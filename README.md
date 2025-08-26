@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # PrivAlert (Flask 기반 위험정보 탐지)
 
 아직 코드는 없습니다. 초기 환경/설정만 포함합니다.
@@ -30,3 +31,6 @@ conda activate privalert
 
 ## 라이선스
 MIT (LICENSE 참조)
+=======
+# PrivAlert
+>>>>>>> 8a4032f3a350c4b87f6cbd9fb0dc0d30273ea3ce
