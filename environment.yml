@@ -1,0 +1,9 @@
+name: privalert
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - Flask==3.0.3
+      - python-dotenv==1.0.1

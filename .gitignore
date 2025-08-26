@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.dist/
+build/
+dist/
+
+# Envs
+.env
+.env.*
+.venv/
+venv/
+pip-wheel-metadata/
+
+# Conda
+*.conda
+*.ipynb_checkpoints
+.envrc
+conda-env/
+.conda/
+pkgs/
+
+# OS/Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Data
+data/
+*.sqlite
+*.db
+
+# Logs
+logs/
+*.log
