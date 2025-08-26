@@ -1,36 +1,59 @@
-<<<<<<< HEAD
-# PrivAlert (Flask 기반 위험정보 탐지)
+# 🔔 PrivAlert
 
-아직 코드는 없습니다. 초기 환경/설정만 포함합니다.
+19기 도전학기제 설계형(팀) 도전!보안벨
+"사용자 맞춤 민감정보 탐지를 윟나 AI 기반 텍스트 및 이미지 점검 시스템 개발발
+Flask 기반 **위험정보(개인정보 등) 탐지 웹서비스** 프로젝트입니다.  
 
-## 목표
-- 업로드 텍스트/이미지 내 위험정보 탐지
-- 위험도 산정 및 수정 문구 제안
-- Flask 백엔드 + (추후) React 프런트
 
-## 로컬 환경 (선택 사항)
-- Miniconda/Anaconda
-- Python 3.10
+---
 
-## 설치 (Conda)
+## 📌 프로젝트 개요
+- 업로드된 텍스트/이미지에서 개인정보 가능성이 있는 패턴 탐지
+- 위험도(0~100) 산정 및 수정 문구 제안
+- 아키텍처(예정): React (Frontend) + Flask (Backend) + MySQL (DB) + AI 분석 파이프라인
+
+---
+
+## ⚙️ 초기 세팅 방법
+
+### 1) 저장소 클론
 ```bash
-conda env create -f environment.yml
-conda activate privalert
-# (선택) pip 사용 시: pip install -r requirements.txt
-```
+git clone https://github.com/yelin1197/PrivAlert.git
+cd PrivAlert
 
-## 환경 변수
-`.env` 파일 생성(커밋 금지). 예시는 `.env.example` 참고.
+데이터 수집 & 분석
 
-필수:
-- `OPENAI_API_KEY=`
+정형 데이터: 정규표현식 기반 탐지 (전화번호, 이메일 등)
 
-선택:
-- `FLASK_ENV=development`
-- `FLASK_RUN_PORT=5000`
+비정형 데이터:
 
-## 라이선스
-MIT (LICENSE 참조)
-=======
-# PrivAlert
->>>>>>> 8a4032f3a350c4b87f6cbd9fb0dc0d30273ea3ce
+이름 → 웹 크롤링 데이터
+
+주소 → AI Hub 데이터셋
+
+닉네임/SNS 아이디 → 정규표현식
+
+문맥 기반 → KoBERT 등 한국어 사전학습 모델 파인튜닝
+
+개체명 인식 → spaCy / Stanza 활용
+
+웹사이트 개발 파이프라인
+
+전처리 레이어: 언어 식별, 토큰화, 정규식 패턴 탐지, NER 모델 실행
+
+컨텍스트 판단 레이어: 마스킹된 텍스트를 LLM(GPT) API로 전달 → 위험 판단 및 수정 문구 생성
+
+후처리/머지: 중복 스팬 병합, 신뢰도 가중치, 위험도 산정 및 라벨링
+
+저장/로그: 원문은 저장하지 않고, 익명화된 분석 로그만 S3/Firebase에 저장
+
+
+--
+
+### 커밋 스타일
+[CREATE] : API 첫 생성, 기능 추가
+[UPDATE] : 버그 및 API 수정, 추가 구현 중
+[REFAC] : 오타 수정, 디렉토리 변경 등 소규모 수정
+[CHORE] : 코드 변경 없는 환경설정 등 수정 (예: setup)
+[DOCS] : 문서 작업
+[DEPLOY] : 배포 관련 작업
