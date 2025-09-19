@@ -1,25 +1,16 @@
+import os
 from flask import Blueprint, request, jsonify
 from flasgger.utils import swag_from
 from app.services.hand_detection import HandDetectionService
+from config import DOCS_DIR
 
 hand_bp = Blueprint("hand", __name__)
 hand_service = HandDetectionService()
 
 @hand_bp.route("/detect", methods=["POST"])
-@swag_from({
-    "tags": ["Hand/Fingerprint"],
-    "summary": "손가락 끝(지문 노출 가능 영역) 탐지",
-    "consumes": ["multipart/form-data"],
-    "parameters": [
-        {"name": "image", "in": "formData", "type": "file", "required": True, "description": "이미지 파일"}
-    ],
-    "responses": {
-        200: {"description": "탐지 성공"},
-        400: {"description": "잘못된 요청"},
-        500: {"description": "서버 오류"}
-    }
-})
+@swag_from(os.path.join(DOCS_DIR, "hand.yml"))
 def detect_fingertips():
+    """손가락 끝 검출 API"""
     if "image" not in request.files:
         return jsonify({"success": False, "error": "이미지 파일 필요"}), 400
 

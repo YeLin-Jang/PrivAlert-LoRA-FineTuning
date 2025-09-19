@@ -1,0 +1,43 @@
+tags:
+  - Face Detection
+summary: 얼굴 검출 (Mediapipe)
+description: 업로드된 이미지에서 얼굴을 검출하고, 경계 상자와 신뢰도 점수를 반환합니다. 프리뷰 이미지는 얼굴 박스가 덧씌워진 비식별화 버전만 제공됩니다.
+consumes:
+  - multipart/form-data
+parameters:
+  - name: image
+    in: formData
+    type: file
+    required: true
+    description: 얼굴이 포함된 이미지 파일 (jpg, png 등)
+responses:
+  200:
+    description: 얼굴 검출 성공
+    schema:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        count: { type: integer, example: 1 }
+        faces:
+          type: array
+          items:
+            type: object
+            properties:
+              index: { type: integer, example: 1 }
+              box:
+                type: object
+                properties:
+                  x: { type: integer, example: 123 }
+                  y: { type: integer, example: 45 }
+                  w: { type: integer, example: 220 }
+                  h: { type: integer, example: 220 }
+              score: { type: number, format: float, example: 0.985 }
+        message: { type: string, example: "1개의 얼굴이 감지되었습니다" }
+        result_image_url:
+          type: string
+          example: "/static/results/face/face_abc123.jpg"
+          description: 얼굴 박스가 덧씌워진 비식별화 프리뷰 이미지 URL
+  400:
+    description: 잘못된 요청 (이미지 없음)
+  500:
+    description: 서버 오류

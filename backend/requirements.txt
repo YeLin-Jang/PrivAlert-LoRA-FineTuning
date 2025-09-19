@@ -10,3 +10,5 @@ opencv-python-headless==4.10.0.84
 numpy==1.26.4
 mediapipe==0.10.14
 flask-cors==4.0.0
+google-cloud-vision==3.4.5
+protobuf==3.20.3

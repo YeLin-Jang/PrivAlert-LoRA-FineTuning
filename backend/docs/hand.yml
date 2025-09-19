@@ -1,0 +1,40 @@
+tags:
+  - Hand Detection
+summary: 손가락 끝 검출
+description: 업로드된 이미지에서 손가락 끝 위치를 검출하고, 결과 좌표와 프리뷰 이미지를 반환합니다. 프리뷰 이미지는 손가락 끝에 표시가 덧씌워진 비식별화 버전만 제공됩니다.
+consumes:
+  - multipart/form-data
+parameters:
+  - name: image
+    in: formData
+    type: file
+    required: true
+    description: 손이 포함된 이미지 파일 (jpg, png 등)
+responses:
+  200:
+    description: 손가락 끝 검출 성공
+    schema:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        count: { type: integer, example: 5 }
+        fingers:
+          type: array
+          items:
+            type: object
+            properties:
+              index: { type: integer, example: 8 }
+              pos:
+                type: object
+                properties:
+                  x: { type: integer, example: 100 }
+                  y: { type: integer, example: 150 }
+        message: { type: string, example: "5개의 손가락 끝이 감지되었습니다" }
+        result_image_url:
+          type: string
+          example: "/static/results/hand/hand_abc123.jpg"
+          description: 손가락 끝 표시가 덧씌워진 비식별화 프리뷰 이미지 URL
+  400:
+    description: 잘못된 요청 (이미지 없음)
+  500:
+    description: 서버 오류
