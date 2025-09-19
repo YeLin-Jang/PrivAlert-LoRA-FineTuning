@@ -34,9 +34,11 @@ def extract_text():
         if text:
             result = {
                 "success": True,
+                "count": 1,
                 "text": text,
                 "char_count": len(text),
-                "line_count": len(text.split('\n'))
+                "line_count": len(text.split('\n')),
+                "message": f"텍스트가 감지되었습니다 ({len(text)}자)"
             }
 
             # OCR 결과를 static/temp에 JSON 파일로 저장 (경로 + URL 반환)
@@ -52,7 +54,16 @@ def extract_text():
             return jsonify({**result, "file_url": saved["url"]})
 
         else:
-            return jsonify({"success": False, "error": "텍스트를 감지하지 못했습니다"}), 404
+            # 텍스트가 감지되지 않아도 200 OK 반환
+            result = {
+                "success": True,
+                "count": 0,
+                "text": "",
+                "char_count": 0,
+                "line_count": 0,
+                "message": "텍스트가 발견되지 않았습니다"
+            }
+            return jsonify(result)
 
     except Exception as e:
         logger.error(f"OCR 오류: {e}")

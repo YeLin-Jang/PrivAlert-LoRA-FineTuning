@@ -4,6 +4,8 @@ Pillow==10.3.0
 piexif==1.1.3
 pillow-heif==0.16.0
 python-magic==0.4.27
+# Windows에서 libmagic 이슈가 있으면 python-magic-bin 사용을 고려하세요.
+
 requests==2.31.0
 flasgger==0.9.7.1
 opencv-python-headless==4.10.0.84

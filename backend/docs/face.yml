@@ -1,7 +1,7 @@
 tags:
   - Face Detection
 summary: 얼굴 검출 (Mediapipe)
-description: 업로드된 이미지에서 얼굴을 검출하고, 경계 상자와 신뢰도 점수를 반환합니다. 프리뷰 이미지는 얼굴 박스가 덧씌워진 비식별화 버전만 제공됩니다.
+description: 업로드된 이미지에서 얼굴을 검출하고, 경계 상자와 신뢰도 점수를 반환합니다. return_image=true로 요청하면 bounding box가 그려진 이미지를 직접 반환합니다. 프리뷰 이미지는 얼굴 박스가 덧씌워진 비식별화 버전만 제공됩니다.
 consumes:
   - multipart/form-data
 parameters:
@@ -10,6 +10,12 @@ parameters:
     type: file
     required: true
     description: 얼굴이 포함된 이미지 파일 (jpg, png 등)
+  - name: return_image
+    in: formData
+    type: boolean
+    required: false
+    default: false
+    description: true로 설정하면 JSON 대신 bounding box가 그려진 이미지를 PNG 형식으로 반환
 responses:
   200:
     description: 얼굴 검출 성공
@@ -37,6 +43,26 @@ responses:
           type: string
           example: "/static/results/face/face_abc123.jpg"
           description: 얼굴 박스가 덧씌워진 비식별화 프리뷰 이미지 URL
+    examples:
+      json_response:
+        summary: JSON 응답 (return_image=false 또는 생략)
+        value:
+          success: true
+          count: 1
+          faces:
+            - index: 1
+              box:
+                x: 123
+                y: 45
+                w: 220
+                h: 220
+              score: 0.985
+          message: "1개의 얼굴이 감지되었습니다"
+          result_image_url: "/static/results/face/face_abc123.jpg"
+      image_response:
+        summary: 이미지 응답 (return_image=true)
+        description: bounding box가 그려진 이미지를 PNG 형식으로 반환
+        value: "image/png"
   400:
     description: 잘못된 요청 (이미지 없음)
   500:

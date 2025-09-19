@@ -25,7 +25,16 @@ backend/conda-env/
 backend/.conda/
 backend/pkgs/
 
-# 데이터/DB (민감)
+# OS/Editor
+backend/.DS_Store
+backend/Thumbs.db
+backend/.vscode/
+backend/.idea/
+
+# Flask static 빌드 결과물
+backend/app/static/
+
+# 데이터/DB 
 backend/data/
 backend/app/static/temp/
 backend/*.sqlite

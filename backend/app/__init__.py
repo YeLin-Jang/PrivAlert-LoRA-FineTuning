@@ -69,23 +69,26 @@ def create_app(config_name=None):
         "produces": ["application/json"],
     })
     
-    # 필요한 디렉토리 생성 (face, hand, ocr)
+    # 필요한 디렉토리 생성
     required_dirs = [
         os.path.join(BASE_DATA_DIR, "face"),
         os.path.join(BASE_DATA_DIR, "hand"),
         os.path.join(BASE_DATA_DIR, "ocr"),
+        os.path.join(BASE_DATA_DIR, "image"),  
     ]
     for d in required_dirs:
         ensure_dir(d)
     
     # 블루프린트 등록
-    from app.routes.face_routes import face_bp
-    from app.routes.hand_routes import hand_bp
+    from app.routes.face_detection_routes import face_bp
+    from app.routes.hand_detection_routes import hand_bp
     from app.routes.ocr_routes import ocr_bp
+    from app.routes.image_sanitize_routes import image_sanitize_bp  
     
-    app.register_blueprint(face_bp, url_prefix="/api/face")
-    app.register_blueprint(hand_bp, url_prefix="/api/hand")
-    app.register_blueprint(ocr_bp, url_prefix="/api")
+    app.register_blueprint(face_bp, url_prefix="/api/v1/face")
+    app.register_blueprint(hand_bp, url_prefix="/api/v1/hand")
+    app.register_blueprint(ocr_bp, url_prefix="/api/v1/ocr")
+    app.register_blueprint(image_sanitize_bp, url_prefix="/api/v1/images")  
     
     # 헬스체크 엔드포인트
     @app.route("/health")
