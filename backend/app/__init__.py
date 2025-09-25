@@ -45,29 +45,45 @@ def create_app(config_name=None):
     
     # Swagger 설정
     port = os.getenv("PORT", "5000")
-    Swagger(app, config={
-        "headers": [],
-        "specs": [{
-            "endpoint": "apispec",
-            "route": "/apispec.json",
-            "rule_filter": lambda rule: True,
-            "model_filter": lambda tag: True,
-        }],
-        "static_url_path": "/flasgger_static",
-        "swagger_ui": True,
-        "specs_route": "/api-docs/",
-    }, template={
-        "swagger": "2.0",
-        "info": {
-            "title": "PrivAlert API",
-            "description": "개인정보 탐지 및 분석 API",
-            "version": "1.0.0",
-        },
-        "host": f"localhost:{port}",
-        "basePath": "/",
-        "schemes": ["http"],
-        "produces": ["application/json"],
-    })
+    try:
+        Swagger(app, config={
+            "headers": [],
+            "specs": [{
+                "endpoint": "apispec",
+                "route": "/apispec.json",
+                "rule_filter": lambda rule: True,
+                "model_filter": lambda tag: True,
+            }],
+            "static_url_path": "/flasgger_static",
+            "swagger_ui": True,
+            "specs_route": "/api-docs/",
+            "swagger_ui_args": {
+                "displayRequestDuration": True,
+                "docExpansion": "list",
+                "operationsSorter": "method",
+                "tagsSorter": "alpha"
+            }
+        }, template={
+            "swagger": "2.0",
+            "info": {
+                "title": "PrivAlert API",
+                "description": "개인정보 탐지 및 분석 API - 이미지와 텍스트를 통합 분석하여 민감 정보를 탐지합니다",
+                "version": "1.0.0",
+                "contact": {
+                    "name": "PrivAlert Team",
+                    "email": "support@privalert.com"
+                }
+            },
+            "host": f"localhost:{port}",
+            "basePath": "/api/v1",
+            "schemes": ["http"],
+            "produces": ["application/json"],
+            "consumes": ["application/json", "multipart/form-data"],
+        })
+        app.logger.info("Swagger 설정 완료")
+    except Exception as e:
+        app.logger.error(f"Swagger 설정 중 오류 발생: {e}")
+        # Swagger 설정 실패해도 앱은 계속 실행
     
     # 필요한 디렉토리 생성
     required_dirs = [
@@ -83,12 +99,16 @@ def create_app(config_name=None):
     from app.routes.face_detection_routes import face_bp
     from app.routes.hand_detection_routes import hand_bp
     from app.routes.ocr_routes import ocr_bp
-    from app.routes.image_sanitize_routes import image_sanitize_bp  
+    from app.routes.image_sanitize_routes import image_sanitize_bp
+    from app.routes.integrated_filter_routes import integrated_filter_bp
+    from app.routes.integrated_analysis_routes import integrated_analysis_bp
     
     app.register_blueprint(face_bp, url_prefix="/api/v1/face")
     app.register_blueprint(hand_bp, url_prefix="/api/v1/hand")
     app.register_blueprint(ocr_bp, url_prefix="/api/v1/ocr")
-    app.register_blueprint(image_sanitize_bp, url_prefix="/api/v1/images")  
+    app.register_blueprint(image_sanitize_bp, url_prefix="/api/v1/images")
+    app.register_blueprint(integrated_filter_bp, url_prefix="/api/v1/filter")
+    app.register_blueprint(integrated_analysis_bp, url_prefix="/api/v1/analyze")  
     
     # 헬스체크 엔드포인트
     @app.route("/health")

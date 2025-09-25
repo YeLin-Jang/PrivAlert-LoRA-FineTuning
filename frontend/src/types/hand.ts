@@ -1,9 +1,13 @@
 export interface HandResult {
   success: boolean;
-  hands: Array<{
-    x: number;
-    y: number;
-    width: number;
-    height: number;
+  count: number;
+  fingers: Array<{
+    index: number;
+    pos: {
+      x: number;
+      y: number;
+    };
   }>;
+  message: string;
+  result_image_url?: string;
 }

@@ -1,0 +1,125 @@
+tags:
+  - name: Religious Filter
+    description: 종교별 민감 단어 필터링 API
+
+paths:
+  /api/v1/filter/filter:
+    post:
+      tags:
+        - Religious Filter
+      summary: 텍스트에서 종교 관련 민감 단어 필터링
+      description: |
+        입력된 텍스트에서 종교 관련 민감 단어를 감지하고 마스킹합니다.
+        한국어 텍스트 처리에 최적화되어 있으며, 우회 패턴도 감지할 수 있습니다.
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          description: 필터링할 텍스트와 옵션
+          required: true
+          schema:
+            type: object
+            required:
+              - text
+            properties:
+              text:
+                type: string
+                description: 필터링할 텍스트
+                example: "예수 그리스도는 하나님의 아들입니다"
+                maxLength: 10000
+              mask_char:
+                type: string
+                description: 마스킹에 사용할 문자
+                default: "*"
+                example: "*"
+                maxLength: 1
+      responses:
+        200:
+          description: 필터링 성공
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: true
+              original_text:
+                type: string
+                example: "예수 그리스도는 하나님의 아들입니다"
+              filtered_text:
+                type: string
+                example: "*** ******는 ******의 아들입니다"
+              detected_words:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    word:
+                      type: string
+                      example: "예수"
+                    start:
+                      type: integer
+                      example: 0
+                    end:
+                      type: integer
+                      example: 2
+                    religion:
+                      type: string
+                      example: "christianity"
+                    pattern_type:
+                      type: string
+                      example: "keyword"
+              statistics:
+                type: object
+                properties:
+                  christianity:
+                    type: integer
+                    example: 2
+                  islam:
+                    type: integer
+                    example: 0
+                  buddhism:
+                    type: integer
+                    example: 0
+                  general_religious:
+                    type: integer
+                    example: 0
+                  total_detected:
+                    type: integer
+                    example: 2
+                  total_words:
+                    type: integer
+                    example: 5
+                  detection_rate:
+                    type: number
+                    example: 40.0
+        400:
+          description: 잘못된 요청
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+                example: "텍스트가 제공되지 않았습니다"
+              code:
+                type: integer
+                example: 400
+        500:
+          description: 서버 내부 오류
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+                example: "서버 내부 오류가 발생했습니다"
+              code:
+                type: integer
+                example: 500

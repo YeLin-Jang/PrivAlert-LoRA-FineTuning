@@ -6,7 +6,7 @@ from flasgger.utils import swag_from
 from app.services.face_detection_service import FaceDetectionService
 from config import DOCS_DIR
 
-face_bp = Blueprint("face", __name__, url_prefix="/face")
+face_bp = Blueprint("face", __name__)
 face_service = FaceDetectionService()
 
 @face_bp.route("/detect", methods=["POST"])

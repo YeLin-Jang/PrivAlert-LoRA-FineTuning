@@ -6,7 +6,7 @@ from flasgger.utils import swag_from
 from app.services.hand_detection_service import HandDetectionService
 from config import DOCS_DIR
 
-hand_bp = Blueprint("hand", __name__, url_prefix="/hand")
+hand_bp = Blueprint("hand", __name__)
 hand_service = HandDetectionService()
 
 @hand_bp.route("/detect", methods=["POST"])

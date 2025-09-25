@@ -9,8 +9,8 @@ from app.utils.file_utils import save_path_with_timestamp, to_public_url
 class FaceDetectionService:
     def __init__(self):
         self.mp_face = mp.solutions.face_detection
-        self.det_short = self.mp_face.FaceDetection(model_selection=0, min_detection_confidence=0.6)
-        self.det_long = self.mp_face.FaceDetection(model_selection=1, min_detection_confidence=0.6)
+        self.det_short = self.mp_face.FaceDetection(model_selection=0, min_detection_confidence=0.3)
+        self.det_long = self.mp_face.FaceDetection(model_selection=1, min_detection_confidence=0.3)
 
         # 내부 민감 데이터 저장소 (원본 보관, 외부 공개 ❌)
         self.save_dir_internal = os.path.join("data", "results", "face")
@@ -49,24 +49,35 @@ class FaceDetectionService:
             rgb = cv2.cvtColor(image_enh, cv2.COLOR_BGR2RGB)
 
             # 검출 시도
+            print(f"이미지 크기: {iw}x{ih}")
             results = self.det_short.process(rgb)
+            print(f"Short model 결과: {results is not None and hasattr(results, 'detections') and results.detections is not None}")
+            
             if not results or not getattr(results, "detections", None):
+                print("Long model로 재시도...")
                 results = self.det_long.process(rgb)
+                print(f"Long model 결과: {results is not None and hasattr(results, 'detections') and results.detections is not None}")
 
             faces = []
             preview_img = image.copy()
             if results and getattr(results, "detections", None):
+                print(f"감지된 얼굴 수: {len(results.detections)}")
                 for i, det in enumerate(results.detections, 1):
                     if not getattr(det, "location_data", None):
+                        print(f"얼굴 {i}: location_data 없음")
                         continue
                     box = det.location_data.relative_bounding_box
                     x, y = int(box.xmin * iw), int(box.ymin * ih)
                     ww, hh = int(box.width * iw), int(box.height * ih)
-                    cv2.rectangle(preview_img, (x, y), (x + ww, y + hh), (0, 255, 0), 2)
                     score = float(det.score[0]) if det.score else 0.0
+                    print(f"얼굴 {i}: 위치=({x},{y},{ww},{hh}), 신뢰도={score:.3f}")
+                    
+                    cv2.rectangle(preview_img, (x, y), (x + ww, y + hh), (0, 255, 0), 2)
                     faces.append(
                         {"index": i, "box": {"x": x, "y": y, "w": ww, "h": hh}, "score": score}
                     )
+            else:
+                print("얼굴이 감지되지 않았습니다.")
 
             result_image_url = None
             if save_result:

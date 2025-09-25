@@ -5,7 +5,7 @@ from flasgger.utils import swag_from
 from app.utils.image_sanitize import sanitize_image
 from config import DOCS_DIR
 
-image_sanitize_bp = Blueprint("image_sanitize", __name__, url_prefix="/images")
+image_sanitize_bp = Blueprint("image_sanitize", __name__)
 
 def _boolean(val: str | None, default: bool = True) -> bool:
     if val is None:

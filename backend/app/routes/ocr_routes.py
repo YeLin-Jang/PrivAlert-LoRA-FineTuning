@@ -9,7 +9,7 @@ from app import BASE_DATA_DIR
 
 logger = logging.getLogger(__name__)
 
-ocr_bp = Blueprint("ocr", __name__, url_prefix="/ocr")
+ocr_bp = Blueprint("ocr", __name__)
 ocr_service = OCRService()
 
 @ocr_bp.route("/text", methods=["POST"])
