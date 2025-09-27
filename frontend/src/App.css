@@ -265,7 +265,7 @@ body {
 
 .sub-options-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
   margin-top: 12px;
 }
@@ -618,6 +618,80 @@ body {
   font-weight: 500;
 }
 
+/* OCR 텍스트 카드 */
+.ocr-text-card {
+  background: #2a2a2a;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  border: 1px solid #444444;
+}
+
+.ocr-text-card h3 {
+  margin: 0 0 15px 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ocr-content {
+  color: #e0e0e0;
+}
+
+.ocr-summary {
+  margin: 0 0 15px 0;
+  font-size: 0.9rem;
+  color: #b0b0b0;
+  font-style: italic;
+}
+
+.ocr-texts {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.ocr-text-item {
+  background: #1a1a1a;
+  border-radius: 8px;
+  padding: 15px;
+  border: 1px solid #333333;
+}
+
+.ocr-text-item h4 {
+  margin: 0 0 10px 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.ocr-text-content {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #e0e0e0;
+  background: #0a0a0a;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #222222;
+  font-family: 'Courier New', monospace;
+}
+
+.no-text-message {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #888888;
+  font-style: italic;
+  text-align: center;
+  padding: 20px;
+  background: #1a1a1a;
+  border-radius: 6px;
+  border: 1px solid #333333;
+}
+
 .image-results-card {
   background: #333333;
   padding: 25px;
@@ -650,6 +724,15 @@ body {
   margin-bottom: 10px;
   font-weight: 500;
   color: #ffffff;
+}
+
+.detection-summary {
+  margin-bottom: 15px;
+}
+
+.detection-summary .image-info {
+  margin-bottom: 5px;
+  font-size: 0.95rem;
 }
 
 .image-result-item img {

@@ -32,6 +32,8 @@ class HandDetectionService:
             if image_np is None:
                 if image_file is None:
                     return {"success": False, "error": "이미지 없음"}
+                # 파일 포인터를 처음으로 되돌림
+                image_file.seek(0)
                 data = np.frombuffer(image_file.read(), np.uint8)
                 image = cv2.imdecode(data, cv2.IMREAD_COLOR)
                 if image is None:

@@ -131,9 +131,9 @@ export default function UploadForm() {
           const file = item.getAsFile();
           if (file) {
             processImageFile(file);
-          }
-        } else if (item.type.indexOf('text') !== -1) {
-          item.getAsString((text) => {
+        }
+      } else if (item.type.indexOf('text') !== -1) {
+        item.getAsString((text) => {
             processTextContent(text);
           });
         }
@@ -142,7 +142,7 @@ export default function UploadForm() {
     
     // 붙여넣기 후 텍스트 업데이트
     setTimeout(() => {
-      if (editorRef.current) {
+          if (editorRef.current) {
         const textContent = editorRef.current.innerText;
         setText(textContent);
         const editorImages = editorRef.current.querySelectorAll('img').length;
@@ -187,21 +187,21 @@ export default function UploadForm() {
     });
     
     // HTML 내용을 에디터에 삽입
-    const selection = window.getSelection();
-    if (selection && selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      range.deleteContents();
+            const selection = window.getSelection();
+            if (selection && selection.rangeCount > 0) {
+              const range = selection.getRangeAt(0);
+              range.deleteContents();
       
       // HTML 노드들을 삽입
       while (tempDiv.firstChild) {
         range.insertNode(tempDiv.firstChild);
       }
       
-      range.setStartAfter(range.endContainer);
-      range.collapse(true);
-      selection.removeAllRanges();
-      selection.addRange(range);
-    } else {
+              range.setStartAfter(range.endContainer);
+              range.collapse(true);
+              selection.removeAllRanges();
+              selection.addRange(range);
+            } else {
       editorRef.current.appendChild(tempDiv);
     }
   };
@@ -421,6 +421,26 @@ export default function UploadForm() {
         });
       }
       
+      // 손가락 감지 결과 디버깅
+      if (analysisResult.hand_detection) {
+        console.log('손가락 감지 결과:', analysisResult.hand_detection);
+        analysisResult.hand_detection.images.forEach((img, index) => {
+          console.log(`손가락 감지 이미지 ${index + 1}:`, {
+            filename: img.filename,
+            count: img.count,
+            result_image_url: img.result_image_url,
+            full_url: `http://localhost:5000${img.result_image_url}`
+          });
+        });
+      }
+      
+      // 처리 옵션 상태 디버깅
+      console.log('처리 옵션 상태:', {
+        showFaces,
+        blurFingers,
+        detectionOptions
+      });
+      
       setResult(analysisResult);
       setShowResultModal(true);
       console.log('모달 표시:', true);
@@ -514,7 +534,7 @@ export default function UploadForm() {
                   >
                     🔍 전체 선택
                   </button>
-                </div>
+                 </div>
               </div>
               
               <input
@@ -789,41 +809,49 @@ export default function UploadForm() {
                   <h3>📊 분석 요약</h3>
                   <div className="summary-stats">
                     {detectionOptions.face && (
-                      <div className="stat-item">
-                        <span className="stat-label">얼굴 감지</span>
-                        <span className="stat-value">{result.summary.faces_detected}개</span>
-                      </div>
+                    <div className="stat-item">
+                      <span className="stat-label">얼굴 감지</span>
+                      <span className="stat-value">{result.summary.faces_detected}개</span>
+                    </div>
                     )}
                     {detectionOptions.fingerprint && (
-                      <div className="stat-item">
-                        <span className="stat-label">손가락 감지</span>
-                        <span className="stat-value">{result.summary.fingers_detected}개</span>
-                      </div>
+                    <div className="stat-item">
+                      <span className="stat-label">손가락 감지</span>
+                      <span className="stat-value">{result.summary.fingers_detected}개</span>
+                    </div>
                     )}
                     {detectionOptions.religion && (
-                      <div className="stat-item">
-                        <span className="stat-label">종교적 내용</span>
-                        <span className={`stat-value ${result.summary.religious_content_detected ? 'detected' : 'safe'}`}>
-                          {result.summary.religious_content_detected ? '발견됨' : '없음'}
-                        </span>
-                      </div>
+                    <div className="stat-item">
+                      <span className="stat-label">종교적 내용</span>
+                      <span className={`stat-value ${result.summary.religious_content_detected ? 'detected' : 'safe'}`}>
+                        {result.summary.religious_content_detected ? '발견됨' : '없음'}
+                      </span>
+                    </div>
                     )}
                   </div>
                 </div>
 
-                {/* 텍스트 분석 결과 */}
+                {/* 텍스트 분석 결과 - 항상 표시 */}
                 {result.text_analysis && (
                   <div className="text-analysis-card">
                     <h3>📝 텍스트 분석</h3>
                     <div className="text-content">
-                      <div className="text-section">
-                        <h4>원본 텍스트</h4>
-                        <p className="text-preview">{result.text_analysis.original_text}</p>
-                      </div>
-                      <div className="text-section">
-                        <h4>필터링된 텍스트</h4>
-                        <p className="text-preview">{result.text_analysis.filtered_text}</p>
-                      </div>
+                      {result.text_analysis.original_text ? (
+                        <>
+                          <div className="text-section">
+                            <h4>원본 텍스트</h4>
+                            <p className="text-preview">{result.text_analysis.original_text}</p>
+                          </div>
+                          <div className="text-section">
+                            <h4>필터링된 텍스트</h4>
+                            <p className="text-preview">{result.text_analysis.filtered_text}</p>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-section">
+                          <p className="no-text-message">텍스트를 발견하지 못했습니다</p>
+                        </div>
+                      )}
                       
                       {result.text_analysis.detected_words.length > 0 && (
                         <div className="detected-words-section">
@@ -845,7 +873,29 @@ export default function UploadForm() {
                   </div>
                 )}
 
-                {/* 얼굴 감지 결과 - 얼굴 상세 표시 옵션이 체크되었을 때만 표시 */}
+                {/* OCR 텍스트 추출 결과 - 항상 표시 */}
+                {result.ocr_text && (
+                  <div className="ocr-text-card">
+                    <h3>📄 추출된 텍스트</h3>
+                    <div className="ocr-content">
+                      <p className="ocr-summary">{result.ocr_text.message}</p>
+                      {result.ocr_text.texts.length > 0 ? (
+                        <div className="ocr-texts">
+                          {result.ocr_text.texts.map((text, index) => (
+                            <div key={index} className="ocr-text-item">
+                              <h4>이미지 {index + 1}</h4>
+                              <p className="ocr-text-content">{text}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="no-text-message">텍스트를 발견하지 못했습니다</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* 얼굴 감지 결과 - 얼굴 감지 결과 표시 옵션이 체크되었을 때만 표시 */}
                 {showFaces && result.face_detection && result.face_detection.images.length > 0 && (
                   <div className="image-results-card">
                     <h3>👤 얼굴 감지 결과</h3>
@@ -875,7 +925,7 @@ export default function UploadForm() {
                   </div>
                 )}
 
-                {/* 손가락 감지 결과 - 손가락 블러 처리 옵션이 체크되었을 때만 표시 */}
+                {/* 손가락 감지 결과 - 손가락 감지 결과 표시 옵션이 체크되었을 때만 표시 */}
                 {blurFingers && result.hand_detection && result.hand_detection.images.length > 0 && (
                   <div className="image-results-card">
                     <h3>👋 손가락 감지 결과</h3>
