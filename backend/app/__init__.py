@@ -5,7 +5,7 @@ from flasgger import Swagger
 from dotenv import load_dotenv
 from flask_cors import CORS
 from app.utils.file_utils import ensure_dir
-from config import BASE_DATA_DIR
+from config import BASE_DATA_DIR, BASE_DIR
 
 # 환경변수 로드
 load_dotenv()
@@ -20,7 +20,8 @@ def setup_logging(app):
 
 def create_app(config_name=None):
     """Flask 애플리케이션 팩토리"""
-    app = Flask(__name__)
+    static_folder_path = os.path.join(BASE_DIR, 'static')
+    app = Flask(__name__, static_folder=static_folder_path, static_url_path='/static')
     
     # 환경 설정
     flask_env = os.getenv("FLASK_ENV", "development")
@@ -51,6 +52,12 @@ def create_app(config_name=None):
             "supports_credentials": True
         }
     })
+    
+    # data 디렉토리도 정적 파일로 서빙 (원본 파일용)
+    from flask import send_from_directory
+    @app.route('/data/<path:filename>')
+    def serve_data(filename):
+        return send_from_directory(BASE_DATA_DIR, filename)
     
     # Swagger 설정
     port = os.getenv("PORT", "5000")
