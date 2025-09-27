@@ -332,4 +332,4 @@ def analyze_content():
                      (1 if results["summary"]["religious_content_detected"] else 0))
     logger.info(f"통합 분석 완료: {total_detected}개 민감 정보 감지")
     
-    return APIResponse.success(results, results["summary"]["message"])
+    return APIResponse.success({"data": results}, results["summary"]["message"])

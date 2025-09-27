@@ -14,10 +14,37 @@ export default function UploadForm() {
   const [editorImageCount, setEditorImageCount] = useState(0);
   const editorRef = useRef<HTMLDivElement>(null);
 
+  // 민감 정보 탐지 옵션
+  const [detectionOptions, setDetectionOptions] = useState({
+    face: true,           // 얼굴 (지원됨)
+    fingerprint: true,    // 지문/손가락 (지원됨)
+    religion: true,       // 종교 (지원됨)
+    // 아래는 준비 중
+    name: false,          // 이름
+    address: false,       // 주소
+    workplace: false,     // 직장
+    school: false,        // 학교
+    phone: false,         // 전화번호
+    email: false,         // 이메일
+    idNumber: false,      // 주민등록번호
+    passport: false,      // 여권번호
+    driverLicense: false, // 운전면허번호
+    account: false,       // 계좌번호
+    ipAddress: false,     // IP주소
+    postalCode: false     // 우편번호
+  });
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       setFiles(Array.from(e.target.files));
     }
+  };
+
+  const toggleDetectionOption = (option: keyof typeof detectionOptions) => {
+    setDetectionOptions(prev => ({
+      ...prev,
+      [option]: !prev[option]
+    }));
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
@@ -322,10 +349,14 @@ export default function UploadForm() {
     setError(null);
 
     try {
+      console.log('분석 시작:', { allFiles: allFiles.length, editorText: editorText.length });
       const analysisResult = await analyzeContent(allFiles, editorText, blurFingers, showFaces);
+      console.log('분석 결과:', analysisResult);
       setResult(analysisResult);
       setShowResultModal(true);
+      console.log('모달 표시:', true);
     } catch (err) {
+      console.error('분석 오류:', err);
       setError(err instanceof Error ? err.message : '분석 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -341,6 +372,25 @@ export default function UploadForm() {
     setBlurFingers(true);
     setShowFaces(true);
     setEditorImageCount(0);
+    
+    // 탐지 옵션 초기화
+    setDetectionOptions({
+      face: true,
+      fingerprint: true,
+      religion: true,
+      name: false,
+      address: false,
+      workplace: false,
+      school: false,
+      phone: false,
+      email: false,
+      idNumber: false,
+      passport: false,
+      driverLicense: false,
+      account: false,
+      ipAddress: false,
+      postalCode: false
+    });
     
     // 에디터 초기화
     if (editorRef.current) {
@@ -396,9 +446,6 @@ export default function UploadForm() {
                     🔍 전체 선택
                   </button>
                 </div>
-                 <div className="editor-hint">
-                   💡 텍스트를 직접 입력하거나 이미지를 붙여넣어주세요 (Ctrl+A: 전체선택, Ctrl+C: 복사, Ctrl+V: 붙여넣기)
-                 </div>
               </div>
               
               <input
@@ -421,7 +468,7 @@ export default function UploadForm() {
                   onKeyDown={handleKeyDown}
                   onClick={() => editorRef.current?.focus()}
                   suppressContentEditableWarning={true}
-                  data-placeholder="여기에 텍스트를 입력하거나 이미지를 붙여넣으세요..."
+                  data-placeholder="여기에 텍스트를 입력하거나 이미지를 붙여넣어주세요!"
                 />
               </div>
               
@@ -436,7 +483,145 @@ export default function UploadForm() {
           </div>
 
           <div className="input-group">
-            <label className="input-label">분석 옵션</label>
+            <label className="input-label">민감 정보 탐지 옵션</label>
+            <div className="options-grid">
+              {/* 지원되는 기능들 */}
+              <label className="option-item">
+                <input
+                  type="checkbox"
+                  checked={detectionOptions.face}
+                  onChange={() => toggleDetectionOption('face')}
+                  disabled={loading}
+                  className="option-checkbox"
+                />
+                <span className="option-text">얼굴</span>
+              </label>
+              <label className="option-item">
+                <input
+                  type="checkbox"
+                  checked={detectionOptions.fingerprint}
+                  onChange={() => toggleDetectionOption('fingerprint')}
+                  disabled={loading}
+                  className="option-checkbox"
+                />
+                <span className="option-text">지문/손가락</span>
+              </label>
+              <label className="option-item">
+                <input
+                  type="checkbox"
+                  checked={detectionOptions.religion}
+                  onChange={() => toggleDetectionOption('religion')}
+                  disabled={loading}
+                  className="option-checkbox"
+                />
+                <span className="option-text">종교</span>
+              </label>
+              
+              {/* 준비 중인 기능들 */}
+              <label className="option-item disabled">
+                <input
+                  type="checkbox"
+                  checked={detectionOptions.name}
+                  disabled={true}
+                  className="option-checkbox"
+                />
+                <span className="option-text">이름</span>
+              </label>
+              <label className="option-item disabled">
+                <input
+                  type="checkbox"
+                  checked={detectionOptions.address}
+                  disabled={true}
+                  className="option-checkbox"
+                />
+                <span className="option-text">주소/우편번호</span>
+              </label>
+              <label className="option-item disabled">
+                <input
+                  type="checkbox"
+                  checked={detectionOptions.workplace}
+                  disabled={true}
+                  className="option-checkbox"
+                />
+                <span className="option-text">직장 정보</span>
+              </label>
+              <label className="option-item disabled">
+                <input
+                  type="checkbox"
+                  checked={detectionOptions.school}
+                  disabled={true}
+                  className="option-checkbox"
+                />
+                <span className="option-text">학교 정보</span>
+              </label>
+              <label className="option-item disabled">
+                <input
+                  type="checkbox"
+                  checked={detectionOptions.phone}
+                  disabled={true}
+                  className="option-checkbox"
+                />
+                <span className="option-text">전화번호</span>
+              </label>
+              <label className="option-item disabled">
+                <input
+                  type="checkbox"
+                  checked={detectionOptions.email}
+                  disabled={true}
+                  className="option-checkbox"
+                />
+                <span className="option-text">이메일</span>
+              </label>
+              <label className="option-item disabled">
+                <input
+                  type="checkbox"
+                  checked={detectionOptions.idNumber}
+                  disabled={true}
+                  className="option-checkbox"
+                />
+                <span className="option-text">주민등록번호</span>
+              </label>
+              <label className="option-item disabled">
+                <input
+                  type="checkbox"
+                  checked={detectionOptions.passport}
+                  disabled={true}
+                  className="option-checkbox"
+                />
+                <span className="option-text">여권번호</span>
+              </label>
+              <label className="option-item disabled">
+                <input
+                  type="checkbox"
+                  checked={detectionOptions.driverLicense}
+                  disabled={true}
+                  className="option-checkbox"
+                />
+                <span className="option-text">운전면허번호</span>
+              </label>
+              <label className="option-item disabled">
+                <input
+                  type="checkbox"
+                  checked={detectionOptions.account}
+                  disabled={true}
+                  className="option-checkbox"
+                />
+                <span className="option-text">계좌번호</span>
+              </label>
+              <label className="option-item disabled">
+                <input
+                  type="checkbox"
+                  checked={detectionOptions.ipAddress}
+                  disabled={true}
+                  className="option-checkbox"
+                />
+                <span className="option-text">IP주소</span>
+              </label>
+            </div>
+          </div>
+
+          <div className="input-group">
+            <label className="input-label">처리 옵션</label>
             <div className="options-grid">
               <label className="option-item">
                 <input
@@ -457,8 +642,8 @@ export default function UploadForm() {
                   disabled={loading}
                   className="option-checkbox"
                 />
-                <span className="option-text">얼굴 표시</span>
-                <span className="option-desc">감지된 얼굴의 위치를 표시합니다</span>
+                <span className="option-text">얼굴 상세 표시</span>
+                <span className="option-desc">감지된 얼굴의 위치를 상세히 표시합니다</span>
               </label>
             </div>
           </div>

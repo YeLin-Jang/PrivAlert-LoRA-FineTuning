@@ -33,12 +33,15 @@ export const analyzeContent = async (
   formData.append('blur_fingers', blurFingers.toString());
   formData.append('show_faces', showFaces.toString());
 
+  console.log('API 요청 전송:', { files: files.length, text: text.length });
   const response = await api.post<ApiResponse<AnalysisResult>>('/api/v1/analyze', formData);
+  console.log('API 응답:', response.data);
   
   if (!response.data.success) {
     throw new Error(response.data.message || '분석 중 오류가 발생했습니다.');
   }
   
+  console.log('API 데이터:', response.data.data);
   return response.data.data!;
 };
 

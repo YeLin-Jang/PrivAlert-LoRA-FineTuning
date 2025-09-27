@@ -201,14 +201,14 @@ body {
 /* 옵션 */
 .options-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 15px;
 }
 
 .option-item {
   display: flex;
   align-items: flex-start;
-  padding: 20px;
+  padding: 15px;
   background: #f8f8f8;
   border-radius: 8px;
   cursor: pointer;
@@ -219,6 +219,24 @@ body {
 .option-item:hover {
   background: #f0f0f0;
   border-color: #d0d0d0;
+}
+
+.option-item.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: #f5f5f5;
+}
+
+.option-item.disabled:hover {
+  background: #f5f5f5;
+  border-color: #e0e0e0;
+}
+
+.coming-soon {
+  font-size: 0.8rem;
+  color: #999999;
+  font-weight: normal;
+  font-style: italic;
 }
 
 .option-checkbox {
@@ -232,14 +250,7 @@ body {
 .option-text {
   font-weight: 600;
   color: #000000;
-  margin-bottom: 5px;
   display: block;
-}
-
-.option-desc {
-  font-size: 0.9rem;
-  color: #666666;
-  line-height: 1.4;
 }
 
 /* 액션 섹션 */
