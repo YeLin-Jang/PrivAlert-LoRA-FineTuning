@@ -239,6 +239,37 @@ body {
   font-style: italic;
 }
 
+.sub-option {
+  margin-left: 20px;
+  margin-top: 8px;
+  padding-left: 16px;
+  border-left: 2px solid #e0e0e0;
+}
+
+.sub-option .option-item {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  margin-bottom: 6px;
+}
+
+.sub-option .option-item:hover {
+  background: #e9ecef;
+  border-color: #dee2e6;
+}
+
+.sub-options-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.sub-options-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
 .option-checkbox {
   margin-right: 15px;
   margin-top: 2px;
@@ -626,6 +657,22 @@ body {
   height: auto;
   border-radius: 6px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.result-image-container {
+  margin-top: 10px;
+  text-align: center;
+}
+
+.result-image {
+  max-width: 100%;
+  max-height: 400px;
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  border: 2px solid #444444;
+  background: #333333;
+  padding: 5px;
 }
 
 .modal-footer {

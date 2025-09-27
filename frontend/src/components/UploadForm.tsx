@@ -36,7 +36,62 @@ export default function UploadForm() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      setFiles(Array.from(e.target.files));
+      const newFiles = Array.from(e.target.files);
+      setFiles(prev => [...prev, ...newFiles]);
+      
+      // 선택된 파일들을 에디터에 표시
+      newFiles.forEach((file, index) => {
+        if (file.type.startsWith('image/')) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            if (editorRef.current) {
+              const img = document.createElement('img');
+              img.src = event.target?.result as string;
+              img.style.maxWidth = '100%';
+              img.style.height = 'auto';
+              img.style.margin = '10px 0';
+              img.style.borderRadius = '8px';
+              img.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+              img.style.display = 'block';
+              
+              // 커서 위치에 이미지 삽입
+              const selection = window.getSelection();
+              if (selection && selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                range.deleteContents();
+                range.insertNode(img);
+                range.setStartAfter(img);
+                range.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(range);
+              } else {
+                editorRef.current.appendChild(img);
+              }
+              
+              // 줄바꿈 추가
+              const br = document.createElement('br');
+              if (selection && selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                range.insertNode(br);
+                range.setStartAfter(br);
+                range.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(range);
+              } else {
+                editorRef.current.appendChild(br);
+              }
+              
+              // 이미지 개수 업데이트
+              const editorImages = editorRef.current.querySelectorAll('img').length;
+              setEditorImageCount(editorImages);
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+      
+      // 파일 입력 필드 초기화 (같은 파일을 다시 선택할 수 있도록)
+      e.target.value = '';
     }
   };
 
@@ -352,6 +407,20 @@ export default function UploadForm() {
       console.log('분석 시작:', { allFiles: allFiles.length, editorText: editorText.length });
       const analysisResult = await analyzeContent(allFiles, editorText, blurFingers, showFaces);
       console.log('분석 결과:', analysisResult);
+      
+      // 얼굴 감지 결과 디버깅
+      if (analysisResult.face_detection) {
+        console.log('얼굴 감지 결과:', analysisResult.face_detection);
+        analysisResult.face_detection.images.forEach((img, index) => {
+          console.log(`얼굴 감지 이미지 ${index + 1}:`, {
+            filename: img.filename,
+            count: img.count,
+            result_image_url: img.result_image_url,
+            full_url: `http://localhost:5000${img.result_image_url}`
+          });
+        });
+      }
+      
       setResult(analysisResult);
       setShowResultModal(true);
       console.log('모달 표시:', true);
@@ -526,6 +595,7 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">이름</span>
+                <span className="coming-soon">준비 중</span>
               </label>
               <label className="option-item disabled">
                 <input
@@ -535,6 +605,7 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">주소/우편번호</span>
+                <span className="coming-soon">준비 중</span>
               </label>
               <label className="option-item disabled">
                 <input
@@ -544,6 +615,7 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">직장 정보</span>
+                <span className="coming-soon">준비 중</span>
               </label>
               <label className="option-item disabled">
                 <input
@@ -553,6 +625,7 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">학교 정보</span>
+                <span className="coming-soon">준비 중</span>
               </label>
               <label className="option-item disabled">
                 <input
@@ -562,6 +635,7 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">전화번호</span>
+                <span className="coming-soon">준비 중</span>
               </label>
               <label className="option-item disabled">
                 <input
@@ -571,6 +645,7 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">이메일</span>
+                <span className="coming-soon">준비 중</span>
               </label>
               <label className="option-item disabled">
                 <input
@@ -580,6 +655,7 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">주민등록번호</span>
+                <span className="coming-soon">준비 중</span>
               </label>
               <label className="option-item disabled">
                 <input
@@ -589,6 +665,7 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">여권번호</span>
+                <span className="coming-soon">준비 중</span>
               </label>
               <label className="option-item disabled">
                 <input
@@ -598,6 +675,7 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">운전면허번호</span>
+                <span className="coming-soon">준비 중</span>
               </label>
               <label className="option-item disabled">
                 <input
@@ -607,6 +685,7 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">계좌번호</span>
+                <span className="coming-soon">준비 중</span>
               </label>
               <label className="option-item disabled">
                 <input
@@ -616,37 +695,44 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">IP주소</span>
+                <span className="coming-soon">준비 중</span>
               </label>
             </div>
+            
+            {/* 하위 옵션들 - 별도 섹션으로 분리 */}
+            {(detectionOptions.face || detectionOptions.fingerprint) && (
+              <div className="sub-options-section">
+                <label className="input-label">처리 옵션</label>
+                <div className="sub-options-grid">
+                  {detectionOptions.face && (
+                    <label className="option-item">
+                      <input
+                        type="checkbox"
+                        checked={showFaces}
+                        onChange={(e) => setShowFaces(e.target.checked)}
+                        disabled={loading}
+                        className="option-checkbox"
+                      />
+                      <span className="option-text">얼굴 감지 결과 표시</span>
+                    </label>
+                  )}
+                  {detectionOptions.fingerprint && (
+                    <label className="option-item">
+                      <input
+                        type="checkbox"
+                        checked={blurFingers}
+                        onChange={(e) => setBlurFingers(e.target.checked)}
+                        disabled={loading}
+                        className="option-checkbox"
+                      />
+                      <span className="option-text">손가락 감지 결과 표시</span>
+                    </label>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="input-group">
-            <label className="input-label">처리 옵션</label>
-            <div className="options-grid">
-              <label className="option-item">
-                <input
-                  type="checkbox"
-                  checked={blurFingers}
-                  onChange={(e) => setBlurFingers(e.target.checked)}
-                  disabled={loading}
-                  className="option-checkbox"
-                />
-                <span className="option-text">손가락 블러 처리</span>
-                <span className="option-desc">감지된 손가락을 블러 처리합니다</span>
-              </label>
-              <label className="option-item">
-                <input
-                  type="checkbox"
-                  checked={showFaces}
-                  onChange={(e) => setShowFaces(e.target.checked)}
-                  disabled={loading}
-                  className="option-checkbox"
-                />
-                <span className="option-text">얼굴 상세 표시</span>
-                <span className="option-desc">감지된 얼굴의 위치를 상세히 표시합니다</span>
-              </label>
-            </div>
-          </div>
         </div>
 
         <div className="action-section">
@@ -702,29 +788,26 @@ export default function UploadForm() {
                 <div className="summary-card">
                   <h3>📊 분석 요약</h3>
                   <div className="summary-stats">
-                    <div className="stat-item">
-                      <span className="stat-label">얼굴 감지</span>
-                      <span className="stat-value">{result.summary.faces_detected}개</span>
-                    </div>
-                    <div className="stat-item">
-                      <span className="stat-label">손가락 감지</span>
-                      <span className="stat-value">{result.summary.fingers_detected}개</span>
-                    </div>
-                    <div className="stat-item">
-                      <span className="stat-label">민감한 텍스트</span>
-                      <span className={`stat-value ${result.summary.sensitive_text_found ? 'detected' : 'safe'}`}>
-                        {result.summary.sensitive_text_found ? '발견됨' : '없음'}
-                      </span>
-                    </div>
-                    <div className="stat-item">
-                      <span className="stat-label">종교적 내용</span>
-                      <span className={`stat-value ${result.summary.religious_content_detected ? 'detected' : 'safe'}`}>
-                        {result.summary.religious_content_detected ? '발견됨' : '없음'}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="summary-message">
-                    <p>{result.summary.message}</p>
+                    {detectionOptions.face && (
+                      <div className="stat-item">
+                        <span className="stat-label">얼굴 감지</span>
+                        <span className="stat-value">{result.summary.faces_detected}개</span>
+                      </div>
+                    )}
+                    {detectionOptions.fingerprint && (
+                      <div className="stat-item">
+                        <span className="stat-label">손가락 감지</span>
+                        <span className="stat-value">{result.summary.fingers_detected}개</span>
+                      </div>
+                    )}
+                    {detectionOptions.religion && (
+                      <div className="stat-item">
+                        <span className="stat-label">종교적 내용</span>
+                        <span className={`stat-value ${result.summary.religious_content_detected ? 'detected' : 'safe'}`}>
+                          {result.summary.religious_content_detected ? '발견됨' : '없음'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -762,16 +845,29 @@ export default function UploadForm() {
                   </div>
                 )}
 
-                {/* 이미지 결과 */}
-                {result.face_detection && result.face_detection.images.length > 0 && (
+                {/* 얼굴 감지 결과 - 얼굴 상세 표시 옵션이 체크되었을 때만 표시 */}
+                {showFaces && result.face_detection && result.face_detection.images.length > 0 && (
                   <div className="image-results-card">
                     <h3>👤 얼굴 감지 결과</h3>
                     <div className="image-results">
                       {result.face_detection.images.map((img, index) => (
                         <div key={index} className="image-result-item">
-                          <p className="image-info">{img.filename}: {img.count}개 얼굴 감지</p>
+                          <p className="image-info">{img.count}개 얼굴 감지</p>
                           {img.result_image_url && (
-                            <img src={img.result_image_url} alt={`얼굴 감지 결과 ${index + 1}`} />
+                            <div className="result-image-container">
+                              <img 
+                                src={`http://localhost:5000${img.result_image_url}`} 
+                                alt={`얼굴 감지 결과 ${index + 1}`}
+                                className="result-image"
+                                onError={(e) => {
+                                  console.error('이미지 로딩 실패:', img.result_image_url);
+                                  e.currentTarget.style.display = 'none';
+                                }}
+                                onLoad={() => {
+                                  console.log('이미지 로딩 성공:', img.result_image_url);
+                                }}
+                              />
+                            </div>
                           )}
                         </div>
                       ))}
@@ -779,15 +875,29 @@ export default function UploadForm() {
                   </div>
                 )}
 
-                {result.hand_detection && result.hand_detection.images.length > 0 && (
+                {/* 손가락 감지 결과 - 손가락 블러 처리 옵션이 체크되었을 때만 표시 */}
+                {blurFingers && result.hand_detection && result.hand_detection.images.length > 0 && (
                   <div className="image-results-card">
                     <h3>👋 손가락 감지 결과</h3>
                     <div className="image-results">
                       {result.hand_detection.images.map((img, index) => (
                         <div key={index} className="image-result-item">
-                          <p className="image-info">{img.filename}: {img.count}개 손가락 감지</p>
+                          <p className="image-info">{img.count}개 손가락 감지</p>
                           {img.result_image_url && (
-                            <img src={img.result_image_url} alt={`손가락 감지 결과 ${index + 1}`} />
+                            <div className="result-image-container">
+                              <img 
+                                src={`http://localhost:5000${img.result_image_url}`} 
+                                alt={`손가락 감지 결과 ${index + 1}`}
+                                className="result-image"
+                                onError={(e) => {
+                                  console.error('이미지 로딩 실패:', img.result_image_url);
+                                  e.currentTarget.style.display = 'none';
+                                }}
+                                onLoad={() => {
+                                  console.log('이미지 로딩 성공:', img.result_image_url);
+                                }}
+                              />
+                            </div>
                           )}
                         </div>
                       ))}
