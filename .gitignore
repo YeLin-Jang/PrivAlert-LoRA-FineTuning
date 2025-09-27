@@ -1,39 +1,69 @@
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.egg-info/
-.dist/
-build/
-dist/
+# backend (Flack) 관련
+backend/__pycache__/
+backend/**/*.pyc
+backend/**/*.pyo
+backend/**/*.pyd
+backend/**/*.egg-info/
+backend/.dist/
+backend/build/
+backend/dist/
 
-# Envs
-.env
-.env.*
-.venv/
-venv/
-pip-wheel-metadata/
+# Backend 환경변수
+backend/.env
+backend/.env*
+
+# 가상환경
+backend/.venv/
+backend/venv/
+backend/pip-wheel-metadata/
 
 # Conda
-*.conda
-*.ipynb_checkpoints
-.envrc
-conda-env/
-.conda/
-pkgs/
+backend/*.conda
+backend/.ipynb_checkpoints
+backend/.envrc
+backend/conda-env/
+backend/.conda/
+backend/pkgs/
 
 # OS/Editor
+backend/.DS_Store
+backend/Thumbs.db
+backend/.vscode/
+backend/.idea/
+
+# Flask static 빌드 결과물
+backend/app/static/
+
+# 데이터/DB 
+backend/data/
+backend/app/static/temp/
+backend/*.sqlite
+backend/*.db
+
+# 로그
+backend/logs/
+backend/*.log
+
+#테스트 관련
+backend/tests/
+
+# - - - - - - - - - - - - - - - - - 
+# frontend (Node/React) 관련
+frontend/node_modules/
+frontend/build/
+frontend/dist/
+frontend/.cache/
+frontend/.next/
+
+# Frontend 환경변수
+frontend/.env
+frontend/.env*
+
+# === OS / Editor ===
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
 
-# Data
-data/
-*.sqlite
-*.db
-
-# Logs
-logs/
+# === 공통 ===
 *.log
