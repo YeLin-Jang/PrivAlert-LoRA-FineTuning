@@ -8,6 +8,7 @@ from app.services.face_detection_service import FaceDetectionService
 from app.services.hand_detection_service import HandDetectionService
 from app.services.ocr_service import OCRService
 from app.services.integrated_filter_service import IntegratedFilterService
+from app.services.mask_regex import mask_regex_service
 from app.utils.api_utils import APIResponse, handle_api_exception
 
 logger = logging.getLogger(__name__)
@@ -194,6 +195,16 @@ def analyze_content():
     blur_fingers = request.form.get('blur_fingers', 'true').lower() in ['true', '1', 'yes']
     show_faces = request.form.get('show_faces', 'false').lower() in ['true', '1', 'yes']
     
+    # 탐지 옵션 파라미터 (프론트엔드에서 전달) - 정형 데이터만
+    detection_options = {
+        'phone': request.form.get('detect_phone', 'false').lower() in ['true', '1', 'yes'],
+        'rrn': request.form.get('detect_rrn', 'false').lower() in ['true', '1', 'yes'],
+        'passport': request.form.get('detect_passport', 'false').lower() in ['true', '1', 'yes'],
+        'ip_address': request.form.get('detect_ip_address', 'false').lower() in ['true', '1', 'yes'],
+        'email': request.form.get('detect_email', 'false').lower() in ['true', '1', 'yes'],
+        'account': request.form.get('detect_account', 'false').lower() in ['true', '1', 'yes']
+    }
+    
     # 서비스 인스턴스 생성
     face_service = FaceDetectionService()
     hand_service = HandDetectionService()
@@ -244,16 +255,14 @@ def analyze_content():
             # 손가락 검출 (항상 실행)
             logger.info(f"손가락 감지 시작: blur_fingers={blur_fingers}")
             hand_result = hand_service.detect_fingertips(image_file, save_preview=True, return_image=True)
-            if isinstance(hand_result, tuple):
-                hand_data, _ = hand_result
-                logger.info(f"손가락 감지 결과: success={hand_data.get('success', False)}, count={hand_data.get('count', 0)}")
-            else:
-                logger.info(f"손가락 감지 결과: success={hand_result.get('success', False)}, count={hand_result.get('count', 0)}")
             
-            if blur_fingers and isinstance(hand_result, tuple):
+            # hand_result가 튜플인지 딕셔너리인지 확인
+            if isinstance(hand_result, tuple):
                 hand_data, _ = hand_result
             else:
                 hand_data = hand_result
+                
+            logger.info(f"손가락 감지 결과: success={hand_data.get('success', False)}, count={hand_data.get('count', 0)}")
                 
             if hand_data.get("success"):
                 all_finger_count += hand_data["count"]
@@ -319,7 +328,7 @@ def analyze_content():
     
     # 텍스트 분석 (OCR 결과 + 직접 입력 텍스트) - 항상 포함
     if text_input.strip():
-        # 종교 필터만 적용
+        # 종교 필터 적용
         filter_result = filter_service.filter_text(text_input.strip(), use_replacements=True, filters=["religious"])
         
         # 종교 관련 민감 정보
@@ -330,16 +339,29 @@ def analyze_content():
         if religious_words:
             religious_detected = True
         
+        # 정형 데이터 탐지 (mask_regex_service 사용)
+        structured_data_result = mask_regex_service.detect_sensitive_data(text_input.strip(), detection_options)
+        
+        # 정형 데이터 마스킹
+        masked_text = mask_regex_service.mask_sensitive_data(text_input.strip(), detection_options)
+        
         results["text_analysis"] = {
             "original_text": text_input.strip(),
             "filtered_text": filter_result.get("filtered_text", text_input.strip()),
+            "masked_text": masked_text,  # 마스킹된 텍스트 추가
             "religious_content_detected": religious_detected,
             "detected_words": religious_words,
-            "statistics": filter_result.get("overall_statistics", {})
+            "statistics": filter_result.get("overall_statistics", {}),
+            "structured_data": structured_data_result
         }
         
         results["summary"]["sensitive_text_found"] = filter_result.get("has_sensitive_content", False)
         results["summary"]["religious_content_detected"] = religious_detected
+        
+        # 정형 데이터 탐지 결과 요약에 추가
+        if structured_data_result.get("detected", False):
+            results["summary"]["structured_data_detected"] = True
+            results["summary"]["structured_data_count"] = structured_data_result.get("total_count", 0)
     else:
         # 텍스트가 없는 경우
         results["text_analysis"] = {
@@ -361,6 +383,23 @@ def analyze_content():
         summary_parts.append(f"{results['summary']['fingers_detected']}개의 손가락이 탐지되었습니다")
     if results["summary"]["religious_content_detected"]:
         summary_parts.append("종교 관련 민감 텍스트가 발견되었습니다")
+    
+    # 정형 데이터 탐지 결과를 개별적으로 추가
+    if results.get("text_analysis") and results["text_analysis"].get("structured_data"):
+        structured_data = results["text_analysis"]["structured_data"]
+        if structured_data.get("detected", False):
+            for category, data in structured_data.get("categories", {}).items():
+                if data.get("count", 0) > 0:
+                    category_names = {
+                        "phone": "전화번호",
+                        "rrn": "주민등록번호", 
+                        "passport": "여권번호",
+                        "ip_address": "IP주소",
+                        "email": "이메일",
+                        "account": "계좌번호"
+                    }
+                    category_name = category_names.get(category, category)
+                    summary_parts.append(f"{data['count']}개의 {category_name}이 탐지되었습니다")
     
     results["summary"]["message"] = "; ".join(summary_parts) if summary_parts else "민감 정보가 발견되지 않았습니다"
     
