@@ -19,18 +19,19 @@ export default function UploadForm() {
     face: true,           // 얼굴 (지원됨)
     fingerprint: true,    // 지문/손가락 (지원됨)
     religion: true,       // 종교 (지원됨)
-    // 아래는 준비 중
+    // 정형 데이터 탐지 옵션들
+    phone: false,         // 전화번호 (지원됨)
+    rrn: false,           // 주민등록번호 (지원됨)
+    passport: false,      // 여권번호 (지원됨)
+    ip_address: false,    // IP주소 (지원됨)
+    email: false,         // 이메일 (지원됨)
+    account: false,       // 계좌번호 (지원됨)
+    // 비정형 데이터 (아직 지원 안됨)
     name: false,          // 이름
     address: false,       // 주소
     workplace: false,     // 직장
     school: false,        // 학교
-    phone: false,         // 전화번호
-    email: false,         // 이메일
-    idNumber: false,      // 주민등록번호
-    passport: false,      // 여권번호
     driverLicense: false, // 운전면허번호
-    account: false,       // 계좌번호
-    ipAddress: false,     // IP주소
     postalCode: false     // 우편번호
   });
 
@@ -404,8 +405,8 @@ export default function UploadForm() {
     setError(null);
 
     try {
-      console.log('분석 시작:', { allFiles: allFiles.length, editorText: editorText.length });
-      const analysisResult = await analyzeContent(allFiles, editorText, blurFingers, showFaces);
+      console.log('분석 시작:', { allFiles: allFiles.length, editorText: editorText.length, detectionOptions });
+      const analysisResult = await analyzeContent(allFiles, editorText, blurFingers, showFaces, detectionOptions);
       console.log('분석 결과:', analysisResult);
       
       // 얼굴 감지 결과 디버깅
@@ -467,17 +468,17 @@ export default function UploadForm() {
       face: true,
       fingerprint: true,
       religion: true,
+      phone: false,
+      rrn: false,
+      passport: false,
+      ip_address: false,
+      email: false,
+      account: false,
       name: false,
       address: false,
       workplace: false,
       school: false,
-      phone: false,
-      email: false,
-      idNumber: false,
-      passport: false,
       driverLicense: false,
-      account: false,
-      ipAddress: false,
       postalCode: false
     });
     
@@ -606,7 +607,69 @@ export default function UploadForm() {
                 <span className="option-text">종교</span>
               </label>
               
-              {/* 준비 중인 기능들 */}
+              {/* 정형 데이터 탐지 옵션들 (지원됨) */}
+              <label className="option-item">
+                <input
+                  type="checkbox"
+                  checked={detectionOptions.phone}
+                  onChange={() => toggleDetectionOption('phone')}
+                  disabled={loading}
+                  className="option-checkbox"
+                />
+                <span className="option-text">전화번호</span>
+              </label>
+              <label className="option-item">
+                <input
+                  type="checkbox"
+                  checked={detectionOptions.rrn}
+                  onChange={() => toggleDetectionOption('rrn')}
+                  disabled={loading}
+                  className="option-checkbox"
+                />
+                <span className="option-text">주민등록번호</span>
+              </label>
+              <label className="option-item">
+                <input
+                  type="checkbox"
+                  checked={detectionOptions.passport}
+                  onChange={() => toggleDetectionOption('passport')}
+                  disabled={loading}
+                  className="option-checkbox"
+                />
+                <span className="option-text">여권번호</span>
+              </label>
+              <label className="option-item">
+                <input
+                  type="checkbox"
+                  checked={detectionOptions.ip_address}
+                  onChange={() => toggleDetectionOption('ip_address')}
+                  disabled={loading}
+                  className="option-checkbox"
+                />
+                <span className="option-text">IP주소</span>
+              </label>
+              <label className="option-item">
+                <input
+                  type="checkbox"
+                  checked={detectionOptions.email}
+                  onChange={() => toggleDetectionOption('email')}
+                  disabled={loading}
+                  className="option-checkbox"
+                />
+                <span className="option-text">이메일</span>
+              </label>
+              <label className="option-item">
+                <input
+                  type="checkbox"
+                  checked={detectionOptions.account}
+                  onChange={() => toggleDetectionOption('account')}
+                  disabled={loading}
+                  className="option-checkbox"
+                />
+                <span className="option-text">계좌번호</span>
+              </label>
+              
+              {/* 비정형 데이터 탐지 옵션들 (준비 중) */}
               <label className="option-item disabled">
                 <input
                   type="checkbox"
@@ -624,7 +687,7 @@ export default function UploadForm() {
                   disabled={true}
                   className="option-checkbox"
                 />
-                <span className="option-text">주소/우편번호</span>
+                <span className="option-text">주소</span>
                 <span className="coming-soon">준비 중</span>
               </label>
               <label className="option-item disabled">
@@ -650,46 +713,6 @@ export default function UploadForm() {
               <label className="option-item disabled">
                 <input
                   type="checkbox"
-                  checked={detectionOptions.phone}
-                  disabled={true}
-                  className="option-checkbox"
-                />
-                <span className="option-text">전화번호</span>
-                <span className="coming-soon">준비 중</span>
-              </label>
-              <label className="option-item disabled">
-                <input
-                  type="checkbox"
-                  checked={detectionOptions.email}
-                  disabled={true}
-                  className="option-checkbox"
-                />
-                <span className="option-text">이메일</span>
-                <span className="coming-soon">준비 중</span>
-              </label>
-              <label className="option-item disabled">
-                <input
-                  type="checkbox"
-                  checked={detectionOptions.idNumber}
-                  disabled={true}
-                  className="option-checkbox"
-                />
-                <span className="option-text">주민등록번호</span>
-                <span className="coming-soon">준비 중</span>
-              </label>
-              <label className="option-item disabled">
-                <input
-                  type="checkbox"
-                  checked={detectionOptions.passport}
-                  disabled={true}
-                  className="option-checkbox"
-                />
-                <span className="option-text">여권번호</span>
-                <span className="coming-soon">준비 중</span>
-              </label>
-              <label className="option-item disabled">
-                <input
-                  type="checkbox"
                   checked={detectionOptions.driverLicense}
                   disabled={true}
                   className="option-checkbox"
@@ -700,21 +723,11 @@ export default function UploadForm() {
               <label className="option-item disabled">
                 <input
                   type="checkbox"
-                  checked={detectionOptions.account}
+                  checked={detectionOptions.postalCode}
                   disabled={true}
                   className="option-checkbox"
                 />
-                <span className="option-text">계좌번호</span>
-                <span className="coming-soon">준비 중</span>
-              </label>
-              <label className="option-item disabled">
-                <input
-                  type="checkbox"
-                  checked={detectionOptions.ipAddress}
-                  disabled={true}
-                  className="option-checkbox"
-                />
-                <span className="option-text">IP주소</span>
+                <span className="option-text">우편번호</span>
                 <span className="coming-soon">준비 중</span>
               </label>
             </div>
@@ -828,13 +841,83 @@ export default function UploadForm() {
                       </span>
                     </div>
                     )}
+                    {detectionOptions.phone && (
+                    <div className="stat-item">
+                      <span className="stat-label">전화번호</span>
+                      <span className={`stat-value ${result.text_analysis?.structured_data?.categories?.phone?.count > 0 ? 'detected' : 'safe'}`}>
+                        {result.text_analysis?.structured_data?.categories?.phone?.count || 0}개
+                      </span>
+                    </div>
+                    )}
+                    {detectionOptions.rrn && (
+                    <div className="stat-item">
+                      <span className="stat-label">주민등록번호</span>
+                      <span className={`stat-value ${result.text_analysis?.structured_data?.categories?.rrn?.count > 0 ? 'detected' : 'safe'}`}>
+                        {result.text_analysis?.structured_data?.categories?.rrn?.count || 0}개
+                      </span>
+                    </div>
+                    )}
+                    {detectionOptions.passport && (
+                    <div className="stat-item">
+                      <span className="stat-label">여권번호</span>
+                      <span className={`stat-value ${result.text_analysis?.structured_data?.categories?.passport?.count > 0 ? 'detected' : 'safe'}`}>
+                        {result.text_analysis?.structured_data?.categories?.passport?.count || 0}개
+                      </span>
+                    </div>
+                    )}
+                    {detectionOptions.ip_address && (
+                    <div className="stat-item">
+                      <span className="stat-label">IP주소</span>
+                      <span className={`stat-value ${result.text_analysis?.structured_data?.categories?.ip_address?.count > 0 ? 'detected' : 'safe'}`}>
+                        {result.text_analysis?.structured_data?.categories?.ip_address?.count || 0}개
+                      </span>
+                    </div>
+                    )}
+                    {detectionOptions.email && (
+                    <div className="stat-item">
+                      <span className="stat-label">이메일</span>
+                      <span className={`stat-value ${result.text_analysis?.structured_data?.categories?.email?.count > 0 ? 'detected' : 'safe'}`}>
+                        {result.text_analysis?.structured_data?.categories?.email?.count || 0}개
+                      </span>
+                    </div>
+                    )}
+                    {detectionOptions.account && (
+                    <div className="stat-item">
+                      <span className="stat-label">계좌번호</span>
+                      <span className={`stat-value ${result.text_analysis?.structured_data?.categories?.account?.count > 0 ? 'detected' : 'safe'}`}>
+                        {result.text_analysis?.structured_data?.categories?.account?.count || 0}개
+                      </span>
+                    </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* OCR 텍스트 추출 결과 - 항상 표시 */}
+                <div className="ocr-text-card">
+                  <h3>🔍 추출된 텍스트 (OCR)</h3>
+                  <div className="ocr-content">
+                    {result.ocr_text && result.ocr_text.texts && result.ocr_text.texts.length > 0 ? (
+                      <>
+                        <p className="ocr-summary">{result.ocr_text.message}</p>
+                        <div className="ocr-texts">
+                          {result.ocr_text.texts.map((text, index) => (
+                            <div key={index} className="ocr-text-item">
+                              <h4>이미지 {index + 1}</h4>
+                              <p className="ocr-text-content">{text}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <p className="no-text-message">이미지에서 텍스트를 추출하지 못했습니다.</p>
+                    )}
                   </div>
                 </div>
 
                 {/* 텍스트 분석 결과 - 항상 표시 */}
                 {result.text_analysis && (
                   <div className="text-analysis-card">
-                    <h3>📝 텍스트 분석</h3>
+                    <h3>📝 텍스트 분석 (OCR + 입력 텍스트 전체)</h3>
                     <div className="text-content">
                       {result.text_analysis.original_text ? (
                         <>
@@ -842,10 +925,22 @@ export default function UploadForm() {
                             <h4>원본 텍스트</h4>
                             <p className="text-preview">{result.text_analysis.original_text}</p>
                           </div>
+                          
+                          {/* 종교 필터링 결과가 원본과 다를 때만 표시 */}
+                          {result.text_analysis.filtered_text !== result.text_analysis.original_text && (
                           <div className="text-section">
-                            <h4>필터링된 텍스트</h4>
+                            <h4>종교 필터링된 텍스트</h4>
                             <p className="text-preview">{result.text_analysis.filtered_text}</p>
                           </div>
+                          )}
+                          
+                          {/* 정형 데이터 마스킹 결과가 원본과 다를 때만 표시 */}
+                          {result.text_analysis.masked_text && result.text_analysis.masked_text !== result.text_analysis.original_text && (
+                          <div className="text-section">
+                            <h4>정형 데이터 마스킹된 텍스트</h4>
+                            <p className="text-preview">{result.text_analysis.masked_text}</p>
+                          </div>
+                          )}
                         </>
                       ) : (
                         <div className="text-section">
@@ -869,31 +964,97 @@ export default function UploadForm() {
                           </div>
                         </div>
                       )}
-                    </div>
-                  </div>
-                )}
-
-                {/* OCR 텍스트 추출 결과 - 항상 표시 */}
-                {result.ocr_text && (
-                  <div className="ocr-text-card">
-                    <h3>📄 추출된 텍스트</h3>
-                    <div className="ocr-content">
-                      <p className="ocr-summary">{result.ocr_text.message}</p>
-                      {result.ocr_text.texts.length > 0 ? (
-                        <div className="ocr-texts">
-                          {result.ocr_text.texts.map((text, index) => (
-                            <div key={index} className="ocr-text-item">
-                              <h4>이미지 {index + 1}</h4>
-                              <p className="ocr-text-content">{text}</p>
-                            </div>
-                          ))}
+                      
+                      {/* 정형 데이터 탐지 결과 */}
+                      {result.text_analysis.structured_data && result.text_analysis.structured_data.detected && (
+                        <div className="structured-data-section">
+                          <h4>📋 감지된 정형 데이터</h4>
+                          <div className="structured-data-list">
+                            {detectionOptions.phone && result.text_analysis.structured_data.categories.phone && (
+                              <div className="category-item">
+                                <h5 className="category-name">전화번호</h5>
+                                <div className="category-items">
+                                  {result.text_analysis.structured_data.categories.phone.items.map((item, index) => (
+                                    <div key={index} className="data-item">
+                                      <span className="data-type">[{item.type}]</span>
+                                      <span className="data-value">"{item.value}"</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {detectionOptions.rrn && result.text_analysis.structured_data.categories.rrn && (
+                              <div className="category-item">
+                                <h5 className="category-name">주민등록번호</h5>
+                                <div className="category-items">
+                                  {result.text_analysis.structured_data.categories.rrn.items.map((item, index) => (
+                                    <div key={index} className="data-item">
+                                      <span className="data-type">[{item.type}]</span>
+                                      <span className="data-value">"{item.value}"</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {detectionOptions.passport && result.text_analysis.structured_data.categories.passport && (
+                              <div className="category-item">
+                                <h5 className="category-name">여권번호</h5>
+                                <div className="category-items">
+                                  {result.text_analysis.structured_data.categories.passport.items.map((item, index) => (
+                                    <div key={index} className="data-item">
+                                      <span className="data-type">[{item.type}]</span>
+                                      <span className="data-value">"{item.value}"</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {detectionOptions.ip_address && result.text_analysis.structured_data.categories.ip_address && (
+                              <div className="category-item">
+                                <h5 className="category-name">IP주소</h5>
+                                <div className="category-items">
+                                  {result.text_analysis.structured_data.categories.ip_address.items.map((item, index) => (
+                                    <div key={index} className="data-item">
+                                      <span className="data-type">[{item.type}]</span>
+                                      <span className="data-value">"{item.value}"</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {detectionOptions.email && result.text_analysis.structured_data.categories.email && (
+                              <div className="category-item">
+                                <h5 className="category-name">이메일</h5>
+                                <div className="category-items">
+                                  {result.text_analysis.structured_data.categories.email.items.map((item, index) => (
+                                    <div key={index} className="data-item">
+                                      <span className="data-type">[{item.type}]</span>
+                                      <span className="data-value">"{item.value}"</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {detectionOptions.account && result.text_analysis.structured_data.categories.account && (
+                              <div className="category-item">
+                                <h5 className="category-name">계좌번호</h5>
+                                <div className="category-items">
+                                  {result.text_analysis.structured_data.categories.account.items.map((item, index) => (
+                                    <div key={index} className="data-item">
+                                      <span className="data-type">[{item.type}]</span>
+                                      <span className="data-value">"{item.value}"</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      ) : (
-                        <p className="no-text-message">텍스트를 발견하지 못했습니다</p>
                       )}
                     </div>
                   </div>
                 )}
+
 
                 {/* 얼굴 감지 결과 - 얼굴 감지 결과 표시 옵션이 체크되었을 때만 표시 */}
                 {showFaces && result.face_detection && result.face_detection.images.length > 0 && (
