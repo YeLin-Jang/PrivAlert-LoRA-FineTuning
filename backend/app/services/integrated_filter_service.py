@@ -5,6 +5,7 @@
 import logging
 from typing import Dict, List, Any
 from app.services.religious_filter_service import ReligiousFilterService
+from app.services.sentiment_analysis_service import sentiment_service
 
 logger = logging.getLogger(__name__)
 
@@ -56,16 +57,47 @@ class IntegratedFilterService:
             "applied_filters": filters
         }
         
+        # 감정 분석 기반 종교적 모독 감지
+        blasphemy_result = sentiment_service.detect_religious_blasphemy(text)
+        
         # 각 필터별로 처리
         for filter_name in filters:
             try:
                 if filter_name == "religious":
+                    # 기존 종교 필터링
                     result = self.religious_filter.filter_text(text, use_replacements)
                     if result["success"]:
                         filter_results["religious"] = result
                         # 필터링된 텍스트로 업데이트
                         filtered_text = result["filtered_text"]
                         overall_statistics["total_detected"] += result["statistics"]["total_detected"]
+                    
+                    # 감정 분석 결과 추가
+                    if blasphemy_result["is_blasphemy"]:
+                        # 종교적 모독이 감지된 경우
+                        if "religious" not in filter_results:
+                            filter_results["religious"] = {
+                                "success": True,
+                                "detected_words": [],
+                                "statistics": {"total_detected": 0}
+                            }
+                        
+                        # 감지된 종교별로 민감 단어 추가
+                        for religion in blasphemy_result["detected_religions"]:
+                            blasphemy_word = f"종교적 모독 ({religion})"
+                            filter_results["religious"]["detected_words"].append({
+                                "word": blasphemy_word,
+                                "category": religion,
+                                "replacement": sentiment_service.get_replacement_message([religion]),
+                                "confidence": blasphemy_result["confidence"]
+                            })
+                            filter_results["religious"]["statistics"]["total_detected"] += 1
+                            overall_statistics["total_detected"] += 1
+                        
+                        # 대체 메시지로 텍스트 교체
+                        if use_replacements:
+                            replacement_msg = sentiment_service.get_replacement_message(blasphemy_result["detected_religions"])
+                            filtered_text = replacement_msg
                 
                 # 향후 다른 필터들 추가
                 # elif filter_name == "klie":
