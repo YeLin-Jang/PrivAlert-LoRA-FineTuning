@@ -84,3 +84,43 @@ class OCRService:
         except Exception as e:
             logger.error(f"OCR 처리 중 오류 발생: {str(e)}")
             raise
+    
+    def detect_text_from_bytes(self, image_data: bytes) -> Optional[str]:
+        """
+        바이트 데이터에서 직접 텍스트 추출 (파일 접근 충돌 방지)
+        
+        Args:
+            image_data: 이미지 바이트 데이터
+            
+        Returns:
+            추출된 텍스트 또는 None (텍스트가 없는 경우)
+        """
+        try:
+            if not image_data:
+                logger.warning("빈 이미지 데이터입니다")
+                return None
+            
+            image = vision.Image(content=image_data)
+            response = self.client.text_detection(image=image)
+            
+            # API 오류 확인
+            if response.error.message:
+                logger.error(f"Vision API 오류: {response.error.message}")
+                return None
+            
+            # 텍스트 추출
+            texts = response.text_annotations
+            if not texts:
+                logger.info("텍스트가 감지되지 않았습니다")
+                return None
+            
+            # 첫 번째 텍스트 (전체 텍스트) 추출
+            extracted_text = texts[0].description.strip()
+            
+            logger.info(f"텍스트 추출 완료: {len(extracted_text)}자")
+            
+            return extracted_text if extracted_text else None
+            
+        except Exception as e:
+            logger.error(f"OCR 처리 중 오류 발생: {str(e)}")
+            raise
