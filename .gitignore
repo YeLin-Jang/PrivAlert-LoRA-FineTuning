@@ -32,11 +32,11 @@ backend/.vscode/
 backend/.idea/
 
 # Flask static 빌드 결과물
-backend/app/static/
+backend/static/
 
 # 데이터/DB 
 backend/data/
-backend/app/static/temp/
+backend/static/temp/
 backend/*.sqlite
 backend/*.db
 
