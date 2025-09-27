@@ -1,0 +1,157 @@
+tags:
+  - name: Religious Filter
+    description: 종교 필터링 API
+
+paths:
+  /api/v1/religious/detect:
+    post:
+      tags:
+        - Religious Filter
+      summary: 종교 관련 민감 텍스트 탐지
+      description: |
+        종교 관련 민감한 텍스트를 탐지하고 필터링합니다.
+        현재 구현된 필터링 기준:
+        - 기독교: "하나님 비하", "예수 모독", "교회 훼손" 등
+        - 이슬람: "알라 비하", "무함마드 모독", "꾸란 훼손" 등  
+        - 불교: "부처 비하", "석가모니 모독", "불교 욕" 등
+        - 일반 종교: "종교 비하", "신앙 모독", "신성 욕" 등
+        
+        일반적인 종교 용어는 필터링하지 않습니다:
+        - "교회에 다닌다", "절에 가다", "성당에서 미사" 등
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          description: 탐지할 텍스트
+          required: true
+          schema:
+            type: object
+            properties:
+              text:
+                type: string
+                description: 분석할 텍스트 (최대 10,000자)
+                example: "하나님 비하하는 말이지만 교회에 다닌다"
+            required:
+              - text
+      responses:
+        200:
+          description: 탐지 성공
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: true
+              original_text:
+                type: string
+                example: "하나님 비하하는 말이지만 교회에 다닌다"
+              filtered_text:
+                type: string
+                example: "하나님 비하하는 말이지만 교회에 다닌다"
+              detected_words:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    word:
+                      type: string
+                      example: "하나님 비하"
+                    start:
+                      type: integer
+                      example: 0
+                    end:
+                      type: integer
+                      example: 5
+                    religion:
+                      type: string
+                      example: "christianity"
+                    pattern_type:
+                      type: string
+                      example: "keyword"
+              statistics:
+                type: object
+                properties:
+                  christianity:
+                    type: integer
+                    example: 1
+                  total_detected:
+                    type: integer
+                    example: 1
+                  total_words:
+                    type: integer
+                    example: 8
+                  detection_rate:
+                    type: number
+                    format: float
+                    example: 12.5
+              compliance:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [compliant, review_required, non_compliant]
+                    example: "review_required"
+                  message:
+                    type: string
+                    example: "종교 관련 내용이 발견되었으나 맥락 검토가 필요합니다"
+                  legal_basis:
+                    type: string
+                    example: "대한민국 헌법 제20조 - 종교의 자유"
+                  recommendation:
+                    type: string
+                    example: "교육적 목적이나 문화적 맥락인지 확인하시기 바랍니다"
+                  affected_religions:
+                    type: array
+                    items:
+                      type: string
+                      example: "christianity"
+              standards_applied:
+                type: object
+                properties:
+                  legal_basis:
+                    type: object
+                    example: {"korean_constitution": "대한민국 헌법 제20조 - 종교의 자유 보장"}
+                  filtering_level:
+                    type: string
+                    example: "level_2_contextual_review"
+                  quality_assurance:
+                    type: object
+                    example: {"human_review_process": "자동 필터링 후 Level 2 이상의 감지 건에 대해 전문가 수동 검토"}
+              has_sensitive_content:
+                type: boolean
+                example: true
+              message:
+                type: string
+                example: "1개의 민감한 종교 관련 표현이 감지되었습니다"
+        400:
+          description: 잘못된 요청
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+                example: "텍스트가 필요합니다"
+              code:
+                type: integer
+                example: 400
+        500:
+          description: 서버 내부 오류
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+                example: "서버 내부 오류가 발생했습니다"
+              code:
+                type: integer
+                example: 500
+

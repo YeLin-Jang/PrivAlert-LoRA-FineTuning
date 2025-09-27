@@ -1,0 +1,187 @@
+tags:
+  - name: Religious Filter
+    description: 종교 필터링 API
+
+paths:
+  /api/v1/religious/stats:
+    get:
+      tags:
+        - Religious Filter
+      summary: 종교 필터링 통계 정보 조회
+      description: |
+        현재 적용된 종교 필터링 기준과 통계 정보를 조회합니다.
+        - 지원하는 종교별 키워드 수
+        - 적용된 정규식 패턴 수
+        - 법적 근거 및 필터링 기준
+        - 품질 보증 방법
+      produces:
+        - application/json
+      responses:
+        200:
+          description: 통계 조회 성공
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: true
+              statistics:
+                type: object
+                properties:
+                  total_religions:
+                    type: integer
+                    example: 4
+                    description: 지원하는 종교 수
+                  religions:
+                    type: object
+                    properties:
+                      christianity:
+                        type: object
+                        properties:
+                          keywords_count:
+                            type: integer
+                            example: 15
+                          patterns_count:
+                            type: integer
+                            example: 8
+                          keywords:
+                            type: array
+                            items:
+                              type: string
+                            example: ["하나님 비하", "예수 모독", "그리스도 비하"]
+                          patterns:
+                            type: array
+                            items:
+                              type: string
+                            example: ["\\b하나님\\s*.*?\\s*(비하|모독|욕|더럽힘|훼손)\\b"]
+                      islam:
+                        type: object
+                        properties:
+                          keywords_count:
+                            type: integer
+                            example: 12
+                          patterns_count:
+                            type: integer
+                            example: 6
+                          keywords:
+                            type: array
+                            items:
+                              type: string
+                            example: ["알라 비하", "무함마드 모독", "꾸란 비하"]
+                          patterns:
+                            type: array
+                            items:
+                              type: string
+                            example: ["\\b알라\\s*.*?\\s*(비하|모독|욕|더럽힘)\\b"]
+                      buddhism:
+                        type: object
+                        properties:
+                          keywords_count:
+                            type: integer
+                            example: 10
+                          patterns_count:
+                            type: integer
+                            example: 6
+                          keywords:
+                            type: array
+                            items:
+                              type: string
+                            example: ["부처 비하", "석가모니 모독", "불교 비하"]
+                          patterns:
+                            type: array
+                            items:
+                              type: string
+                            example: ["\\b부처\\s*.*?\\s*(비하|모독|욕|더럽힘)\\b"]
+                      general_religious:
+                        type: object
+                        properties:
+                          keywords_count:
+                            type: integer
+                            example: 8
+                          patterns_count:
+                            type: integer
+                            example: 4
+                          keywords:
+                            type: array
+                            items:
+                              type: string
+                            example: ["종교 비하", "신앙 모독", "신성 비하"]
+                          patterns:
+                            type: array
+                            items:
+                              type: string
+                            example: ["\\b종교\\s*.*?\\s*(비하|모독|욕|더럽힘)\\b"]
+                  total_keywords:
+                    type: integer
+                    example: 45
+                    description: 전체 키워드 수
+                  total_patterns:
+                    type: integer
+                    example: 24
+                    description: 전체 정규식 패턴 수
+                  filtering_criteria:
+                    type: object
+                    properties:
+                      legal_basis:
+                        type: object
+                        properties:
+                          constitution:
+                            type: string
+                            example: "대한민국 헌법 제20조 - 종교의 자유"
+                          personal_info_protection_act:
+                            type: string
+                            example: "개인정보보호법"
+                          youth_protection_act:
+                            type: string
+                            example: "청소년보호법"
+                          broadcasting_act:
+                            type: string
+                            example: "방송법"
+                      filtering_levels:
+                        type: array
+                        items:
+                          type: string
+                        example: ["level_1_immediate_block", "level_2_contextual_review", "level_3_educational_content"]
+                      quality_assurance:
+                        type: object
+                        properties:
+                          false_positive_prevention:
+                            type: object
+                            properties:
+                              description:
+                                type: string
+                                example: "오탐지 방지"
+                              methods:
+                                type: array
+                                items:
+                                  type: string
+                                example: ["맥락 분석", "화이트리스트 키워드", "교육적 내용 식별"]
+                          false_negative_prevention:
+                            type: object
+                            properties:
+                              description:
+                                type: string
+                                example: "미탐지 방지"
+                              methods:
+                                type: array
+                                items:
+                                  type: string
+                                example: ["정기적인 키워드 업데이트", "새로운 우회 패턴 모니터링", "사용자 신고 시스템"]
+              message:
+                type: string
+                example: "종교 필터링 통계를 성공적으로 조회했습니다"
+        500:
+          description: 서버 내부 오류
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+                example: "통계 조회 중 오류가 발생했습니다"
+              code:
+                type: integer
+                example: 500
+

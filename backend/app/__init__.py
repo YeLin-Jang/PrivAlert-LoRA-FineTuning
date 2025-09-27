@@ -5,18 +5,18 @@ from flasgger import Swagger
 from dotenv import load_dotenv
 from flask_cors import CORS
 from app.utils.file_utils import ensure_dir
-from config import BASE_DATA_DIR  
+from config import BASE_DATA_DIR
 
 # 환경변수 로드
 load_dotenv()
 
 def setup_logging(app):
     """로깅 설정"""
-    if not app.config['DEBUG']:
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s %(levelname)s %(name)s: %(message)s'
-        )
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    logging.basicConfig(
+        level=getattr(logging, log_level),
+        format='%(asctime)s %(levelname)s %(name)s: %(message)s'
+    )
 
 def create_app(config_name=None):
     """Flask 애플리케이션 팩토리"""
@@ -24,9 +24,17 @@ def create_app(config_name=None):
     
     # 환경 설정
     flask_env = os.getenv("FLASK_ENV", "development")
+    secret_key = os.getenv("FLASK_SECRET_KEY")
+    
+    # 보안 검증
+    if not secret_key or secret_key == "dev-secret-key":
+        if flask_env == "production":
+            raise ValueError("운영 환경에서는 FLASK_SECRET_KEY를 설정해야 합니다")
+        secret_key = "dev-secret-key-change-in-production"
+    
     app.config.update({
-        "SECRET_KEY": os.getenv("FLASK_SECRET_KEY", "dev-secret-key"),
-        "MAX_CONTENT_LENGTH": 10 * 1024 * 1024,  # 10MB
+        "SECRET_KEY": secret_key,
+        "MAX_CONTENT_LENGTH": int(os.getenv("MAX_CONTENT_LENGTH", "10")) * 1024 * 1024,
         "DEBUG": flask_env == "development"
     })
     
@@ -34,12 +42,13 @@ def create_app(config_name=None):
     setup_logging(app)
     
     # CORS 설정
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
     CORS(app, resources={
         r"/api/*": {
-            "origins": frontend_url,
+            "origins": cors_origins,
             "methods": ["GET", "POST"],
-            "allow_headers": ["Content-Type"]
+            "allow_headers": ["Content-Type"],
+            "supports_credentials": True
         }
     })
     
@@ -79,6 +88,31 @@ def create_app(config_name=None):
             "schemes": ["http"],
             "produces": ["application/json"],
             "consumes": ["application/json", "multipart/form-data"],
+            "definitions": {
+                "FileUpload": {
+                    "type": "object",
+                    "properties": {
+                        "image": {
+                            "type": "file",
+                            "description": "분석할 이미지 파일"
+                        },
+                        "text": {
+                            "type": "string",
+                            "description": "분석할 텍스트"
+                        },
+                        "blur_fingers": {
+                            "type": "boolean",
+                            "description": "손가락 블러 처리 여부",
+                            "default": "true"
+                        },
+                        "show_faces": {
+                            "type": "boolean",
+                            "description": "얼굴 상세 표시 여부",
+                            "default": "false"
+                        }
+                    }
+                }
+            }
         })
         app.logger.info("Swagger 설정 완료")
     except Exception as e:
@@ -102,13 +136,15 @@ def create_app(config_name=None):
     from app.routes.image_sanitize_routes import image_sanitize_bp
     from app.routes.integrated_filter_routes import integrated_filter_bp
     from app.routes.integrated_analysis_routes import integrated_analysis_bp
+    # religious_filter_bp는 내부 모듈로만 사용 (Swagger 노출 안함)
     
     app.register_blueprint(face_bp, url_prefix="/api/v1/face")
     app.register_blueprint(hand_bp, url_prefix="/api/v1/hand")
     app.register_blueprint(ocr_bp, url_prefix="/api/v1/ocr")
     app.register_blueprint(image_sanitize_bp, url_prefix="/api/v1/images")
     app.register_blueprint(integrated_filter_bp, url_prefix="/api/v1/filter")
-    app.register_blueprint(integrated_analysis_bp, url_prefix="/api/v1/analyze")  
+    app.register_blueprint(integrated_analysis_bp, url_prefix="/api/v1")
+    # religious_filter_bp는 내부 모듈로만 사용 (Swagger 노출 안함)  
     
     # 헬스체크 엔드포인트
     @app.route("/health")

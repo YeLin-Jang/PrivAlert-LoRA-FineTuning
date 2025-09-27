@@ -1,8 +1,5 @@
 """
 통합 필터링 서비스
-
-이 서비스는 OCR로 추출된 텍스트나 일반 텍스트를 여러 필터링 모델을 통해 처리합니다.
-종교, KLIE 등 다양한 민감 정보를 탐지하고 필터링합니다.
 """
 
 import logging
@@ -20,17 +17,16 @@ class IntegratedFilterService:
         self.religious_filter = ReligiousFilterService()
         # 향후 KLIE 등 다른 필터링 서비스들 추가 예정
         # self.klie_filter = KLIEFilterService()
-        # self.personal_info_filter = PersonalInfoFilterService()
         
         logger.info("통합 필터링 서비스 초기화 완료")
     
-    def filter_text(self, text: str, mask_char: str = "*", filters: List[str] = None) -> Dict:
+    def filter_text(self, text: str, use_replacements: bool = True, filters: List[str] = None) -> Dict:
         """
         텍스트를 여러 필터링 모델을 통해 처리
         
         Args:
             text: 필터링할 텍스트
-            mask_char: 마스킹에 사용할 문자
+            use_replacements: 대체 단어 사용 여부
             filters: 적용할 필터 목록 (None이면 모든 필터 적용)
             
         Returns:
@@ -64,7 +60,7 @@ class IntegratedFilterService:
         for filter_name in filters:
             try:
                 if filter_name == "religious":
-                    result = self.religious_filter.filter_text(text, mask_char)
+                    result = self.religious_filter.filter_text(text, use_replacements)
                     if result["success"]:
                         filter_results["religious"] = result
                         # 필터링된 텍스트로 업데이트
@@ -76,13 +72,6 @@ class IntegratedFilterService:
                 #     result = self.klie_filter.filter_text(text, mask_char)
                 #     if result["success"]:
                 #         filter_results["klie"] = result
-                #         filtered_text = result["filtered_text"]
-                #         overall_statistics["total_detected"] += result["statistics"]["total_detected"]
-                
-                # elif filter_name == "personal_info":
-                #     result = self.personal_info_filter.filter_text(text, mask_char)
-                #     if result["success"]:
-                #         filter_results["personal_info"] = result
                 #         filtered_text = result["filtered_text"]
                 #         overall_statistics["total_detected"] += result["statistics"]["total_detected"]
                 
@@ -121,7 +110,7 @@ class IntegratedFilterService:
     
     def get_available_filters(self) -> List[str]:
         """사용 가능한 필터 목록 반환"""
-        return ["religious"]  # 향후 "klie", "personal_info" 등 추가
+        return ["religious"]  # 향후 "klie" 등 추가
     
     def get_filter_statistics(self) -> Dict[str, Any]:
         """각 필터별 통계 정보 반환"""
@@ -141,6 +130,5 @@ class IntegratedFilterService:
         
         # 향후 다른 필터들의 통계도 추가
         # stats["klie"] = self.klie_filter.get_statistics()
-        # stats["personal_info"] = self.personal_info_filter.get_statistics()
         
         return stats

@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/api.ts","./src/main.tsx","./src/types.ts","./src/vite-env.d.ts","./src/components/uploadform.tsx","./src/types/face.ts","./src/types/hand.ts","./src/types/ocr.ts"],"version":"5.8.3"}

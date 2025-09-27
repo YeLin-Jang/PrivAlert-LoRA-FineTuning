@@ -142,13 +142,22 @@ class ReligiousFilterService:
         
         return matches
     
-    def filter_text(self, text: str, mask_char: str = "*") -> Dict:
+    def _get_replacement(self, religion: str, word: str) -> str:
+        """대체 단어 찾기"""
+        try:
+            replacements = self.sensitive_words.get(religion, {}).get("replacements", {})
+            return replacements.get(word, "")
+        except Exception as e:
+            logger.warning(f"대체 단어 찾기 실패: {religion}, {word}, 오류: {e}")
+            return ""
+    
+    def filter_text(self, text: str, use_replacements: bool = True) -> Dict:
         """
-        텍스트에서 민감 단어 필터링
+        텍스트에서 민감 단어 필터링 및 대체 단어 제시
         
         Args:
             text: 필터링할 텍스트
-            mask_char: 마스킹에 사용할 문자
+            use_replacements: 대체 단어 사용 여부 (기본값: True)
             
         Returns:
             필터링 결과 딕셔너리
@@ -165,8 +174,8 @@ class ReligiousFilterService:
         
         # 텍스트 정규화
         normalized_text = self._normalize_text(text)
-        filtered_text = normalized_text
         detected_words = []
+        replacement_suggestions = []  # 대체 단어 제안
         statistics = {religion: 0 for religion in self.sensitive_words.keys() if religion != "bypass_patterns"}
         
         # 각 종교별로 민감 단어 검사
@@ -188,13 +197,26 @@ class ReligiousFilterService:
                             break
                     
                     if not is_duplicate:
-                        religion_detected.append({
+                        # 대체 단어 찾기
+                        replacement = self._get_replacement(religion, matched_text)
+                        
+                        word_info = {
                             'word': matched_text,
                             'start': start,
                             'end': end,
                             'religion': religion,
                             'pattern_type': 'regex'
-                        })
+                        }
+                        
+                        if replacement and use_replacements:
+                            word_info['replacement'] = replacement
+                            replacement_suggestions.append({
+                                'original': matched_text,
+                                'replacement': replacement,
+                                'position': f"{start}-{end}"
+                            })
+                        
+                        religion_detected.append(word_info)
             
             # 키워드 직접 검색 (우회 패턴 포함)
             for keyword in self.sensitive_words.get(religion, {}).get("keywords", []):
@@ -216,13 +238,26 @@ class ReligiousFilterService:
                             break
                     
                     if not is_duplicate:
-                        religion_detected.append({
+                        # 대체 단어 찾기
+                        replacement = self._get_replacement(religion, keyword)
+                        
+                        word_info = {
                             'word': keyword,
                             'start': start,
                             'end': end,
                             'religion': religion,
                             'pattern_type': 'keyword'
-                        })
+                        }
+                        
+                        if replacement and use_replacements:
+                            word_info['replacement'] = replacement
+                            replacement_suggestions.append({
+                                'original': keyword,
+                                'replacement': replacement,
+                                'position': f"{start}-{end}"
+                            })
+                        
+                        religion_detected.append(word_info)
                 
                 # 우회 패턴 검색
                 bypass_matches = self._detect_bypass_patterns(normalized_text, keyword)
@@ -236,13 +271,26 @@ class ReligiousFilterService:
                             break
                     
                     if not is_duplicate:
-                        religion_detected.append({
+                        # 대체 단어 찾기
+                        replacement = self._get_replacement(religion, matched_text)
+                        
+                        word_info = {
                             'word': matched_text,
                             'start': start,
                             'end': end,
                             'religion': religion,
                             'pattern_type': 'bypass'
-                        })
+                        }
+                        
+                        if replacement and use_replacements:
+                            word_info['replacement'] = replacement
+                            replacement_suggestions.append({
+                                'original': matched_text,
+                                'replacement': replacement,
+                                'position': f"{start}-{end}"
+                            })
+                        
+                        religion_detected.append(word_info)
             
             # 감지된 단어를 시작 위치 기준으로 정렬
             religion_detected.sort(key=lambda x: x['start'])
@@ -272,6 +320,7 @@ class ReligiousFilterService:
             "original_text": text,
             "filtered_text": text,  # 원본 텍스트 그대로 반환
             "detected_words": detected_words,
+            "replacement_suggestions": replacement_suggestions,  # 대체 단어 제안
             "statistics": {
                 **statistics,
                 "total_detected": total_detected,

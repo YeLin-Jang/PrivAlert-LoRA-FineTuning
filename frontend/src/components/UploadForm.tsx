@@ -1,738 +1,626 @@
-import { useState } from "react";
-import { analyzeContent } from "@/api";
+import React, { useState, useRef } from 'react';
+import { analyzeContent } from '../api';
+import type { AnalysisResult } from '../types';
 
 export default function UploadForm() {
-  const [result, setResult] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-  const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [text, setText] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [text, setText] = useState('');
   const [blurFingers, setBlurFingers] = useState(true);
   const [showFaces, setShowFaces] = useState(false);
-  const [showAnalysisPrompt, setShowAnalysisPrompt] = useState(false);
-  const [showClearTextPrompt, setShowClearTextPrompt] = useState(false);
-  const [contentEditableRef, setContentEditableRef] = useState<HTMLDivElement | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [editorImageCount, setEditorImageCount] = useState(0);
+  const editorRef = useRef<HTMLDivElement>(null);
 
-  // 파일 삭제 함수
-  const removeFile = (index: number) => {
-    setImageFiles(prev => {
-      const newFiles = prev.filter((_, i) => i !== index);
-      
-      // contentEditable 영역에서도 이미지 제거
-      clearContentEditableImages();
-      
-      // 텍스트에 내용이 있으면 사용자에게 확인
-      if (text.trim()) {
-        setShowClearTextPrompt(true);
-      }
-      
-      // 파일이 모두 삭제되고 텍스트도 없으면 프롬프트 숨김
-      if (newFiles.length === 0 && !text.trim()) {
-        setShowAnalysisPrompt(false);
-      }
-      return newFiles;
-    });
-  };
-
-  // 모든 파일 삭제 함수
-  const clearAllFiles = () => {
-    setImageFiles([]);
-    
-    // contentEditable 영역에서도 이미지 제거
-    clearContentEditableImages();
-    
-    // 텍스트에 내용이 있으면 사용자에게 확인
-    if (text.trim()) {
-      setShowClearTextPrompt(true);
-    }
-    
-    // 파일이 모두 삭제되고 텍스트도 없으면 프롬프트 숨김
-    if (!text.trim()) {
-      setShowAnalysisPrompt(false);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setFiles(Array.from(e.target.files));
     }
   };
 
-  // 텍스트 초기화 확인 함수
-  const handleClearTextConfirm = () => {
-    setText("");
-    setShowClearTextPrompt(false);
-    setShowAnalysisPrompt(false);
-    
-    // contentEditable 영역도 초기화
-    if (contentEditableRef) {
-      contentEditableRef.innerHTML = "";
-    }
-  };
-
-  // 텍스트 초기화 취소 함수
-  const handleClearTextCancel = () => {
-    setShowClearTextPrompt(false);
-  };
-
-  // contentEditable 영역에서 이미지 제거 함수
-  const clearContentEditableImages = () => {
-    if (contentEditableRef) {
-      // 모든 img 태그 제거
-      const images = contentEditableRef.querySelectorAll('img');
-      images.forEach(img => img.remove());
-      
-      // 텍스트 내용 업데이트
-      const textContent = contentEditableRef.textContent || "";
-      setText(textContent);
-    }
-  };
-
-  // 클립보드 붙여넣기 처리
-  const handlePaste = async (e: React.ClipboardEvent) => {
-    console.log("붙여넣기 이벤트 발생!");
-    
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
     const items = e.clipboardData.items;
-    console.log("클립보드 아이템 수:", items.length);
     
-    const newImages: File[] = [];
-
+    // HTML 형태의 복사 내용이 있는지 먼저 확인
+    let hasHtml = false;
+    let htmlContent = '';
+    
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      console.log(`아이템 ${i}:`, item.type);
-      
-      if (item.type.indexOf('image') !== -1) {
-        // 이미지 파일 처리
-        const file = item.getAsFile();
-        if (file) {
-          console.log("이미지 파일 발견:", file.name, file.size);
-          newImages.push(file);
+      if (item.type === 'text/html') {
+        hasHtml = true;
+        item.getAsString((html) => {
+          htmlContent = html;
+          processHtmlContent(htmlContent);
+        });
+        break;
+      }
+    }
+    
+    // HTML이 없으면 기존 방식으로 처리
+    if (!hasHtml) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        
+        if (item.type.indexOf('image') !== -1) {
+          const file = item.getAsFile();
+          if (file) {
+            processImageFile(file);
+          }
+        } else if (item.type.indexOf('text') !== -1) {
+          item.getAsString((text) => {
+            processTextContent(text);
+          });
         }
       }
     }
-
-    // 이미지만 별도로 관리
-    if (newImages.length > 0) {
-      setImageFiles(prev => [...prev, ...newImages]);
-      setShowAnalysisPrompt(true);
-    }
-
-    // 텍스트는 contentEditable이 자동으로 처리하므로 별도 처리 불필요
-    console.log("붙여넣기 완료 - 이미지:", newImages.length, "개");
+    
+    // 붙여넣기 후 텍스트 업데이트
+    setTimeout(() => {
+      if (editorRef.current) {
+        const textContent = editorRef.current.innerText;
+        setText(textContent);
+        const editorImages = editorRef.current.querySelectorAll('img').length;
+        setEditorImageCount(editorImages);
+      }
+    }, 100);
   };
 
+  const processHtmlContent = (html: string) => {
+    if (!editorRef.current) return;
+    
+    // HTML을 파싱하여 텍스트와 이미지를 분리
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    
+    // 이미지 태그들을 찾아서 처리
+    const images = tempDiv.querySelectorAll('img');
+    images.forEach((img, index) => {
+      if (img.src.startsWith('data:')) {
+        // Data URL을 File로 변환
+        const base64Data = img.src.split(',')[1];
+        const mimeType = img.src.split(',')[0].split(':')[1].split(';')[0];
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const file = new File([byteArray], `pasted-image-${index}.${mimeType.split('/')[1]}`, { type: mimeType });
+        
+        // 파일 목록에 추가
+        setFiles(prev => [...prev, file]);
+        
+        // 이미지 스타일 적용
+        img.style.maxWidth = '100%';
+        img.style.height = 'auto';
+        img.style.margin = '10px 0';
+        img.style.borderRadius = '8px';
+        img.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+        img.style.display = 'block';
+      }
+    });
+    
+    // HTML 내용을 에디터에 삽입
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      
+      // HTML 노드들을 삽입
+      while (tempDiv.firstChild) {
+        range.insertNode(tempDiv.firstChild);
+      }
+      
+      range.setStartAfter(range.endContainer);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    } else {
+      editorRef.current.appendChild(tempDiv);
+    }
+  };
 
-  async function handleAnalyze() {
-    console.log("분석 시작 - 이미지:", imageFiles.length, "텍스트:", text.length);
+  const processImageFile = (file: File) => {
+    // 파일 목록에 추가
+    setFiles(prev => [...prev, file]);
+    
+    // 에디터에 이미지 삽입
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (editorRef.current) {
+        const img = document.createElement('img');
+        img.src = event.target?.result as string;
+        img.style.maxWidth = '100%';
+        img.style.height = 'auto';
+        img.style.margin = '10px 0';
+        img.style.borderRadius = '8px';
+        img.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+        img.style.display = 'block';
+        
+        // 커서 위치에 이미지 삽입
+        const selection = window.getSelection();
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0);
+          range.deleteContents();
+          range.insertNode(img);
+          range.setStartAfter(img);
+          range.collapse(true);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        } else {
+          editorRef.current.appendChild(img);
+        }
+        
+        // 줄바꿈 추가
+        const br = document.createElement('br');
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0);
+          range.insertNode(br);
+          range.setStartAfter(br);
+          range.collapse(true);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        } else {
+          editorRef.current.appendChild(br);
+        }
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const processTextContent = (text: string) => {
+    if (!editorRef.current) return;
+    
+    // 커서 위치에 텍스트 삽입
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      
+      // 텍스트를 HTML로 변환하여 서식 유지
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = text.replace(/\n/g, '<br>');
+      
+      // 텍스트 노드들을 삽입
+      while (tempDiv.firstChild) {
+        range.insertNode(tempDiv.firstChild);
+      }
+      
+      range.setStartAfter(range.endContainer);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    } else {
+      // 텍스트를 HTML로 변환하여 서식 유지
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = text.replace(/\n/g, '<br>');
+      editorRef.current.appendChild(tempDiv);
+    }
+  };
+
+  const handleEditorInput = () => {
+    if (editorRef.current) {
+      const textContent = editorRef.current.innerText;
+      setText(textContent);
+      
+      // 에디터의 이미지 개수 업데이트
+      const editorImages = editorRef.current.querySelectorAll('img').length;
+      setEditorImageCount(editorImages);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Ctrl+A: 전체 선택
+    if (e.ctrlKey && e.key === 'a') {
+      e.preventDefault();
+      if (editorRef.current) {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(editorRef.current);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        
+        // 선택된 내용을 시각적으로 표시
+        editorRef.current.style.backgroundColor = '#f0f0f0';
+        setTimeout(() => {
+          if (editorRef.current) {
+            editorRef.current.style.backgroundColor = '';
+          }
+        }, 200);
+      }
+    }
+    
+    // Ctrl+C: 복사 (개선된 복사 기능)
+    if (e.ctrlKey && e.key === 'c') {
+      if (editorRef.current) {
+        const selection = window.getSelection();
+        if (selection && selection.toString().length > 0) {
+          // 선택된 내용이 있으면 브라우저 기본 복사 동작을 허용
+          return;
+        } else {
+          // 선택된 내용이 없으면 전체 내용을 클립보드에 복사
+          e.preventDefault();
+          const range = document.createRange();
+          range.selectNodeContents(editorRef.current);
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+          
+          // 복사 실행
+          document.execCommand('copy');
+          
+          // 선택 해제
+          selection?.removeAllRanges();
+        }
+      }
+    }
+    
+    // Ctrl+V: 붙여넣기 (이미 handlePaste에서 처리됨)
+    if (e.ctrlKey && e.key === 'v') {
+      // 브라우저 기본 붙여넣기 동작을 허용 (handlePaste에서 처리)
+      return;
+    }
+  };
+
+  const extractImagesFromEditor = (): File[] => {
+    if (!editorRef.current) return [];
+    
+    const images = editorRef.current.querySelectorAll('img');
+    const imageFiles: File[] = [];
+    
+    images.forEach((img, index) => {
+      // 이미지가 로드되었는지 확인
+      if (img.complete && img.naturalWidth > 0) {
+        try {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            ctx.drawImage(img, 0, 0);
+            
+            canvas.toBlob((blob) => {
+              if (blob) {
+                const file = new File([blob], `pasted-image-${index}.png`, { type: 'image/png' });
+                imageFiles.push(file);
+              }
+            }, 'image/png');
+          }
+        } catch (error) {
+          console.warn('이미지 변환 중 오류:', error);
+        }
+      }
+    });
+    
+    return imageFiles;
+  };
+
+  const handleAnalyze = async () => {
+    if (!editorRef.current) {
+      setError('에디터를 찾을 수 없습니다.');
+      return;
+    }
+
+    // 에디터에서 텍스트 추출
+    const editorText = editorRef.current.innerText || '';
+    
+    // 에디터에서 이미지 추출
+    const editorImages = extractImagesFromEditor();
+    
+    // 모든 파일 합치기 (업로드된 파일 + 에디터의 이미지)
+    const allFiles = [...files, ...editorImages];
+
+    if (allFiles.length === 0 && !editorText.trim()) {
+      setError('텍스트를 입력하거나 이미지를 붙여넣어주세요.');
+      return;
+    }
+
     setLoading(true);
-    setShowAnalysisPrompt(false); // 분석 시작 시 프롬프트 숨김
+    setError(null);
+
     try {
-      // 모든 이미지를 분석
-      const analysisResult = await analyzeContent(imageFiles, text, blurFingers, showFaces);
-      console.log("분석 결과:", analysisResult);
+      const analysisResult = await analyzeContent(allFiles, editorText, blurFingers, showFaces);
       setResult(analysisResult);
-    } catch (error: any) {
-      console.error("분석 중 오류:", error);
-      // 백엔드에서 반환된 에러 메시지 사용
-      const errorMessage = error.response?.data?.error || "분석 중 오류가 발생했습니다";
-      setResult({ success: false, error: errorMessage });
+      setShowResultModal(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '분석 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }
-  }
+  };
+
+  const handleReset = () => {
+    setFiles([]);
+    setText('');
+    setResult(null);
+    setError(null);
+    setShowResultModal(false);
+    setBlurFingers(true);
+    setShowFaces(true);
+    setEditorImageCount(0);
+    
+    // 에디터 초기화
+    if (editorRef.current) {
+      editorRef.current.innerHTML = '';
+      editorRef.current.focus();
+    }
+  };
 
   return (
-    <div style={{ padding: "20px", maxWidth: "800px", margin: "0 auto" }}>
-      <h2>PrivAlert - 개인정보 탐지 시스템</h2>
-      
-      {/* 통합 입력 폼 */}
-      <div style={{ marginBottom: "20px" }}>
-        <h3>📝 콘텐츠 입력</h3>
-        <p style={{ 
-          fontSize: "14px", 
-          color: "#666", 
-          marginBottom: "15px",
-          fontStyle: "italic"
-        }}>
-          💡 <strong>Ctrl+V</strong>로 이미지와 텍스트를 한번에 붙여넣기 하세요!
-        </p>
-        
-        {/* 간단한 텍스트 입력 영역 */}
-        <div style={{ marginBottom: "20px" }}>
-          <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
-            📝 콘텐츠 입력 (텍스트 + 이미지)
-          </label>
-          <div
-            ref={setContentEditableRef}
-            contentEditable="true"
-            suppressContentEditableWarning={true}
-            onPaste={handlePaste}
-            onInput={(e) => {
-              const content = e.currentTarget.textContent || "";
-              setText(content);
-              if (content.trim()) {
-                setShowAnalysisPrompt(true);
-              }
-            }}
-            style={{
-              width: "100%",
-              minHeight: "200px",
-              padding: "15px",
-              border: "2px solid #ddd",
-              borderRadius: "8px",
-              fontSize: "14px",
-              lineHeight: "1.5",
-              outline: "none",
-              backgroundColor: "#fff",
-              resize: "vertical"
-            }}
-            placeholder="여기에 텍스트를 입력하거나 Ctrl+V로 이미지와 텍스트를 붙여넣으세요..."
-          />
-          <p style={{ margin: "5px 0 0 0", fontSize: "12px", color: "#666" }}>
-            💡 한글, Word처럼 텍스트와 이미지를 함께 입력할 수 있습니다
-          </p>
-        </div>
+    <div className="container">
+      <header className="header">
+        <h1>PrivAlert</h1>
+        <p className="subtitle">개인정보 보호 분석 시스템</p>
+      </header>
 
-        {/* 기존 입력 방식 (보조) */}
-        <details style={{ marginBottom: "15px" }}>
-          <summary style={{ cursor: "pointer", fontWeight: "bold", marginBottom: "10px" }}>
-            📁 또는 파일 선택으로 입력하기
-          </summary>
-          
-          {/* 이미지 업로드 */}
-          <div style={{ marginBottom: "15px" }}>
-            <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
-              이미지 파일 추가 - 여러 장 선택 가능 (기존 파일에 추가됨)
-            </label>
-            <input 
-              type="file" 
-              accept="image/*"
-              multiple
-              onChange={(e) => {
-                const newFiles = Array.from(e.target.files || []);
-                setImageFiles(prev => [...prev, ...newFiles]);
-                // 파일 입력 초기화 (같은 파일 다시 선택 가능하도록)
-                e.target.value = '';
-                // 분석 프롬프트 표시
-                if (newFiles.length > 0) {
-                  setShowAnalysisPrompt(true);
-                }
-              }}
-              disabled={loading}
-              style={{ 
-                width: "100%", 
-                padding: "8px", 
-                border: "1px solid #ddd",
-                borderRadius: "5px"
-              }}
-            />
-          </div>
-
-          {/* 텍스트 입력 */}
-          <div style={{ marginBottom: "15px" }}>
-            <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
-              텍스트 입력
-            </label>
-            <textarea
-              value={text}
-              onChange={(e) => {
-                setText(e.target.value);
-                // 텍스트 입력 시 분석 프롬프트 표시/숨김
-                if (e.target.value.trim()) {
-                  setShowAnalysisPrompt(true);
-                } else if (imageFiles.length === 0) {
-                  setShowAnalysisPrompt(false);
-                }
-              }}
-              placeholder="분석할 텍스트를 입력하세요..."
-              rows={4}
-              style={{ 
-                width: "100%", 
-                padding: "8px", 
-                border: "1px solid #ddd",
-                borderRadius: "5px",
-                resize: "vertical"
-              }}
-            />
-          </div>
-        </details>
-
-        {/* 선택된 파일 표시 */}
-        {imageFiles.length > 0 && (
-          <div style={{ marginBottom: "15px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-              <p style={{ color: "green", fontSize: "14px", margin: "0" }}>
-                ✅ 선택된 파일 ({imageFiles.length}개):
-              </p>
-              <button
-                onClick={clearAllFiles}
-                style={{
-                  padding: "4px 8px",
-                  fontSize: "12px",
-                  backgroundColor: "#dc3545",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "3px",
-                  cursor: "pointer"
-                }}
-              >
-                모두 삭제
-              </button>
-            </div>
-            <div style={{ 
-              maxHeight: "150px", 
-              overflowY: "auto", 
-              border: "1px solid #eee", 
-              padding: "10px",
-              backgroundColor: "#f9f9f9",
-              borderRadius: "5px"
-            }}>
-              {imageFiles.map((file, index) => (
-                <div key={index} style={{ 
-                  display: "flex", 
-                  justifyContent: "space-between", 
-                  alignItems: "center",
-                  padding: "8px",
-                  margin: "5px 0",
-                  backgroundColor: "white",
-                  border: "1px solid #ddd",
-                  borderRadius: "3px"
-                }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "14px", fontWeight: "bold", marginBottom: "2px" }}>
-                      {index + 1}. {file.name}
-                    </div>
-                    <div style={{ fontSize: "12px", color: "#666" }}>
-                      {(file.size / 1024 / 1024).toFixed(2)}MB
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => removeFile(index)}
-                    style={{
-                      padding: "4px 8px",
-                      fontSize: "12px",
-                      backgroundColor: "#ffc107",
-                      color: "#212529",
-                      border: "none",
-                      borderRadius: "3px",
-                      cursor: "pointer",
-                      marginLeft: "10px"
-                    }}
-                    title="이 파일 삭제"
+      <main className="main-content">
+        <div className="input-section">
+          <div className="input-group">
+            <label className="input-label">통합 분석 입력</label>
+            <div className="document-editor">
+              <div className="editor-toolbar">
+                <div className="toolbar-group">
+                  <button 
+                    className="toolbar-button"
+                    onClick={() => document.getElementById('file-upload')?.click()}
+                    disabled={loading}
+                    title="이미지 파일 추가"
                   >
-                    ✕ 삭제
+                    📁 이미지 추가
+                  </button>
+                  <button 
+                    className="toolbar-button"
+                    onClick={() => editorRef.current?.focus()}
+                    disabled={loading}
+                    title="텍스트 입력"
+                  >
+                    ✏️ 텍스트 입력
+                  </button>
+                  <button 
+                    className="toolbar-button"
+                    onClick={() => {
+                      if (editorRef.current) {
+                        const selection = window.getSelection();
+                        const range = document.createRange();
+                        range.selectNodeContents(editorRef.current);
+                        selection?.removeAllRanges();
+                        selection?.addRange(range);
+                      }
+                    }}
+                    disabled={loading}
+                    title="전체 선택 (Ctrl+A)"
+                  >
+                    🔍 전체 선택
                   </button>
                 </div>
-              ))}
+                 <div className="editor-hint">
+                   💡 텍스트를 직접 입력하거나 이미지를 붙여넣어주세요 (Ctrl+A: 전체선택, Ctrl+C: 복사, Ctrl+V: 붙여넣기)
+                 </div>
+              </div>
+              
+              <input
+                type="file"
+                multiple
+                accept="image/*"
+                onChange={handleFileChange}
+                disabled={loading}
+                className="file-input"
+                id="file-upload"
+              />
+              
+              <div className="editor-content">
+                <div 
+                  ref={editorRef}
+                  className="rich-editor"
+                  contentEditable
+                  onPaste={handlePaste}
+                  onInput={handleEditorInput}
+                  onKeyDown={handleKeyDown}
+                  onClick={() => editorRef.current?.focus()}
+                  suppressContentEditableWarning={true}
+                  data-placeholder="여기에 텍스트를 입력하거나 이미지를 붙여넣으세요..."
+                />
+              </div>
+              
+              <div className="editor-footer">
+                <div className="editor-stats">
+                  <span className="text-counter">
+                    글자 수: {editorRef.current?.innerText?.length || 0}/10000
+                  </span>
+                </div>
+              </div>
             </div>
-            {imageFiles.length > 1 && (
-              <p style={{ color: "green", fontSize: "12px", margin: "5px 0" }}>
-                ✅ {imageFiles.length}개 이미지 모두 분석됩니다!
-              </p>
+          </div>
+
+          <div className="input-group">
+            <label className="input-label">분석 옵션</label>
+            <div className="options-grid">
+              <label className="option-item">
+                <input
+                  type="checkbox"
+                  checked={blurFingers}
+                  onChange={(e) => setBlurFingers(e.target.checked)}
+                  disabled={loading}
+                  className="option-checkbox"
+                />
+                <span className="option-text">손가락 블러 처리</span>
+                <span className="option-desc">감지된 손가락을 블러 처리합니다</span>
+              </label>
+              <label className="option-item">
+                <input
+                  type="checkbox"
+                  checked={showFaces}
+                  onChange={(e) => setShowFaces(e.target.checked)}
+                  disabled={loading}
+                  className="option-checkbox"
+                />
+                <span className="option-text">얼굴 표시</span>
+                <span className="option-desc">감지된 얼굴의 위치를 표시합니다</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div className="action-section">
+          <button 
+            onClick={handleAnalyze} 
+            disabled={loading || (files.length === 0 && !text.trim())}
+            className="analyze-button"
+          >
+            {loading ? (
+              <>
+                <div className="spinner"></div>
+                분석 중...
+              </>
+            ) : (
+              <>
+                🔍 분석 시작
+              </>
             )}
-          </div>
-        )}
+          </button>
+          <button 
+            onClick={handleReset} 
+            disabled={loading}
+            className="reset-button"
+          >
+            🗑️ 초기화
+          </button>
+        </div>
+      </main>
 
-        {/* 분석 프롬프트 */}
-        {showAnalysisPrompt && (
-          <div style={{
-            padding: "15px",
-            backgroundColor: "#fff3cd",
-            border: "1px solid #ffeaa7",
-            borderRadius: "8px",
-            marginBottom: "15px",
-            textAlign: "center"
-          }}>
-            <div style={{ fontSize: "20px", marginBottom: "8px" }}>✅</div>
-            <p style={{ margin: "0 0 10px 0", fontWeight: "bold", color: "#856404" }}>
-              붙여넣기 완료!
-            </p>
-            <p style={{ margin: "0", fontSize: "14px", color: "#856404" }}>
-              아래 분석 버튼을 눌러서 분석을 시작하세요
-            </p>
-          </div>
-        )}
+      {/* 오류 메시지 */}
+      {error && (
+        <div className="error">
+          <p>오류: {error}</p>
+        </div>
+      )}
 
-        {/* 텍스트 초기화 확인 다이얼로그 */}
-        {showClearTextPrompt && (
-          <div style={{
-            padding: "15px",
-            backgroundColor: "#f8d7da",
-            border: "1px solid #f5c6cb",
-            borderRadius: "8px",
-            marginBottom: "15px",
-            textAlign: "center"
-          }}>
-            <div style={{ fontSize: "20px", marginBottom: "8px" }}>⚠️</div>
-            <p style={{ margin: "0 0 10px 0", fontWeight: "bold", color: "#721c24" }}>
-              파일을 삭제했습니다!
-            </p>
-            <p style={{ margin: "0 0 15px 0", fontSize: "14px", color: "#721c24" }}>
-              텍스트 영역에 내용이 있습니다. 텍스트도 함께 초기화하시겠습니까?
-            </p>
-            <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
-              <button
-                onClick={handleClearTextConfirm}
-                style={{
-                  padding: "8px 16px",
-                  backgroundColor: "#dc3545",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontSize: "14px"
-                }}
+      {/* 결과 모달 */}
+      {showResultModal && result && (
+        <div className="modal-overlay" onClick={() => setShowResultModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>🔍 통합 분석 결과</h2>
+              <button 
+                className="modal-close"
+                onClick={() => setShowResultModal(false)}
               >
-                네, 초기화
-              </button>
-              <button
-                onClick={handleClearTextCancel}
-                style={{
-                  padding: "8px 16px",
-                  backgroundColor: "#6c757d",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontSize: "14px"
-                }}
-              >
-                아니오, 유지
+                ✕
               </button>
             </div>
-          </div>
-        )}
-
-        {/* 분석 버튼 */}
-        <button 
-          onClick={handleAnalyze} 
-          disabled={loading || (imageFiles.length === 0 && !text.trim())}
-          style={{
-            width: "100%",
-            padding: "12px",
-            backgroundColor: loading ? "#ccc" : (showAnalysisPrompt ? "#28a745" : "#007bff"),
-            color: "white",
-            border: "none",
-            borderRadius: "5px",
-            fontSize: "16px",
-            cursor: loading ? "not-allowed" : "pointer",
-            boxShadow: showAnalysisPrompt ? "0 2px 8px rgba(40, 167, 69, 0.3)" : "none",
-            transform: showAnalysisPrompt ? "scale(1.02)" : "scale(1)",
-            transition: "all 0.2s ease"
-          }}
-        >
-          {loading ? "분석 중..." : (showAnalysisPrompt ? "🔍 분석 시작하기" : "🔍 통합 분석 시작")}
-        </button>
-        
-        <p style={{ 
-          fontSize: "12px", 
-          color: "#666", 
-          marginTop: "10px",
-          textAlign: "center"
-        }}>
-          💡 이미지와 텍스트를 함께 입력하면 더 정확한 분석이 가능합니다
-        </p>
-      </div>
-
-      {/* 옵션 설정 */}
-      <div style={{ marginBottom: "20px" }}>
-        <h3>분석 옵션</h3>
-        <label>
-          <input
-            type="checkbox"
-            checked={blurFingers}
-            onChange={(e) => setBlurFingers(e.target.checked)}
-          />
-          손가락 블러 처리
-        </label>
-        <br />
-        <label>
-          <input
-            type="checkbox"
-            checked={showFaces}
-            onChange={(e) => setShowFaces(e.target.checked)}
-          />
-          얼굴 상세 표시 (체크 해제시 개수만 표시)
-        </label>
-      </div>
-
-      {/* 로딩 상태 */}
-      {loading && <div>분석 중...</div>}
-
-      {/* 결과 표시 */}
-      {result && (
-        <div style={{ marginTop: "20px" }}>
-          <h3>분석 결과</h3>
-          
-          {result.success ? (
-    <div>
-              {/* 요약 */}
-              <div style={{ 
-                padding: "15px", 
-                backgroundColor: "#f0f0f0", 
-                borderRadius: "5px",
-                marginBottom: "20px"
-              }}>
-                <h4>📊 요약</h4>
-                <p>{result.summary?.message || "분석 완료"}</p>
-                <ul>
-                  <li>얼굴: {result.summary?.faces_detected || 0}개</li>
-                  <li>손가락: {result.summary?.fingers_detected || 0}개</li>
-                  <li>종교 관련 텍스트: {result.summary?.religious_content_detected ? "발견됨" : "없음"}</li>
-                </ul>
-              </div>
-
-              {/* 좌우 분할 레이아웃 */}
-              <div style={{ 
-                display: "flex", 
-                gap: "20px", 
-                marginBottom: "20px",
-                minHeight: "400px"
-              }}>
-                {/* 왼쪽: 분석 전 (원본 콘텐츠) */}
-                <div style={{ 
-                  flex: "1", 
-                  padding: "20px", 
-                  backgroundColor: "#f8f9fa", 
-                  borderRadius: "8px",
-                  border: "2px solid #e9ecef"
-                }}>
-                  <h4 style={{ margin: "0 0 15px 0", color: "#495057" }}>📝 분석 전</h4>
-                  
-                  {/* 입력된 콘텐츠 (텍스트 + 이미지 순서대로) */}
-                  <div style={{ fontSize: "14px", lineHeight: "1.5" }}>
-                    {text.split('\n').map((line, lineIndex) => (
-                      <div key={lineIndex} style={{ marginBottom: "10px" }}>
-                        {line}
-                      </div>
-                    ))}
+            
+            <div className="modal-body">
+              <div className="result-summary">
+                <div className="summary-card">
+                  <h3>📊 분석 요약</h3>
+                  <div className="summary-stats">
+                    <div className="stat-item">
+                      <span className="stat-label">얼굴 감지</span>
+                      <span className="stat-value">{result.summary.faces_detected}개</span>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">손가락 감지</span>
+                      <span className="stat-value">{result.summary.fingers_detected}개</span>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">민감한 텍스트</span>
+                      <span className={`stat-value ${result.summary.sensitive_text_found ? 'detected' : 'safe'}`}>
+                        {result.summary.sensitive_text_found ? '발견됨' : '없음'}
+                      </span>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">종교적 내용</span>
+                      <span className={`stat-value ${result.summary.religious_content_detected ? 'detected' : 'safe'}`}>
+                        {result.summary.religious_content_detected ? '발견됨' : '없음'}
+                      </span>
+                    </div>
                   </div>
-                  
-                  {/* 입력된 이미지들 */}
-                  {imageFiles.length > 0 && (
-                    <div style={{ marginTop: "15px" }}>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
-                        {imageFiles.map((file, index) => (
-                          <div key={index} style={{ 
-                            width: "150px", 
-                            height: "150px", 
-                            border: "2px solid #dee2e6",
-                            borderRadius: "5px",
-                            overflow: "hidden",
-                            backgroundColor: "white"
-                          }}>
-                            <img 
-                              src={URL.createObjectURL(file)}
-                              alt={`원본 이미지 ${index + 1}`}
-                              style={{ 
-                                width: "100%", 
-                                height: "100%", 
-                                objectFit: "cover" 
-                              }}
-                            />
+                  <div className="summary-message">
+                    <p>{result.summary.message}</p>
+                  </div>
+                </div>
+
+                {/* 텍스트 분석 결과 */}
+                {result.text_analysis && (
+                  <div className="text-analysis-card">
+                    <h3>📝 텍스트 분석</h3>
+                    <div className="text-content">
+                      <div className="text-section">
+                        <h4>원본 텍스트</h4>
+                        <p className="text-preview">{result.text_analysis.original_text}</p>
+                      </div>
+                      <div className="text-section">
+                        <h4>필터링된 텍스트</h4>
+                        <p className="text-preview">{result.text_analysis.filtered_text}</p>
+                      </div>
+                      
+                      {result.text_analysis.detected_words.length > 0 && (
+                        <div className="detected-words-section">
+                          <h4>🚨 감지된 민감 단어</h4>
+                          <div className="words-list">
+                            {result.text_analysis.detected_words.map((word, index) => (
+                              <div key={index} className="word-item">
+                                <span className="word-text">"{word.word}"</span>
+                                <span className="word-religion">({word.religion})</span>
+                                {word.replacement && (
+                                  <span className="word-replacement">→ "{word.replacement}"</span>
+                                )}
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* 오른쪽: 분석 후 (처리된 콘텐츠) */}
-                <div style={{ 
-                  flex: "1", 
-                  padding: "20px", 
-                  backgroundColor: "#fff", 
-                  borderRadius: "8px",
-                  border: "2px solid #007bff"
-                }}>
-                  <h4 style={{ margin: "0 0 15px 0", color: "#007bff" }}>🔍 분석 후</h4>
-                  
-                  {/* 필터링된 텍스트 (민감 단어 강조) */}
-                  {result.text_analysis && (
-                    <div style={{ marginBottom: "20px" }}>
-                      <h5 style={{ margin: "0 0 10px 0", fontSize: "16px", color: "#495057" }}>📝 분석된 텍스트</h5>
-                      <div style={{ 
-                        padding: "15px", 
-                        backgroundColor: "#fff3cd", 
-                        border: "1px solid #ffeaa7",
-                        borderRadius: "5px",
-                        fontSize: "14px",
-                        lineHeight: "1.5"
-                      }}>
-                        {result.text_analysis.detected_words && result.text_analysis.detected_words.length > 0 ? (
-                          // 민감 단어가 있는 경우 강조 표시
-                          (() => {
-                            let text = result.text_analysis.original_text;
-                            let highlightedText = [];
-                            let lastIndex = 0;
-                            
-                            // 감지된 단어들을 위치 순으로 정렬
-                            const sortedWords = result.text_analysis.detected_words.sort((a, b) => a.start - b.start);
-                            
-                            sortedWords.forEach((word, wordIndex) => {
-                              // 원본 텍스트에서 해당 부분 찾기
-                              const wordText = text.slice(word.start, word.end);
-                              
-                              // 감지된 단어 전 텍스트 추가
-                              if (word.start > lastIndex) {
-                                highlightedText.push(text.slice(lastIndex, word.start));
-                              }
-                              
-                              // 감지된 단어 강조 표시
-                              highlightedText.push(
-                                <span 
-                                  key={wordIndex}
-                                  style={{
-                                    backgroundColor: "#ff6b6b",
-                                    color: "white",
-                                    fontWeight: "bold",
-                                    padding: "2px 4px",
-                                    borderRadius: "3px"
-                                  }}
-                                >
-                                  {wordText}
-                                </span>
-                              );
-                              
-                              lastIndex = word.end;
-                            });
-                            
-                            // 남은 텍스트 추가
-                            if (lastIndex < text.length) {
-                              highlightedText.push(text.slice(lastIndex));
-                            }
-                            
-                            return highlightedText;
-                          })()
-                        ) : (
-                          // 민감 단어가 없는 경우 그대로 표시
-                          result.text_analysis.original_text
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* 얼굴 검출 결과 */}
-                  {result.face_detection && (
-                    <div style={{ marginBottom: "20px" }}>
-                      <h5 style={{ margin: "0 0 10px 0", fontSize: "16px", color: "#495057" }}>👤 얼굴 검출</h5>
-                      <p style={{ margin: "0 0 10px 0", fontSize: "14px", color: "#6c757d" }}>{result.face_detection.message}</p>
-                      
-                      {/* 분석된 이미지들 */}
-                      {result.face_detection.images && result.face_detection.images.length > 0 && (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
-                          {result.face_detection.images.map((img: any, index: number) => (
-                            <div key={index} style={{ 
-                              width: "150px", 
-                              height: "150px", 
-                              border: "2px solid #007bff", 
-                              borderRadius: "8px",
-                              backgroundColor: "#f8f9ff",
-                              overflow: "hidden",
-                              position: "relative"
-                            }}>
-                              {img.result_image_url && (
-                                <img 
-                                  src={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}${img.result_image_url}`}
-                                  alt={`얼굴 검출 결과 ${img.image_index}`}
-                                  style={{ 
-                                    width: "100%", 
-                                    height: "100%", 
-                                    objectFit: "cover"
-                                  }}
-                                />
-                              )}
-                              <div style={{ 
-                                position: "absolute", 
-                                bottom: "0", 
-                                left: "0", 
-                                right: "0", 
-                                backgroundColor: "rgba(0, 123, 255, 0.8)", 
-                                color: "white", 
-                                padding: "5px", 
-                                fontSize: "12px", 
-                                textAlign: "center"
-                              }}>
-                                {img.count}개 얼굴
-                              </div>
-                            </div>
-                          ))}
                         </div>
                       )}
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {/* 손가락 검출 결과 */}
-                  {result.hand_detection && (
-                    <div style={{ marginBottom: "20px" }}>
-                      <h5 style={{ margin: "0 0 10px 0", fontSize: "16px", color: "#495057" }}>✋ 손가락 검출</h5>
-                      <p style={{ margin: "0 0 10px 0", fontSize: "14px", color: "#6c757d" }}>{result.hand_detection.message}</p>
-                      
-                      {/* 분석된 이미지들 */}
-                      {result.hand_detection.images && result.hand_detection.images.length > 0 && (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
-                          {result.hand_detection.images.map((img: any, index: number) => (
-                            <div key={index} style={{ 
-                              width: "150px", 
-                              height: "150px", 
-                              border: "2px solid #28a745", 
-                              borderRadius: "8px",
-                              backgroundColor: "#f8fff9",
-                              overflow: "hidden",
-                              position: "relative"
-                            }}>
-                              {img.result_image_url && (
-                                <img 
-                                  src={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}${img.result_image_url}`}
-                                  alt={`손가락 검출 결과 ${img.image_index}`}
-                                  style={{ 
-                                    width: "100%", 
-                                    height: "100%", 
-                                    objectFit: "cover"
-                                  }}
-                                />
-                              )}
-                              <div style={{ 
-                                position: "absolute", 
-                                bottom: "0", 
-                                left: "0", 
-                                right: "0", 
-                                backgroundColor: "rgba(40, 167, 69, 0.8)", 
-                                color: "white", 
-                                padding: "5px", 
-                                fontSize: "12px", 
-                                textAlign: "center"
-                              }}>
-                                {img.count}개 손가락
-                              </div>
-                            </div>
-                          ))}
+                {/* 이미지 결과 */}
+                {result.face_detection && result.face_detection.images.length > 0 && (
+                  <div className="image-results-card">
+                    <h3>👤 얼굴 감지 결과</h3>
+                    <div className="image-results">
+                      {result.face_detection.images.map((img, index) => (
+                        <div key={index} className="image-result-item">
+                          <p className="image-info">{img.filename}: {img.count}개 얼굴 감지</p>
+                          {img.result_image_url && (
+                            <img src={img.result_image_url} alt={`얼굴 감지 결과 ${index + 1}`} />
+                          )}
                         </div>
-                      )}
+                      ))}
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {/* 민감 텍스트 경고 */}
-                  {result.text_analysis && result.text_analysis.religious_content_detected && (
-                    <div style={{ marginBottom: "20px" }}>
-                      <div style={{ 
-                        padding: "15px", 
-                        backgroundColor: "#f8d7da", 
-                        border: "1px solid #f5c6cb",
-                        borderRadius: "5px",
-                        color: "#721c24"
-                      }}>
-                        <div style={{ display: "flex", alignItems: "center", marginBottom: "10px" }}>
-                          <span style={{ fontSize: "20px", marginRight: "8px" }}>⚠️</span>
-                          <strong>종교 관련 민감 텍스트가 발견되었습니다!</strong>
+                {result.hand_detection && result.hand_detection.images.length > 0 && (
+                  <div className="image-results-card">
+                    <h3>👋 손가락 감지 결과</h3>
+                    <div className="image-results">
+                      {result.hand_detection.images.map((img, index) => (
+                        <div key={index} className="image-result-item">
+                          <p className="image-info">{img.filename}: {img.count}개 손가락 감지</p>
+                          {img.result_image_url && (
+                            <img src={img.result_image_url} alt={`손가락 감지 결과 ${index + 1}`} />
+                          )}
                         </div>
-                        <div style={{ fontSize: "14px" }}>
-                          <strong>감지된 단어:</strong> {result.text_analysis.detected_words?.map((w: any) => w.word).join(", ")}
-                        </div>
-                      </div>
+                      ))}
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
-          ) : (
-            <div style={{ color: "red" }}>
-              오류: {result.error}
+            
+            <div className="modal-footer">
+              <button 
+                className="modal-button primary"
+                onClick={() => setShowResultModal(false)}
+              >
+                확인
+              </button>
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>
