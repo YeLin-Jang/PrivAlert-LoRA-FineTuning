@@ -133,13 +133,6 @@ def analyze_content():
                 filtered_text:
                   type: string
                   example: "필터링된 텍스트"
-                religious_content_detected:
-                  type: boolean
-                  example: false
-                detected_words:
-                  type: array
-                  items:
-                    type: object
                 statistics:
                   type: object
             summary:
@@ -152,9 +145,6 @@ def analyze_content():
                   type: integer
                   example: 5
                 sensitive_text_found:
-                  type: boolean
-                  example: false
-                religious_content_detected:
                   type: boolean
                   example: false
                 message:
@@ -224,8 +214,7 @@ def analyze_content():
         "summary": {
             "faces_detected": 0,
             "fingers_detected": 0,
-            "sensitive_text_found": False,
-            "religious_content_detected": False
+            "sensitive_text_found": False
         }
     }
     
@@ -403,17 +392,6 @@ def analyze_content():
     
     # 텍스트 분석 (OCR 결과 + 직접 입력 텍스트) - 항상 포함
     if text_input.strip():
-        # 종교 필터 적용
-        filter_result = filter_service.filter_text(text_input.strip(), use_replacements=True, filters=["religious"])
-        
-        # 종교 관련 민감 정보
-        religious_detected = filter_result.get("filter_results", {}).get("religious", {}).get("has_sensitive_content", False)
-        religious_words = filter_result.get("filter_results", {}).get("religious", {}).get("detected_words", [])
-        
-        # 종교 내용 감지 여부 수정
-        if religious_words:
-            religious_detected = True
-        
         # 정형 데이터 탐지 (mask_regex_service 사용)
         structured_data_result = mask_regex_service.detect_sensitive_data(text_input.strip(), detection_options)
         
@@ -422,16 +400,12 @@ def analyze_content():
         
         results["text_analysis"] = {
             "original_text": text_input.strip(),
-            "filtered_text": filter_result.get("filtered_text", text_input.strip()),
             "masked_text": masked_text,  # 마스킹된 텍스트 추가
-            "religious_content_detected": religious_detected,
-            "detected_words": religious_words,
-            "statistics": filter_result.get("overall_statistics", {}),
+            "statistics": {},
             "structured_data": structured_data_result
         }
         
-        results["summary"]["sensitive_text_found"] = filter_result.get("has_sensitive_content", False)
-        results["summary"]["religious_content_detected"] = religious_detected
+        results["summary"]["sensitive_text_found"] = structured_data_result.get("detected", False)
         
         # 정형 데이터 탐지 결과 요약에 추가
         if structured_data_result.get("detected", False):
@@ -441,14 +415,11 @@ def analyze_content():
         # 텍스트가 없는 경우
         results["text_analysis"] = {
             "original_text": "",
-            "filtered_text": "",
-            "religious_content_detected": False,
-            "detected_words": [],
+            "masked_text": "",
             "statistics": {},
             "message": "텍스트를 발견하지 못했습니다"
         }
         results["summary"]["sensitive_text_found"] = False
-        results["summary"]["religious_content_detected"] = False
     
     # 전체 요약 메시지 생성
     summary_parts = []
@@ -456,8 +427,6 @@ def analyze_content():
         summary_parts.append(f"{results['summary']['faces_detected']}개의 얼굴이 탐지되었습니다")
     if results["summary"]["fingers_detected"] > 0:
         summary_parts.append(f"{results['summary']['fingers_detected']}개의 손가락이 탐지되었습니다")
-    if results["summary"]["religious_content_detected"]:
-        summary_parts.append("종교 관련 민감 텍스트가 발견되었습니다")
     
     # 정형 데이터 탐지 결과를 개별적으로 추가
     if results.get("text_analysis") and results["text_analysis"].get("structured_data"):
@@ -481,7 +450,7 @@ def analyze_content():
     # 로깅
     total_detected = (results["summary"]["faces_detected"] + 
                      results["summary"]["fingers_detected"] + 
-                     (1 if results["summary"]["religious_content_detected"] else 0))
+                     (1 if results["summary"]["sensitive_text_found"] else 0))
     logger.info(f"통합 분석 완료: {total_detected}개 민감 정보 감지")
     
     return APIResponse.success({"data": results}, results["summary"]["message"])

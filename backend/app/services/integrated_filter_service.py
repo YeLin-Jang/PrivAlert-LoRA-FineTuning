@@ -4,8 +4,7 @@
 
 import logging
 from typing import Dict, List, Any
-from app.services.religious_filter_service import ReligiousFilterService
-from app.services.sentiment_analysis_service import sentiment_service
+from app.services.mask_regex import mask_regex_service
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +14,8 @@ class IntegratedFilterService:
     
     def __init__(self):
         """서비스 초기화"""
-        self.religious_filter = ReligiousFilterService()
-        # 향후 KLIE 등 다른 필터링 서비스들 추가 예정
-        # self.klie_filter = KLIEFilterService()
+        # 정형 데이터 마스킹 서비스 사용
+        self.mask_service = mask_regex_service
         
         logger.info("통합 필터링 서비스 초기화 완료")
     
@@ -43,9 +41,9 @@ class IntegratedFilterService:
                 "overall_statistics": {}
             }
         
-        # 기본 필터 목록 (모든 필터 적용)
+        # 기본 필터 목록 (정형 데이터 탐지)
         if filters is None:
-            filters = ["religious"]
+            filters = ["structured_data"]
         
         original_text = text
         filtered_text = text
@@ -57,55 +55,45 @@ class IntegratedFilterService:
             "applied_filters": filters
         }
         
-        # 감정 분석 기반 종교적 모독 감지
-        blasphemy_result = sentiment_service.detect_religious_blasphemy(text)
-        
         # 각 필터별로 처리
         for filter_name in filters:
             try:
-                if filter_name == "religious":
-                    # 기존 종교 필터링
-                    result = self.religious_filter.filter_text(text, use_replacements)
-                    if result["success"]:
-                        filter_results["religious"] = result
-                        # 필터링된 텍스트로 업데이트
-                        filtered_text = result["filtered_text"]
-                        overall_statistics["total_detected"] += result["statistics"]["total_detected"]
+                if filter_name == "structured_data":
+                    # 정형 데이터 탐지 및 마스킹
+                    detection_options = {
+                        'phone': True,
+                        'rrn': True,
+                        'passport': True,
+                        'ip_address': True,
+                        'email': True,
+                        'account': True
+                    }
                     
-                    # 감정 분석 결과 추가
-                    if blasphemy_result["is_blasphemy"]:
-                        # 종교적 모독이 감지된 경우
-                        if "religious" not in filter_results:
-                            filter_results["religious"] = {
-                                "success": True,
-                                "detected_words": [],
-                                "statistics": {"total_detected": 0}
-                            }
-                        
-                        # 감지된 종교별로 민감 단어 추가
-                        for religion in blasphemy_result["detected_religions"]:
-                            blasphemy_word = f"종교적 모독 ({religion})"
-                            filter_results["religious"]["detected_words"].append({
-                                "word": blasphemy_word,
-                                "category": religion,
-                                "replacement": sentiment_service.get_replacement_message([religion]),
-                                "confidence": blasphemy_result["confidence"]
-                            })
-                            filter_results["religious"]["statistics"]["total_detected"] += 1
-                            overall_statistics["total_detected"] += 1
-                        
-                        # 대체 메시지로 텍스트 교체
-                        if use_replacements:
-                            replacement_msg = sentiment_service.get_replacement_message(blasphemy_result["detected_religions"])
-                            filtered_text = replacement_msg
-                
-                # 향후 다른 필터들 추가
-                # elif filter_name == "klie":
-                #     result = self.klie_filter.filter_text(text, mask_char)
-                #     if result["success"]:
-                #         filter_results["klie"] = result
-                #         filtered_text = result["filtered_text"]
-                #         overall_statistics["total_detected"] += result["statistics"]["total_detected"]
+                    # 탐지
+                    detection_result = self.mask_service.detect_sensitive_data(text, detection_options)
+                    
+                    # 마스킹
+                    masked_text = self.mask_service.mask_sensitive_data(text, detection_options)
+                    
+                    if detection_result.get("detected", False):
+                        filter_results["structured_data"] = {
+                            "success": True,
+                            "detected_words": detection_result.get("details", []),
+                            "statistics": {
+                                "total_detected": detection_result.get("total_count", 0),
+                                "categories": detection_result.get("categories", {})
+                            },
+                            "filtered_text": masked_text
+                        }
+                        filtered_text = masked_text
+                        overall_statistics["total_detected"] += detection_result.get("total_count", 0)
+                    else:
+                        filter_results["structured_data"] = {
+                            "success": True,
+                            "detected_words": [],
+                            "statistics": {"total_detected": 0, "categories": {}},
+                            "filtered_text": text
+                        }
                 
             except Exception as e:
                 logger.error(f"{filter_name} 필터링 중 오류 발생: {e}")
@@ -142,25 +130,27 @@ class IntegratedFilterService:
     
     def get_available_filters(self) -> List[str]:
         """사용 가능한 필터 목록 반환"""
-        return ["religious"]  # 향후 "klie" 등 추가
+        return ["structured_data"]
     
     def get_filter_statistics(self) -> Dict[str, Any]:
         """각 필터별 통계 정보 반환"""
         stats = {}
         
-        # 종교 필터 통계
-        religious_stats = {}
-        for religion, data in self.religious_filter.sensitive_words.items():
-            if religion != "bypass_patterns":
-                religious_stats[religion] = {
-                    "keywords": len(data.get("keywords", [])),
-                    "patterns": len(data.get("patterns", [])),
-                    "total": len(data.get("keywords", [])) + len(data.get("patterns", []))
-                }
+        # 정형 데이터 필터 통계
+        structured_data_stats = {}
+        for category, patterns in self.mask_service.patterns.items():
+            structured_data_stats[category] = {
+                "patterns": len(patterns),
+                "description": {
+                    "phone": "전화번호",
+                    "rrn": "주민등록번호",
+                    "passport": "여권번호",
+                    "ip_address": "IP주소",
+                    "email": "이메일",
+                    "account": "계좌번호"
+                }.get(category, category)
+            }
         
-        stats["religious"] = religious_stats
-        
-        # 향후 다른 필터들의 통계도 추가
-        # stats["klie"] = self.klie_filter.get_statistics()
+        stats["structured_data"] = structured_data_stats
         
         return stats

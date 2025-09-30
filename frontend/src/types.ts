@@ -21,21 +21,37 @@ export interface AnalysisResult {
   };
   text_analysis?: {
     original_text: string;
-    filtered_text: string;
-    religious_content_detected: boolean;
-    detected_words: DetectedWord[];
+    masked_text: string;
     statistics: FilterStats;
+    structured_data?: {
+      detected: boolean;
+      total_count: number;
+      categories: {
+        [key: string]: {
+          count: number;
+          items: Array<{
+            type: string;
+            value: string;
+            category: string;
+          }>;
+        };
+      };
+    };
   };
   summary: {
     faces_detected: number;
     fingers_detected: number;
     sensitive_text_found: boolean;
-    religious_content_detected: boolean;
     message: string;
   };
   image_sanitization?: {
     message: string;
     items: SanitizedItem[];
+  };
+  ocr_text?: {
+    texts: string[];
+    total_count: number;
+    message: string;
   };
 }
 
@@ -99,15 +115,6 @@ export interface Finger {
   };
 }
 
-// 감지된 단어
-export interface DetectedWord {
-  word: string;
-  religion: string;
-  pattern_type: string;
-  start: number;
-  end: number;
-  replacement?: string;
-}
 
 // 필터 통계
 export interface FilterStats {

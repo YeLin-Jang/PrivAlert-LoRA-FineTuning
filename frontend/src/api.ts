@@ -72,14 +72,15 @@ export const suggestEducation = async (
   return response.data.data;
 };
 
-// 종교 필터링 API
-export const filterText = async (
+// 정형 데이터 필터링 API
+export const filterStructuredData = async (
   text: string,
-  useReplacements: boolean = true
+  detectionOptions: Record<string, boolean> = {}
 ): Promise<any> => {
-  const response = await api.post('/api/filter/text', {
+  const response = await api.post('/api/v1/filter/filter', {
     text,
-    use_replacements: useReplacements
+    use_replacements: true,
+    filters: ['structured_data']
   });
   
   return response.data;

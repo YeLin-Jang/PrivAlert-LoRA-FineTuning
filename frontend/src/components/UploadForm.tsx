@@ -21,7 +21,6 @@ export default function UploadForm() {
   const [detectionOptions, setDetectionOptions] = useState({
     face: true,           // 얼굴 (지원됨)
     fingerprint: true,    // 지문/손가락 (지원됨)
-    religion: true,       // 종교 (지원됨)
     // 정형 데이터 탐지 옵션들
     phone: false,         // 전화번호 (지원됨)
     rrn: false,           // 주민등록번호 (지원됨)
@@ -486,7 +485,6 @@ export default function UploadForm() {
     setDetectionOptions({
       face: true,
       fingerprint: true,
-      religion: true,
       phone: false,
       rrn: false,
       passport: false,
@@ -614,16 +612,6 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">지문/손가락</span>
-              </label>
-              <label className="option-item">
-                <input
-                  type="checkbox"
-                  checked={detectionOptions.religion}
-                  onChange={() => toggleDetectionOption('religion')}
-                  disabled={loading}
-                  className="option-checkbox"
-                />
-                <span className="option-text">종교</span>
               </label>
               
               {/* 정형 데이터 탐지 옵션들 (지원됨) */}
@@ -852,14 +840,6 @@ export default function UploadForm() {
                       <span className="stat-value">{result.summary.fingers_detected}개</span>
                     </div>
                     )}
-                    {detectionOptions.religion && (
-                    <div className="stat-item">
-                      <span className="stat-label">종교적 내용</span>
-                      <span className={`stat-value ${result.summary.religious_content_detected ? 'detected' : 'safe'}`}>
-                        {result.summary.religious_content_detected ? '발견됨' : '없음'}
-                      </span>
-                    </div>
-                    )}
                     {detectionOptions.phone && (
                     <div className="stat-item">
                       <span className="stat-label">전화번호</span>
@@ -1006,13 +986,6 @@ export default function UploadForm() {
                             <p className="text-preview">{result.text_analysis.original_text}</p>
                           </div>
                           
-                          {/* 종교 필터링 결과가 원본과 다를 때만 표시 */}
-                          {result.text_analysis.filtered_text !== result.text_analysis.original_text && (
-                          <div className="text-section">
-                            <h4>종교 필터링된 텍스트</h4>
-                            <p className="text-preview">{result.text_analysis.filtered_text}</p>
-                          </div>
-                          )}
                           
                           {/* 정형 데이터 마스킹 결과가 원본과 다를 때만 표시 */}
                           {result.text_analysis.masked_text && result.text_analysis.masked_text !== result.text_analysis.original_text && (
@@ -1028,22 +1001,6 @@ export default function UploadForm() {
                         </div>
                       )}
                       
-                      {result.text_analysis.detected_words.length > 0 && (
-                        <div className="detected-words-section">
-                          <h4>🚨 감지된 민감 단어</h4>
-                          <div className="words-list">
-                            {result.text_analysis.detected_words.map((word, index) => (
-                              <div key={index} className="word-item">
-                                <span className="word-text">"{word.word}"</span>
-                                <span className="word-religion">({word.religion})</span>
-                                {word.replacement && (
-                                  <span className="word-replacement">→ "{word.replacement}"</span>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
                       
                       {/* 정형 데이터 탐지 결과 */}
                       {result.text_analysis.structured_data && result.text_analysis.structured_data.detected && (
