@@ -404,6 +404,171 @@ body {
   color: #ffffff;
 }
 
+/* 사이드 패널 (교육/수정 제안) */
+.side-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 420px;
+  height: 100vh;
+  background: #1f2937; /* slate-800 */
+  color: #e5e7eb;      /* gray-200 */
+  box-shadow: -10px 0 30px rgba(0,0,0,0.4);
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(0);
+  animation: slideIn 0.25s ease-out;
+}
+
+@keyframes slideIn {
+  from { transform: translateX(20px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+
+.side-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid #374151; /* slate-700 */
+}
+
+.side-close {
+  background: #374151;
+  color: #e5e7eb;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.side-close:hover {
+  background: #4b5563;
+}
+
+.side-panel-body {
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.edu-list { 
+  display: flex; 
+  flex-direction: column; 
+  gap: 16px; 
+}
+
+.edu-card {
+  background: #111827; /* gray-900 */
+  border: 1px solid #374151;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 수정 문장 섹션 - 맨 위에 강조 */
+.edu-revised-section {
+  background: linear-gradient(135deg, #1e40af, #3b82f6);
+  border: 2px solid #60a5fa;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 8px;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.revised-sentence-box {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: #ffffff;
+  text-align: center;
+  margin-top: 8px;
+  backdrop-filter: blur(10px);
+}
+
+/* 각 섹션 공통 스타일 */
+.edu-section {
+  background: #1f2937;
+  border: 1px solid #374151;
+  border-radius: 10px;
+  padding: 14px;
+  transition: all 0.2s ease;
+}
+
+.edu-section:hover {
+  border-color: #4b5563;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #374151;
+}
+
+.section-icon {
+  font-size: 1.2rem;
+}
+
+.section-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: #f3f4f6;
+}
+
+.section-content {
+  color: #d1d5db;
+  line-height: 1.5;
+}
+
+/* 위험 시나리오 리스트 */
+.risk-list {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.risk-item {
+  background: #dc2626;
+  color: #ffffff;
+  padding: 6px 12px;
+  margin: 6px 0;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  border-left: 4px solid #ef4444;
+}
+
+/* 보안 팁 리스트 */
+.tips-list {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.tip-item {
+  background: #059669;
+  color: #ffffff;
+  padding: 6px 12px;
+  margin: 6px 0;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  border-left: 4px solid #10b981;
+}
+
+/* 기존 스타일 정리 */
+.edu-title { font-weight: 700; margin-bottom: 6px; }
+.edu-law { font-size: 0.95rem; margin: 6px 0; color: #e5e7eb; }
+.edu-risks, .edu-tips { margin: 6px 0 0 16px; }
+
 @keyframes modalSlideIn {
   from {
     opacity: 0;
@@ -742,6 +907,36 @@ body {
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
 }
 
+.result-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.download-button {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #ffffff;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.35);
+}
+
+.download-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(22, 163, 74, 0.45);
+}
+
+.details-list {
+  margin: 0;
+  padding-left: 16px;
+  color: #e5e7eb;
+}
+
 .result-image-container {
   margin-top: 10px;
   text-align: center;
@@ -913,4 +1108,25 @@ body {
   font-size: 0.85rem;
   color: #495057;
   word-break: break-all;
+}
+
+/* 지원됨 배지 스타일 */
+.supported-badge {
+  background: #4CAF50;
+  color: white;
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 8px;
+  font-weight: 500;
+}
+
+.coming-soon {
+  background: #FF9800;
+  color: white;
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 8px;
+  font-weight: 500;
 }

@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 import re
 import logging
-from typing import Dict
+from typing import Dict, List
+from .schools import school_list
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,11 @@ class MaskRegexService:
             "account": [
                 # 계좌번호: 은행 포맷 (2~6자리)-(2~6자리)-(2~7자리), 구분자(하이픈/공백) 필수
                 ("ACCOUNT", re.compile(r"\b\d{2,6}[-\s]\d{2,6}[-\s]\d{2,7}\b")),
+            ],
+            "school": [
+                # 학교명 패턴 (정규표현식 기반)
+                ("SCHOOL_FULL", re.compile(r"[가-힣]{2,}(?:초등학교|중학교|고등학교|대학교)")),
+                ("SCHOOL_SHORT", re.compile(r"[가-힣]{2,}(?:고교|대학|여대)")),
             ]
         }
     
@@ -90,16 +96,36 @@ class MaskRegexService:
             category_results = []
             category_count = 0
             
-            for pattern_name, pattern in self.patterns[category]:
-                matches = pattern.findall(text)
-                if matches:
-                    for match in matches:
-                        category_results.append({
-                            "type": pattern_name,
-                            "value": match,
-                            "category": category
-                        })
-                        category_count += 1
+            # 학교 탐지의 경우 정규표현식과 리스트 모두 사용
+            if category == "school":
+                # 1. 정규표현식으로 탐지
+                for pattern_name, pattern in self.patterns[category]:
+                    matches = pattern.findall(text)
+                    if matches:
+                        for match in matches:
+                            category_results.append({
+                                "type": pattern_name,
+                                "value": match,
+                                "category": category
+                            })
+                            category_count += 1
+                
+                # 2. 학교 리스트로 탐지
+                list_schools = self._detect_schools_from_list(text)
+                category_results.extend(list_schools)
+                category_count += len(list_schools)
+            else:
+                # 다른 카테고리는 기존 방식대로
+                for pattern_name, pattern in self.patterns[category]:
+                    matches = pattern.findall(text)
+                    if matches:
+                        for match in matches:
+                            category_results.append({
+                                "type": pattern_name,
+                                "value": match,
+                                "category": category
+                            })
+                            category_count += 1
             
             if category_results:
                 results["categories"][category] = {
@@ -112,6 +138,30 @@ class MaskRegexService:
         
         logger.info(f"정형 데이터 탐지 완료: 총 {results['total_count']}개 탐지")
         return results
+    
+    def _detect_schools_from_list(self, text: str) -> List[Dict]:
+        """schools.py의 학교 리스트를 사용한 학교명 탐지"""
+        detected_schools = []
+        
+        for school in school_list:
+            if school in text:
+                # 학교명이 발견된 위치 찾기
+                start_pos = 0
+                while True:
+                    pos = text.find(school, start_pos)
+                    if pos == -1:
+                        break
+                    
+                    detected_schools.append({
+                        "type": "SCHOOL_LIST",
+                        "value": school,
+                        "category": "school",
+                        "start": pos,
+                        "end": pos + len(school)
+                    })
+                    start_pos = pos + 1
+        
+        return detected_schools
     
     def mask_sensitive_data(self, text: str, detection_options: Dict[str, bool]) -> str:
         """
@@ -133,23 +183,36 @@ class MaskRegexService:
         for category, is_enabled in detection_options.items():
             if not is_enabled or category not in self.patterns:
                 continue
+            
+            # 카테고리별 라벨 매핑
+            category_labels = {
+                "phone": "전화번호",
+                "rrn": "주민등록번호", 
+                "passport": "여권번호",
+                "ip_address": "IP주소",
+                "email": "이메일",
+                "account": "계좌번호",
+                "school": "학교명"
+            }
+            
+            # 학교 마스킹의 경우 리스트도 함께 사용
+            if category == "school":
+                # 1. 정규표현식으로 마스킹
+                for pattern_name, pattern in self.patterns[category]:
+                    def mask_replacer(match):
+                        return f"[{category_labels.get(category, category.upper())}]"
+                    masked_text = pattern.sub(mask_replacer, masked_text)
                 
-            for pattern_name, pattern in self.patterns[category]:
-                # 카테고리별 라벨 매핑
-                category_labels = {
-                    "phone": "전화번호",
-                    "rrn": "주민등록번호", 
-                    "passport": "여권번호",
-                    "ip_address": "IP주소",
-                    "email": "이메일",
-                    "account": "계좌번호"
-                }
-                
-                # 마스킹 패턴 생성 - [라벨] 형태로 치환
-                def mask_replacer(match):
-                    return f"[{category_labels.get(category, category.upper())}]"
-                
-                masked_text = pattern.sub(mask_replacer, masked_text)
+                # 2. 학교 리스트로 마스킹
+                for school in school_list:
+                    if school in masked_text:
+                        masked_text = masked_text.replace(school, f"[{category_labels.get(category, category.upper())}]")
+            else:
+                # 다른 카테고리는 기존 방식대로
+                for pattern_name, pattern in self.patterns[category]:
+                    def mask_replacer(match):
+                        return f"[{category_labels.get(category, category.upper())}]"
+                    masked_text = pattern.sub(mask_replacer, masked_text)
         
         return masked_text
 

@@ -31,7 +31,7 @@ def filter_text():
           properties:
             text: 
               type: string
-              example: "하나님 비하하는 말을 하면 안 됩니다. 사이비 종교에 속지 마세요."
+              example: "개인정보: 010-1234-5678, 이메일: test@example.com"
               description: "분석할 텍스트"
             use_replacements:
               type: boolean
@@ -41,8 +41,8 @@ def filter_text():
             filters: 
               type: array
               items: {type: string}
-              example: ["religious"]
-              description: "적용할 필터 목록 (기본값: 모든 필터)"
+              example: ["phone", "email", "school"]
+              description: "적용할 필터 목록 (phone, rrn, passport, ip_address, email, account, school)"
     responses:
       200: {description: 성공}
       400: {description: 잘못된 요청}
