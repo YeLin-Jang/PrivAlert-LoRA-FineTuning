@@ -53,6 +53,25 @@ export const analyzeContent = async (
   return response.data.data!;
 };
 
+// 교육/수정 제안 API
+export const suggestEducation = async (
+  maskedText: string,
+  categories: Record<string, any>,
+  language: string = 'ko',
+  tone: string = 'educational'
+) => {
+  const response = await axios.post(`${API_BASE}/api/v1/education/suggest`, {
+    masked_text: maskedText,
+    categories,
+    language,
+    tone,
+  });
+  if (!response.data?.success) {
+    throw new Error(response.data?.error || '교육 제안 생성 실패');
+  }
+  return response.data.data;
+};
+
 // 종교 필터링 API
 export const filterText = async (
   text: string,

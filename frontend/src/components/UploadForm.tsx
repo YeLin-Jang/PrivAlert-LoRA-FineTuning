@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { analyzeContent } from '../api';
+import { analyzeContent, suggestEducation } from '../api';
 import type { AnalysisResult, SanitizedItem } from '../types';
 
 export default function UploadForm() {
@@ -11,6 +11,9 @@ export default function UploadForm() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showResultModal, setShowResultModal] = useState(false);
+  const [showEduPanel, setShowEduPanel] = useState(false);
+  const [eduItems, setEduItems] = useState<any[] | null>(null);
+  const [eduLoading, setEduLoading] = useState(false);
   const [editorImageCount, setEditorImageCount] = useState(0);
   const editorRef = useRef<HTMLDivElement>(null);
 
@@ -444,6 +447,19 @@ export default function UploadForm() {
       
       setResult(analysisResult);
       setShowResultModal(true);
+      // 교육 패널 자동 로딩 (마스킹 텍스트와 카테고리 기반)
+      try {
+        const masked = analysisResult?.text_analysis?.masked_text || analysisResult?.text_analysis?.filtered_text || '';
+        const cats = (analysisResult as any)?.text_analysis?.structured_data?.categories || {};
+        setEduLoading(true);
+        const edu = await suggestEducation(masked, cats, 'ko', 'educational');
+        setEduItems(edu?.items || []);
+        setShowEduPanel(true);
+      } catch (e) {
+        console.warn('교육 제안 로딩 실패', e);
+      } finally {
+        setEduLoading(false);
+      }
       console.log('모달 표시:', true);
     } catch (err) {
       console.error('분석 오류:', err);
@@ -459,6 +475,9 @@ export default function UploadForm() {
     setResult(null);
     setError(null);
     setShowResultModal(false);
+    setShowEduPanel(false);
+    setEduItems(null);
+    setEduLoading(false);
     setBlurFingers(true);
     setShowFaces(true);
     setEditorImageCount(0);
@@ -1187,6 +1206,96 @@ export default function UploadForm() {
                 확인
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 교육/수정 제안 사이드 패널 */}
+      {showEduPanel && (
+        <div className="side-panel">
+          <div className="side-panel-header">
+            <h3>🎓 교육/수정 제안</h3>
+            <button className="side-close" onClick={() => setShowEduPanel(false)}>✕</button>
+          </div>
+          <div className="side-panel-body">
+            {eduLoading && <p>생성 중...</p>}
+            {!eduLoading && (!eduItems || eduItems.length === 0) && <p>제안 항목이 없습니다.</p>}
+            {!eduLoading && eduItems && eduItems.length > 0 && (
+              <div className="edu-list">
+                {eduItems.map((it, idx) => (
+                  <div key={idx} className="edu-card">
+                    {/* 수정 문장 - 맨 위에 강조 */}
+                    {it.revised_sentence && (
+                      <div className="edu-revised-section">
+                        <div className="section-header">
+                          <span className="section-icon">✏️</span>
+                          <span className="section-title">수정 문장</span>
+                        </div>
+                        <div className="revised-sentence-box">
+                          {it.revised_sentence}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 카테고리 박스 */}
+                    <div className="edu-section">
+                      <div className="section-header">
+                        <span className="section-icon">📋</span>
+                        <span className="section-title">카테고리</span>
+                      </div>
+                      <div className="section-content">
+                        {it.category}
+                      </div>
+                    </div>
+
+                    {/* 법령 요약 박스 */}
+                    <div className="edu-section">
+                      <div className="section-header">
+                        <span className="section-icon">⚖️</span>
+                        <span className="section-title">법령 요약</span>
+                      </div>
+                      <div className="section-content">
+                        {it.law_summary}
+                      </div>
+                    </div>
+
+                    {/* 위험 시나리오 박스 */}
+                    {it.risk_scenarios && it.risk_scenarios.length > 0 && (
+                      <div className="edu-section">
+                        <div className="section-header">
+                          <span className="section-icon">⚠️</span>
+                          <span className="section-title">위험 시나리오</span>
+                        </div>
+                        <div className="section-content">
+                          <ul className="risk-list">
+                            {it.risk_scenarios.map((r: string, i: number) => (
+                              <li key={i} className="risk-item">• {r}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 보안 팁 박스 */}
+                    {it.tips && it.tips.length > 0 && (
+                      <div className="edu-section">
+                        <div className="section-header">
+                          <span className="section-icon">💡</span>
+                          <span className="section-title">보안 팁</span>
+                        </div>
+                        <div className="section-content">
+                          <ul className="tips-list">
+                            {it.tips.map((t: string, i: number) => (
+                              <li key={i} className="tip-item">✅ {t}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
