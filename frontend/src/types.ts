@@ -33,6 +33,31 @@ export interface AnalysisResult {
     religious_content_detected: boolean;
     message: string;
   };
+  image_sanitization?: {
+    message: string;
+    items: SanitizedItem[];
+  };
+}
+
+export interface SanitizedItem {
+  image_index: number;
+  filename: string;
+  sanitized_filename: string;
+  sanitized_url: string;
+  report: {
+    source_format: string;
+    target_format: string;
+    exif_removed: boolean;
+    gps_removed: boolean;
+    size: number;
+  };
+  summary_ko?: string;
+  details_ko?: {
+    exif?: string;
+    gps?: string;
+    format?: string;
+    size?: string | null;
+  };
 }
 
 // 얼굴 감지 이미지

@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { analyzeContent } from '../api';
-import type { AnalysisResult } from '../types';
+import type { AnalysisResult, SanitizedItem } from '../types';
 
 export default function UploadForm() {
   const [files, setFiles] = useState<File[]>([]);
@@ -913,6 +913,67 @@ export default function UploadForm() {
                     )}
                   </div>
                 </div>
+
+                {/* EXIF/메타데이터 제거 결과 - 항상 표시 (있을 때) */}
+                {result.image_sanitization && result.image_sanitization.items && result.image_sanitization.items.length > 0 && (
+                  <div className="image-results-card">
+                    <h3>🧹 EXIF/메타데이터 제거 결과</h3>
+                    <p className="image-info">{result.image_sanitization.message}</p>
+                    <div className="image-results">
+                      {result.image_sanitization.items.map((it: SanitizedItem, idx: number) => (
+                        <div key={idx} className="image-result-item">
+                          <p className="image-info">{it.summary_ko || `${it.filename} 처리 완료`}</p>
+                          <div className="result-actions">
+                            <button
+                              className="download-button"
+                              onClick={async () => {
+                                try {
+                                  const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:5000';
+                                  const resolvedPath = (() => {
+                                    if (!it.sanitized_url && it.sanitized_filename) {
+                                      return `/data/image/${it.sanitized_filename}`;
+                                    }
+                                    if (!it.sanitized_url) return '';
+                                    if (it.sanitized_url.startsWith('http')) return it.sanitized_url;
+                                    if (it.sanitized_url.startsWith('/')) return `${API_BASE}${it.sanitized_url}`;
+                                    return `${API_BASE}/data/image/${it.sanitized_url}`;
+                                  })();
+                                  if (!resolvedPath) throw new Error('다운로드 경로가 없습니다');
+                                  const url = resolvedPath;
+                                  const res = await fetch(url);
+                                  if (!res.ok) throw new Error('다운로드 실패');
+                                  const blob = await res.blob();
+                                  const a = document.createElement('a');
+                                  const ext = (it.report?.target_format || 'jpeg').toString().toLowerCase();
+                                  const name = (it.sanitized_filename || `sanitized_${idx}.${ext === 'jpeg' ? 'jpg' : ext}`);
+                                  a.href = URL.createObjectURL(blob);
+                                  a.download = name;
+                                  document.body.appendChild(a);
+                                  a.click();
+                                  a.remove();
+                                  URL.revokeObjectURL(a.href);
+                                } catch (e) {
+                                  console.error(e);
+                                  alert('다운로드 중 오류가 발생했습니다.');
+                                }
+                              }}
+                            >
+                              ⬇️ 정제본 다운로드
+                            </button>
+                            {it.details_ko && (
+                              <ul className="details-list">
+                                {it.details_ko.exif && <li>EXIF: {it.details_ko.exif}</li>}
+                                {it.details_ko.gps && <li>위치정보(GPS): {it.details_ko.gps}</li>}
+                                {it.details_ko.format && <li>저장 포맷: {it.details_ko.format}</li>}
+                                {it.details_ko.size && <li>최종 크기: {it.details_ko.size}</li>}
+                              </ul>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* 텍스트 분석 결과 - 항상 표시 */}
                 {result.text_analysis && (

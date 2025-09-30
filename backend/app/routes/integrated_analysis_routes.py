@@ -3,13 +3,18 @@
 import logging
 import os
 import tempfile
+import uuid
+from io import BytesIO
 from flask import Blueprint, request
+from werkzeug.datastructures import FileStorage
 from app.services.face_detection_service import FaceDetectionService
 from app.services.hand_detection_service import HandDetectionService
 from app.services.ocr_service import OCRService
 from app.services.integrated_filter_service import IntegratedFilterService
 from app.services.mask_regex import mask_regex_service
 from app.utils.api_utils import APIResponse, handle_api_exception
+from app.utils.image_sanitize import sanitize_image
+from config import BASE_DATA_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -231,9 +236,72 @@ def analyze_content():
         all_ocr_text = []
         face_results = []
         hand_results = []
+        sanitize_results = []
         
         for idx, image_file in enumerate(valid_images):
             logger.info(f"이미지 {idx + 1} 분석 시작: {image_file.filename}")
+
+            # 0) 업로드 즉시 EXIF/메타데이터 제거 (프론트 수정 없이 투명 처리)
+            try:
+                image_file.seek(0)
+                original_bytes = image_file.read()
+                cleaned_bytes, cleaned_ext, report = sanitize_image(original_bytes, keep_icc=True, target_format=None)
+
+                # 결과 저장 (결과 페이지에서 다운로드할 수 있도록 URL 제공)
+                os.makedirs(os.path.join(BASE_DATA_DIR, "image"), exist_ok=True)
+                new_name = f"sanitized_{uuid.uuid4().hex}.{cleaned_ext}"
+                save_path = os.path.join(BASE_DATA_DIR, "image", new_name)
+                with open(save_path, "wb") as f:
+                    f.write(cleaned_bytes)
+                sanitized_url = f"/data/image/{new_name}"
+
+                # 한국어 요약 생성
+                def _human_size(n: int) -> str:
+                    units = ["B", "KB", "MB", "GB"]
+                    i = 0
+                    x = float(n)
+                    while x >= 1024 and i < len(units) - 1:
+                        x /= 1024.0
+                        i += 1
+                    return f"{x:.1f} {units[i]}"
+
+                msgs = []
+                exif_removed = bool(report.get("exif_removed"))
+                gps_removed = bool(report.get("gps_removed"))
+                if exif_removed:
+                    msgs.append("EXIF 정보를 제거했어요")
+                else:
+                    msgs.append("EXIF 정보가 없었어요")
+                if gps_removed:
+                    msgs.append("위치정보(GPS)를 제거했어요")
+                else:
+                    msgs.append("위치정보(GPS)가 없었어요")
+
+                target_fmt = report.get("target_format") or "-"
+                msgs.append(f"저장 포맷: {target_fmt}")
+                size_val = report.get("size")
+                if isinstance(size_val, int):
+                    msgs.append(f"최종 크기: {_human_size(size_val)}")
+
+                sanitize_results.append({
+                    "image_index": idx + 1,
+                    "filename": image_file.filename,
+                    "sanitized_filename": new_name,
+                    "sanitized_url": sanitized_url,
+                    "report": report,
+                    "summary_ko": " · ".join(msgs),
+                    "details_ko": {
+                        "exif": "제거됨" if exif_removed else "없음",
+                        "gps": "제거됨" if gps_removed else "없음",
+                        "format": target_fmt,
+                        "size": _human_size(size_val) if isinstance(size_val, int) else None
+                    }
+                })
+
+                # 이후 파이프라인은 정제된 바이트로 진행
+                image_file = FileStorage(stream=BytesIO(cleaned_bytes), filename=new_name, content_type=f"image/{cleaned_ext}")
+            except Exception as e:
+                logger.warning(f"이미지 {idx + 1} EXIF 정제 중 오류: {e}")
             
             # 얼굴 검출
             face_result = face_service.detect_faces(image_file, save_result=True, return_image=show_faces)
@@ -315,6 +383,13 @@ def analyze_content():
                 "images": hand_results
             }
             results["summary"]["fingers_detected"] = all_finger_count
+
+        # EXIF/메타데이터 제거 결과 추가 (프론트는 이 정보를 사용해 변화 설명과 다운로드 제공 가능)
+        if sanitize_results:
+            results["image_sanitization"] = {
+                "message": f"총 {len(sanitize_results)}개 이미지의 메타데이터를 제거했습니다",
+                "items": sanitize_results
+            }
         
         # OCR 텍스트 결과 추가 (항상 포함)
         logger.info(f"최종 OCR 텍스트 배열: {all_ocr_text} (개수: {len(all_ocr_text)})")

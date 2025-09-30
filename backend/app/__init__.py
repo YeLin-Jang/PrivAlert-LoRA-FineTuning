@@ -50,6 +50,12 @@ def create_app(config_name=None):
             "methods": ["GET", "POST"],
             "allow_headers": ["Content-Type"],
             "supports_credentials": True
+        },
+        r"/data/*": {
+            "origins": cors_origins,
+            "methods": ["GET"],
+            "allow_headers": ["Content-Type"],
+            "supports_credentials": False
         }
     })
     
