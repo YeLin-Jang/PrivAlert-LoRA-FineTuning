@@ -197,7 +197,8 @@ def analyze_content():
         'passport': request.form.get('detect_passport', 'false').lower() in ['true', '1', 'yes'],
         'ip_address': request.form.get('detect_ip_address', 'false').lower() in ['true', '1', 'yes'],
         'email': request.form.get('detect_email', 'false').lower() in ['true', '1', 'yes'],
-        'account': request.form.get('detect_account', 'false').lower() in ['true', '1', 'yes']
+        'account': request.form.get('detect_account', 'false').lower() in ['true', '1', 'yes'],
+        'school': request.form.get('detect_school', 'false').lower() in ['true', '1', 'yes']
     }
     
     # 서비스 인스턴스 생성
@@ -440,7 +441,8 @@ def analyze_content():
                         "passport": "여권번호",
                         "ip_address": "IP주소",
                         "email": "이메일",
-                        "account": "계좌번호"
+                        "account": "계좌번호",
+                        "school": "학교명"
                     }
                     category_name = category_names.get(category, category)
                     summary_parts.append(f"{data['count']}개의 {category_name}이 탐지되었습니다")

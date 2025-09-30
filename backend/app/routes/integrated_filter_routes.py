@@ -41,8 +41,8 @@ def filter_text():
             filters: 
               type: array
               items: {type: string}
-              example: ["structured_data"]
-              description: "적용할 필터 목록 (기본값: 모든 필터)"
+              example: ["phone", "email", "school"]
+              description: "적용할 필터 목록 (phone, rrn, passport, ip_address, email, account, school)"
     responses:
       200: {description: 성공}
       400: {description: 잘못된 요청}

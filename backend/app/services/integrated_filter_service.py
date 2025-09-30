@@ -41,9 +41,9 @@ class IntegratedFilterService:
                 "overall_statistics": {}
             }
         
-        # 기본 필터 목록 (정형 데이터 탐지)
+        # 기본 필터 목록 (모든 정형 데이터)
         if filters is None:
-            filters = ["structured_data"]
+            filters = self.get_available_filters()
         
         original_text = text
         filtered_text = text
@@ -58,16 +58,10 @@ class IntegratedFilterService:
         # 각 필터별로 처리
         for filter_name in filters:
             try:
-                if filter_name == "structured_data":
-                    # 정형 데이터 탐지 및 마스킹
-                    detection_options = {
-                        'phone': True,
-                        'rrn': True,
-                        'passport': True,
-                        'ip_address': True,
-                        'email': True,
-                        'account': True
-                    }
+                # 개별 정형 데이터 필터 처리
+                if filter_name in self.get_available_filters():
+                    # 해당 필터만 활성화한 탐지 옵션 생성
+                    detection_options = {filter_name: True}
                     
                     # 탐지
                     detection_result = self.mask_service.detect_sensitive_data(text, detection_options)
@@ -76,7 +70,7 @@ class IntegratedFilterService:
                     masked_text = self.mask_service.mask_sensitive_data(text, detection_options)
                     
                     if detection_result.get("detected", False):
-                        filter_results["structured_data"] = {
+                        filter_results[filter_name] = {
                             "success": True,
                             "detected_words": detection_result.get("details", []),
                             "statistics": {
@@ -88,13 +82,21 @@ class IntegratedFilterService:
                         filtered_text = masked_text
                         overall_statistics["total_detected"] += detection_result.get("total_count", 0)
                     else:
-                        filter_results["structured_data"] = {
+                        filter_results[filter_name] = {
                             "success": True,
                             "detected_words": [],
                             "statistics": {"total_detected": 0, "categories": {}},
                             "filtered_text": text
                         }
-                
+                else:
+                    # 지원하지 않는 필터
+                    filter_results[filter_name] = {
+                        "success": False,
+                        "error": f"지원하지 않는 필터: {filter_name}",
+                        "detected_words": [],
+                        "statistics": {}
+                    }
+                    
             except Exception as e:
                 logger.error(f"{filter_name} 필터링 중 오류 발생: {e}")
                 filter_results[filter_name] = {
@@ -130,16 +132,23 @@ class IntegratedFilterService:
     
     def get_available_filters(self) -> List[str]:
         """사용 가능한 필터 목록 반환"""
-        return ["structured_data"]
+        return [
+            "phone",      # 전화번호
+            "rrn",        # 주민등록번호
+            "passport",   # 여권번호
+            "ip_address", # IP주소
+            "email",      # 이메일
+            "account",    # 계좌번호
+            "school"      # 학교명
+        ]
     
     def get_filter_statistics(self) -> Dict[str, Any]:
         """각 필터별 통계 정보 반환"""
         stats = {}
         
-        # 정형 데이터 필터 통계
-        structured_data_stats = {}
+        # 개별 정형 데이터 필터 통계
         for category, patterns in self.mask_service.patterns.items():
-            structured_data_stats[category] = {
+            stats[category] = {
                 "patterns": len(patterns),
                 "description": {
                     "phone": "전화번호",
@@ -147,10 +156,10 @@ class IntegratedFilterService:
                     "passport": "여권번호",
                     "ip_address": "IP주소",
                     "email": "이메일",
-                    "account": "계좌번호"
-                }.get(category, category)
+                    "account": "계좌번호",
+                    "school": "학교명"
+                }.get(category, category),
+                "supported": True
             }
-        
-        stats["structured_data"] = structured_data_stats
         
         return stats

@@ -7,6 +7,48 @@ export interface ApiResponse<T = any> {
   code?: number;
 }
 
+// 개별 서비스 결과 타입들
+export interface FaceResult {
+  success: boolean;
+  count: number;
+  faces: Array<{
+    index: number;
+    box: {
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+    };
+    score: number;
+  }>;
+  message: string;
+  result_image_url?: string;
+}
+
+export interface HandResult {
+  success: boolean;
+  count: number;
+  fingers: Array<{
+    index: number;
+    pos: {
+      x: number;
+      y: number;
+    };
+  }>;
+  message: string;
+  result_image_url?: string;
+}
+
+export interface OCRResult {
+  success: boolean;
+  count: number;
+  text: string;
+  char_count: number;
+  line_count: number;
+  message: string;
+  file_url?: string;
+}
+
 // 통합 분석 결과 타입
 export interface AnalysisResult {
   face_detection?: {

@@ -17,22 +17,22 @@ export default function UploadForm() {
   const [editorImageCount, setEditorImageCount] = useState(0);
   const editorRef = useRef<HTMLDivElement>(null);
 
-  // 민감 정보 탐지 옵션
+    // 민감 정보 탐지 옵션
   const [detectionOptions, setDetectionOptions] = useState({
     face: true,           // 얼굴 (지원됨)
     fingerprint: true,    // 지문/손가락 (지원됨)
-    // 정형 데이터 탐지 옵션들
-    phone: false,         // 전화번호 (지원됨)
-    rrn: false,           // 주민등록번호 (지원됨)
-    passport: false,      // 여권번호 (지원됨)
-    ip_address: false,    // IP주소 (지원됨)
-    email: false,         // 이메일 (지원됨)
-    account: false,       // 계좌번호 (지원됨)
+    // 정형 데이터 탐지 옵션들 (기본 활성화)
+    phone: true,          // 전화번호 (지원됨)
+    rrn: true,            // 주민등록번호 (지원됨)
+    passport: true,       // 여권번호 (지원됨)
+    ip_address: true,     // IP주소 (지원됨)
+    email: true,          // 이메일 (지원됨)
+    account: true,        // 계좌번호 (지원됨)
+    school: true,         // 학교명 (지원됨)
     // 비정형 데이터 (아직 지원 안됨)
     name: false,          // 이름
     address: false,       // 주소
     workplace: false,     // 직장
-    school: false,        // 학교
     driverLicense: false, // 운전면허번호
     postalCode: false     // 우편번호
   });
@@ -485,16 +485,16 @@ export default function UploadForm() {
     setDetectionOptions({
       face: true,
       fingerprint: true,
-      phone: false,
-      rrn: false,
-      passport: false,
-      ip_address: false,
-      email: false,
-      account: false,
+      phone: true,
+      rrn: true,
+      passport: true,
+      ip_address: true,
+      email: true,
+      account: true,
+      school: true,
       name: false,
       address: false,
       workplace: false,
-      school: false,
       driverLicense: false,
       postalCode: false
     });
@@ -624,6 +624,7 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">전화번호</span>
+                <span className="supported-badge">✓ 지원됨</span>
               </label>
               <label className="option-item">
                 <input
@@ -634,6 +635,7 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">주민등록번호</span>
+                <span className="supported-badge">✓ 지원됨</span>
               </label>
               <label className="option-item">
                 <input
@@ -644,6 +646,7 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">여권번호</span>
+                <span className="supported-badge">✓ 지원됨</span>
               </label>
               <label className="option-item">
                 <input
@@ -654,6 +657,7 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">IP주소</span>
+                <span className="supported-badge">✓ 지원됨</span>
               </label>
               <label className="option-item">
                 <input
@@ -664,6 +668,7 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">이메일</span>
+                <span className="supported-badge">✓ 지원됨</span>
               </label>
               <label className="option-item">
                 <input
@@ -674,6 +679,7 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">계좌번호</span>
+                <span className="supported-badge">✓ 지원됨</span>
               </label>
               
               {/* 비정형 데이터 탐지 옵션들 (준비 중) */}
@@ -707,15 +713,16 @@ export default function UploadForm() {
                 <span className="option-text">직장 정보</span>
                 <span className="coming-soon">준비 중</span>
               </label>
-              <label className="option-item disabled">
+              <label className="option-item">
                 <input
                   type="checkbox"
                   checked={detectionOptions.school}
-                  disabled={true}
+                  onChange={() => toggleDetectionOption('school')}
+                  disabled={loading}
                   className="option-checkbox"
                 />
-                <span className="option-text">학교 정보</span>
-                <span className="coming-soon">준비 중</span>
+                <span className="option-text">학교명</span>
+                <span className="supported-badge">✓ 지원됨</span>
               </label>
               <label className="option-item disabled">
                 <input
@@ -885,6 +892,14 @@ export default function UploadForm() {
                       <span className="stat-label">계좌번호</span>
                       <span className={`stat-value ${result.text_analysis?.structured_data?.categories?.account?.count > 0 ? 'detected' : 'safe'}`}>
                         {result.text_analysis?.structured_data?.categories?.account?.count || 0}개
+                      </span>
+                    </div>
+                    )}
+                    {detectionOptions.school && (
+                    <div className="stat-item">
+                      <span className="stat-label">학교명</span>
+                      <span className={`stat-value ${result.text_analysis?.structured_data?.categories?.school?.count > 0 ? 'detected' : 'safe'}`}>
+                        {result.text_analysis?.structured_data?.categories?.school?.count || 0}개
                       </span>
                     </div>
                     )}
@@ -1077,6 +1092,19 @@ export default function UploadForm() {
                                 <h5 className="category-name">계좌번호</h5>
                                 <div className="category-items">
                                   {result.text_analysis.structured_data.categories.account.items.map((item, index) => (
+                                    <div key={index} className="data-item">
+                                      <span className="data-type">[{item.type}]</span>
+                                      <span className="data-value">"{item.value}"</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {detectionOptions.school && result.text_analysis.structured_data.categories.school && (
+                              <div className="category-item">
+                                <h5 className="category-name">학교명</h5>
+                                <div className="category-items">
+                                  {result.text_analysis.structured_data.categories.school.items.map((item, index) => (
                                     <div key={index} className="data-item">
                                       <span className="data-type">[{item.type}]</span>
                                       <span className="data-value">"{item.value}"</span>

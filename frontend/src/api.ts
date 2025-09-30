@@ -77,10 +77,15 @@ export const filterStructuredData = async (
   text: string,
   detectionOptions: Record<string, boolean> = {}
 ): Promise<any> => {
+  // 활성화된 필터들만 추출
+  const activeFilters = Object.entries(detectionOptions)
+    .filter(([key, value]) => value && ['phone', 'rrn', 'passport', 'ip_address', 'email', 'account', 'school'].includes(key))
+    .map(([key]) => key);
+  
   const response = await api.post('/api/v1/filter/filter', {
     text,
     use_replacements: true,
-    filters: ['structured_data']
+    filters: activeFilters
   });
   
   return response.data;
