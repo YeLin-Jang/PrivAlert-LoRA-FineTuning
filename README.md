@@ -4,6 +4,8 @@
 사용자 맞춤 민감정보 탐지를 위한 **AI 기반 텍스트 및 이미지 점검 시스템 개발**  
 Flask 기반 **위험정보(개인정보 등) 탐지 웹서비스** 프로젝트입니다.  
 
+이 문서에는 이미지 EXIF/메타데이터 제거 백엔드 엔드포인트 사용법과 Windows 설치/실행 가이드가 포함됩니다.
+
 ---
 
 ## 📌 프로젝트 개요
@@ -18,6 +20,17 @@ Flask 기반 **위험정보(개인정보 등) 탐지 웹서비스** 프로젝트
 git clone https://github.com/yelin1197/PrivAlert.git
 cd PrivAlert
 ```
+
+### Windows(CMD/PowerShell) 설치 및 실행
+```cmd
+py -3.10 -m venv .venv || py -3.13 -m venv .venv
+.\.venv\Scripts\activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python app.py
+```
+
+주의: `python-magic`가 Windows에서 동작하지 않을 경우 `python-magic-bin` 사용을 고려하세요.
 
 ---
 
@@ -46,6 +59,63 @@ cd PrivAlert
    - 원문은 저장하지 않고, 익명화된 분석 로그만 S3/Firebase에 저장  
 
 ---
+
+## 🧹 이미지 메타데이터 정제 API
+
+### 엔드포인트
+- `POST /api/v1/images/sanitize`: multipart/form-data로 `file` 업로드 → 정제된 이미지를 즉시 다운로드 응답(as_attachment)
+- `POST /api/v1/images/sanitize:report`: 동일 입력 → JSON 리포트 반환
+
+### 폼 필드
+- `file`(필수): 이미지 파일
+- `target_format`(선택): `jpeg|png|webp|heic`
+- `keep_icc`(선택): `true|false` (기본 true)
+
+### 제약/보안
+- 허용 포맷: JPEG/JPG, PNG, WEBP, HEIF/HEIC
+- 바이트 상한: 20MB, 픽셀 상한: 50,000,000
+- EXIF Orientation 반영, EXIF/GPS 및 PNG 텍스트 청크 제거
+- 서버 디스크 저장 없이 메모리로 처리, 최소 로깅
+
+### cURL 예시
+```bash
+curl -X POST http://localhost:5000/api/v1/images/sanitize \
+  -F "file=@/path/to/photo.jpg" \
+  -F "target_format=jpeg" \
+  -F "keep_icc=true" \
+  -o sanitized.jpg
+```
+
+### React(TypeScript) 예시
+```ts
+async function sanitizeAndDownload(file: File, format?: "jpeg"|"png"|"webp"|"heic") {
+  const fd = new FormData();
+  fd.append("file", file);
+  if (format) fd.append("target_format", format);
+  fd.append("keep_icc", "true");
+  const res = await fetch("/api/v1/images/sanitize", { method: "POST", body: fd });
+  if (!res.ok) throw new Error("sanitize failed");
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `sanitized.${(format||file.type.split('/')[1]||'jpg')}`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+```
+
+### 응답 예시
+- 다운로드형: 파일 스트림
+- 리포트형(JSON):
+```json
+{"source_format":"JPEG","target_format":"JPEG","exif_removed":true,"gps_removed":true,"size":12345}
+```
+
+### 트러블슈팅(Windows)
+- `python-magic` 오류: `python-magic-bin` 대체 설치 고려
+- `pillow-heif` 동작 불가: HEIC 저장이 불가할 수 있으니 `target_format=jpeg|png|webp` 사용
+- 대용량 이미지 에러: 20MB/5천만 픽셀 상한에 걸릴 수 있음
 
 ## 📑 커밋 스타일
 - **[CREATE]** : API 첫 생성, 기능 추가  

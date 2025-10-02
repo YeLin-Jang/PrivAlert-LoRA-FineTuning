@@ -155,6 +155,7 @@ class MaskRegexService:
                         })
                         category_count += 1
                         start_pos = pos + 1
+
             else:
                 # 다른 카테고리는 기존 방식대로
                 for pattern_name, pattern in self.patterns[category]:
@@ -167,7 +168,6 @@ class MaskRegexService:
                                 "category": category
                             })
                             category_count += 1
-
             
             if category_results:
                 results["categories"][category] = {
@@ -251,6 +251,7 @@ class MaskRegexService:
                 for school in school_list:
                     if school in masked_text:
                         masked_text = masked_text.replace(school, f"[{category_labels.get(category, category.upper())}]")
+                        
             elif category == "address":
                 # 1. 정규표현식으로 마스킹
                 for pattern_name, pattern in self.patterns[category]:

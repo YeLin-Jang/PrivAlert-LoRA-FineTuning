@@ -15,7 +15,8 @@ export const analyzeContent = async (
   files: File[],
   text: string,
   blurFingers: boolean = true,
-  showFaces: boolean = false
+  showFaces: boolean = false,
+  detectionOptions?: Record<string, boolean>
 ): Promise<AnalysisResult> => {
   const formData = new FormData();
   
@@ -32,8 +33,15 @@ export const analyzeContent = async (
   // 옵션 추가
   formData.append('blur_fingers', blurFingers.toString());
   formData.append('show_faces', showFaces.toString());
+  
+  // 탐지 옵션 추가
+  if (detectionOptions) {
+    Object.entries(detectionOptions).forEach(([key, value]) => {
+      formData.append(`detect_${key}`, value.toString());
+    });
+  }
 
-  console.log('API 요청 전송:', { files: files.length, text: text.length });
+  console.log('API 요청 전송:', { files: files.length, text: text.length, detectionOptions });
   const response = await api.post<ApiResponse<AnalysisResult>>('/api/v1/analyze', formData);
   console.log('API 응답:', response.data);
   
@@ -45,14 +53,39 @@ export const analyzeContent = async (
   return response.data.data!;
 };
 
-// 종교 필터링 API
-export const filterText = async (
+// 교육/수정 제안 API
+export const suggestEducation = async (
+  maskedText: string,
+  categories: Record<string, any>,
+  language: string = 'ko',
+  tone: string = 'educational'
+) => {
+  const response = await axios.post(`${API_BASE}/api/v1/education/suggest`, {
+    masked_text: maskedText,
+    categories,
+    language,
+    tone,
+  });
+  if (!response.data?.success) {
+    throw new Error(response.data?.error || '교육 제안 생성 실패');
+  }
+  return response.data.data;
+};
+
+// 정형 데이터 필터링 API
+export const filterStructuredData = async (
   text: string,
-  useReplacements: boolean = true
+  detectionOptions: Record<string, boolean> = {}
 ): Promise<any> => {
-  const response = await api.post('/api/filter/text', {
+  // 활성화된 필터들만 추출
+  const activeFilters = Object.entries(detectionOptions)
+    .filter(([key, value]) => value && ['phone', 'rrn', 'passport', 'ip_address', 'email', 'account', 'school'].includes(key))
+    .map(([key]) => key);
+  
+  const response = await api.post('/api/v1/filter/filter', {
     text,
-    use_replacements: useReplacements
+    use_replacements: true,
+    filters: activeFilters
   });
   
   return response.data;
