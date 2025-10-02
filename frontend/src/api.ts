@@ -1,5 +1,12 @@
 import axios from 'axios';
-import type { ApiResponse, AnalysisResult } from './types';
+import type { 
+  ApiResponse, 
+  AnalysisResult, 
+  NameDetectionResult, 
+  NameMaskingResult, 
+  NameRewritingResult, 
+  NameProcessingResult 
+} from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
@@ -89,4 +96,79 @@ export const filterStructuredData = async (
   });
   
   return response.data;
+};
+
+// 이름 탐지 API
+export const detectNames = async (text: string): Promise<NameDetectionResult> => {
+  const response = await api.post<ApiResponse<NameDetectionResult>>('/api/v1/name/detect', {
+    text
+  });
+  
+  if (!response.data.success) {
+    throw new Error(response.data.error || '이름 탐지 중 오류가 발생했습니다.');
+  }
+  
+  return response.data.data!;
+};
+
+// 이름 마스킹 API
+export const maskNames = async (text: string, maskChar: string = '*'): Promise<NameMaskingResult> => {
+  const response = await api.post<ApiResponse<NameMaskingResult>>('/api/v1/name/mask', {
+    text,
+    mask_char: maskChar
+  });
+  
+  if (!response.data.success) {
+    throw new Error(response.data.error || '이름 마스킹 중 오류가 발생했습니다.');
+  }
+  
+  return response.data.data!;
+};
+
+// 텍스트 리라이팅 API
+export const rewriteText = async (text: string, useOpenAI: boolean = false): Promise<NameRewritingResult> => {
+  const response = await api.post<ApiResponse<NameRewritingResult>>('/api/v1/name/rewrite', {
+    text,
+    use_openai: useOpenAI
+  });
+  
+  if (!response.data.success) {
+    throw new Error(response.data.error || '텍스트 리라이팅 중 오류가 발생했습니다.');
+  }
+  
+  return response.data.data!;
+};
+
+// 이름 처리 통합 API
+export const processNames = async (
+  text: string, 
+  maskChar: string = '*', 
+  useOpenAI: boolean = false
+): Promise<NameProcessingResult> => {
+  const response = await api.post<ApiResponse<NameProcessingResult>>('/api/v1/name/process', {
+    text,
+    mask_char: maskChar,
+    use_openai: useOpenAI
+  });
+  
+  if (!response.data.success) {
+    throw new Error(response.data.error || '이름 처리 중 오류가 발생했습니다.');
+  }
+  
+  return response.data.data!;
+};
+
+// 이름 탐지 서비스 상태 확인 API
+export const getNameDetectionStatus = async () => {
+  const response = await api.get<ApiResponse<{
+    model_loaded: boolean;
+    device: string;
+    service_status: string;
+  }>>('/api/v1/name/status');
+  
+  if (!response.data.success) {
+    throw new Error(response.data.error || '서비스 상태 확인 중 오류가 발생했습니다.');
+  }
+  
+  return response.data.data!;
 };

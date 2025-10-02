@@ -142,6 +142,14 @@ def create_app(config_name=None):
     for d in required_dirs:
         ensure_dir(d)
     
+    # 모델 초기화
+    try:
+        from app.services.model_initializer import initialize_models
+        initialize_models()
+    except Exception as e:
+        app.logger.warning(f"모델 초기화 실패: {e}")
+        # 모델 초기화 실패해도 애플리케이션은 계속 실행
+    
     # 블루프린트 등록
     from app.routes.face_detection_routes import face_bp
     from app.routes.hand_detection_routes import hand_bp
@@ -150,6 +158,14 @@ def create_app(config_name=None):
     from app.routes.integrated_filter_routes import integrated_filter_bp
     from app.routes.integrated_analysis_routes import integrated_analysis_bp
     from app.routes.education_routes import education_bp
+    
+    # 이름 탐지 기능 (의존성 문제로 임시 비활성화)
+    try:
+        from app.routes.name_detection_routes import name_bp
+        app.register_blueprint(name_bp, url_prefix="/api/v1/name")
+        app.logger.info("이름 탐지 기능 활성화됨")
+    except ImportError as e:
+        app.logger.warning(f"이름 탐지 기능 비활성화: {e}")
     
     app.register_blueprint(face_bp, url_prefix="/api/v1/face")
     app.register_blueprint(hand_bp, url_prefix="/api/v1/hand")

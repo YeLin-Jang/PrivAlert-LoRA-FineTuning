@@ -165,3 +165,37 @@ export interface FilterStats {
   detection_rate: number;
   applied_filters: string[];
 }
+
+// 이름 탐지 관련 타입
+export interface DetectedName {
+  text: string;
+  start: number;
+  end: number;
+  confidence: number;
+}
+
+export interface NameDetectionResult {
+  original_text: string;
+  detected_names: DetectedName[];
+  name_count: number;
+}
+
+export interface NameMaskingResult {
+  original_text: string;
+  masked_text: string;
+  detected_names: DetectedName[];
+  mask_count: number;
+}
+
+export interface NameRewritingResult {
+  original_text: string;
+  rewritten_text: string;
+}
+
+export interface NameProcessingResult {
+  original_text: string;
+  masked_text: string;
+  rewritten_text: string;
+  detected_names: DetectedName[];
+  mask_count: number;
+}
