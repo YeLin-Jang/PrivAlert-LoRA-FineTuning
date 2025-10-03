@@ -1200,8 +1200,8 @@ export default function UploadForm() {
                                 <div className="category-items">
                                   {result.text_analysis.structured_data.categories.name.items.map((item, index) => (
                                     <div key={index} className="data-item">
-                                      <span className="data-type">[{item.type}]</span>
-                                      <span className="data-value">"{item.value}"</span>
+                                      <span className="data-type">[NAME]</span>
+                                      <span className="data-value">"{(item as any).text}"</span>
                                       {(item as any).score && (
                                         <span className="data-score">(신뢰도: {((item as any).score * 100).toFixed(1)}%)</span>
                                       )}

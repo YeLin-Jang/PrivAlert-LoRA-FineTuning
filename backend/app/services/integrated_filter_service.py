@@ -56,12 +56,17 @@ class IntegratedFilterService:
             "applied_filters": filters
         }
         
+        logger.info(f"적용할 필터 목록: {filters}")
+        
         # 각 필터별로 처리
         for filter_name in filters:
+            logger.info(f"필터 처리 시작: {filter_name}")
             try:
                 # 이름 탐지 필터 처리
                 if filter_name == "name":
+                    logger.info(f"이름 탐지 시작: '{text}'")
                     name_result = name_detection_service.detect_names(text)
+                    logger.info(f"이름 탐지 결과: {name_result}")
                     if name_result["success"] and name_result["count"] > 0:
                         # 이름 마스킹
                         mask_result = name_detection_service.mask_names(text)
