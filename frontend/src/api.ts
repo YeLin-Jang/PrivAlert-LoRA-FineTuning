@@ -79,7 +79,7 @@ export const filterStructuredData = async (
 ): Promise<any> => {
   // 활성화된 필터들만 추출
   const activeFilters = Object.entries(detectionOptions)
-    .filter(([key, value]) => value && ['phone', 'rrn', 'passport', 'ip_address', 'email', 'account', 'school', 'workplace', 'address', 'driverLicense', 'postalCode'].includes(key))
+    .filter(([key, value]) => value && ['phone', 'rrn', 'passport', 'ip_address', 'email', 'account', 'school', 'workplace', 'address', 'driverLicense', 'postalCode', 'name'].includes(key))
     .map(([key]) => key);
   
   const response = await api.post('/api/v1/filter/filter', {
@@ -89,4 +89,38 @@ export const filterStructuredData = async (
   });
   
   return response.data;
+};
+
+// 이름 탐지 API
+export const detectNames = async (text: string) => {
+  const response = await axios.post(`${API_BASE}/api/v1/name/detect`, {
+    text
+  }, {
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  });
+  
+  if (!response.data?.success) {
+    throw new Error(response.data?.message || '이름 탐지 실패');
+  }
+  
+  return response.data.data;
+};
+
+// 이름 마스킹 API
+export const maskNames = async (text: string) => {
+  const response = await axios.post(`${API_BASE}/api/v1/name/mask`, {
+    text
+  }, {
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  });
+  
+  if (!response.data?.success) {
+    throw new Error(response.data?.message || '이름 마스킹 실패');
+  }
+  
+  return response.data.data;
 };

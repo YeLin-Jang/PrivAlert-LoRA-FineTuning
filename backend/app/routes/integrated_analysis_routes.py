@@ -200,6 +200,7 @@ def analyze_content():
         'account': request.form.get('detect_account', 'false').lower() in ['true', '1', 'yes'],
         'school': request.form.get('detect_school', 'false').lower() in ['true', '1', 'yes'],
         'workplace': request.form.get('detect_workplace', 'false').lower() in ['true', '1', 'yes'],
+        'name': request.form.get('detect_name', 'false').lower() in ['true', '1', 'yes'],
         'address': request.form.get('detect_address', 'false').lower() in ['true', '1', 'yes'],
         'driverLicense': request.form.get('detect_driverLicense', 'false').lower() in ['true', '1', 'yes'],
         'postalCode': request.form.get('detect_postalCode', 'false').lower() in ['true', '1', 'yes']
@@ -397,11 +398,29 @@ def analyze_content():
     
     # 텍스트 분석 (OCR 결과 + 직접 입력 텍스트) - 항상 포함
     if text_input.strip():
-        # 정형 데이터 탐지 (mask_regex_service 사용)
-        structured_data_result = mask_regex_service.detect_sensitive_data(text_input.strip(), detection_options)
+        # 활성화된 필터 목록 생성
+        active_filters = [key for key, value in detection_options.items() if value]
+        logger.info(f"활성화된 탐지 필터: {active_filters}")
         
-        # 정형 데이터 마스킹
-        masked_text = mask_regex_service.mask_sensitive_data(text_input.strip(), detection_options)
+        # 통합 필터 서비스 사용 (이름 탐지 포함)
+        filter_result = filter_service.filter_text(text_input.strip(), use_replacements=True, filters=active_filters)
+        
+        # 결과 처리
+        structured_data_result = {
+            "detected": filter_result.get("overall_statistics", {}).get("total_detected", 0) > 0,
+            "total_count": filter_result.get("overall_statistics", {}).get("total_detected", 0),
+            "categories": {}
+        }
+        
+        # 필터별 결과를 카테고리로 변환
+        for filter_name, result in filter_result.get("filter_results", {}).items():
+            if result.get("success") and result.get("statistics", {}).get("total_detected", 0) > 0:
+                structured_data_result["categories"][filter_name] = {
+                    "count": result["statistics"]["total_detected"],
+                    "items": result["detected_words"]
+                }
+        
+        masked_text = filter_result.get("filtered_text", text_input.strip())
         
         results["text_analysis"] = {
             "original_text": text_input.strip(),
