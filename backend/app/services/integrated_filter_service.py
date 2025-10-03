@@ -5,6 +5,7 @@
 import logging
 from typing import Dict, List, Any
 from app.services.mask_regex import mask_regex_service
+from app.services.name_detection_service import name_detection_service
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +59,40 @@ class IntegratedFilterService:
         # 각 필터별로 처리
         for filter_name in filters:
             try:
+                # 이름 탐지 필터 처리
+                if filter_name == "name":
+                    name_result = name_detection_service.detect_names(text)
+                    if name_result["success"] and name_result["count"] > 0:
+                        # 이름 마스킹
+                        mask_result = name_detection_service.mask_names(text)
+                        if mask_result["success"]:
+                            filter_results[filter_name] = {
+                                "success": True,
+                                "detected_words": name_result["names"],
+                                "statistics": {
+                                    "total_detected": name_result["count"],
+                                    "categories": {"name": {"count": name_result["count"], "items": name_result["names"]}}
+                                },
+                                "filtered_text": mask_result["masked_text"]
+                            }
+                            filtered_text = mask_result["masked_text"]
+                            overall_statistics["total_detected"] += name_result["count"]
+                        else:
+                            filter_results[filter_name] = {
+                                "success": False,
+                                "error": "이름 마스킹 실패",
+                                "detected_words": [],
+                                "statistics": {}
+                            }
+                    else:
+                        filter_results[filter_name] = {
+                            "success": True,
+                            "detected_words": [],
+                            "statistics": {"total_detected": 0, "categories": {}},
+                            "filtered_text": text
+                        }
                 # 개별 정형 데이터 필터 처리
-                if filter_name in self.get_available_filters():
+                elif filter_name in self.get_available_filters():
                     # 해당 필터만 활성화한 탐지 옵션 생성
                     detection_options = {filter_name: True}
                     
@@ -143,7 +176,8 @@ class IntegratedFilterService:
             "address",       # 주소
             "driverLicense", # 운전면허번호
             "postalCode",    # 우편번호
-            "workplace"      # 직장명 (AI 모델)
+            "workplace",     # 직장명 (AI 모델)
+            "name"           # 이름 (AI 모델)
         ]
     
     def get_filter_statistics(self) -> Dict[str, Any]:

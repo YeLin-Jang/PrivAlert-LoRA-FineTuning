@@ -1,0 +1,192 @@
+tags:
+  - name: Name Detection
+    description: 이름 탐지 관련 API
+
+paths:
+  /api/v1/name/detect:
+    post:
+      tags:
+        - Name Detection
+      summary: 이름 탐지
+      description: 텍스트에서 한국어 이름을 탐지합니다.
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          description: 탐지할 텍스트
+          required: true
+          schema:
+            type: object
+            properties:
+              text:
+                type: string
+                description: 분석할 텍스트
+                example: "안녕하세요. 저는 김철수입니다."
+            required:
+              - text
+      responses:
+        200:
+          description: 성공
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: true
+              message:
+                type: string
+                example: "2개의 이름을 탐지했습니다."
+              data:
+                type: object
+                properties:
+                  names:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        text:
+                          type: string
+                          example: "김철수"
+                        start:
+                          type: integer
+                          example: 12
+                        end:
+                          type: integer
+                          example: 15
+                        score:
+                          type: number
+                          example: 0.95
+                        label:
+                          type: string
+                          example: "B-PERSON"
+                  count:
+                    type: integer
+                    example: 2
+        400:
+          description: 잘못된 요청
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: "텍스트를 입력해주세요."
+              data:
+                type: object
+                example: null
+        500:
+          description: 서버 오류
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: "서버 오류가 발생했습니다."
+              data:
+                type: object
+                example: null
+
+  /api/v1/name/mask:
+    post:
+      tags:
+        - Name Detection
+      summary: 이름 마스킹
+      description: 텍스트에서 한국어 이름을 [이름]으로 마스킹합니다.
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          description: 마스킹할 텍스트
+          required: true
+          schema:
+            type: object
+            properties:
+              text:
+                type: string
+                description: 마스킹할 텍스트
+                example: "안녕하세요. 저는 김철수입니다."
+            required:
+              - text
+      responses:
+        200:
+          description: 성공
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: true
+              message:
+                type: string
+                example: "1개의 이름을 마스킹했습니다."
+              data:
+                type: object
+                properties:
+                  original_text:
+                    type: string
+                    example: "안녕하세요. 저는 김철수입니다."
+                  masked_text:
+                    type: string
+                    example: "안녕하세요. 저는 [이름]입니다."
+                  names:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        text:
+                          type: string
+                          example: "김철수"
+                        start:
+                          type: integer
+                          example: 12
+                        end:
+                          type: integer
+                          example: 15
+                        score:
+                          type: number
+                          example: 0.95
+                        label:
+                          type: string
+                          example: "B-PERSON"
+                  count:
+                    type: integer
+                    example: 1
+        400:
+          description: 잘못된 요청
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: "텍스트를 입력해주세요."
+              data:
+                type: object
+                example: null
+        500:
+          description: 서버 오류
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: "서버 오류가 발생했습니다."
+              data:
+                type: object
+                example: null

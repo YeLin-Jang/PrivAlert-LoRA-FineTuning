@@ -16,25 +16,25 @@ export default function UploadForm() {
   const [eduLoading, setEduLoading] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
 
-    // 민감 정보 탐지 옵션
+    // 민감 정보 탐지 옵션 (초기 상태: 모두 비활성화)
   const [detectionOptions, setDetectionOptions] = useState({
-    face: true,           // 얼굴 (지원됨)
-    fingerprint: true,    // 지문/손가락 (지원됨)
-    // 정형 데이터 탐지 옵션들 (기본 활성화)
-    phone: true,          // 전화번호 (지원됨)
-    rrn: true,            // 주민등록번호 (지원됨)
-    passport: true,       // 여권번호 (지원됨)
-    ip_address: true,     // IP주소 (지원됨)
-    email: true,          // 이메일 (지원됨)
-    account: true,        // 계좌번호 (지원됨)
-    school: true,         // 학교명 (지원됨)
+    face: false,          // 얼굴 (지원됨)
+    fingerprint: false,   // 지문/손가락 (지원됨)
+    // 정형 데이터 탐지 옵션들
+    phone: false,         // 전화번호 (지원됨)
+    rrn: false,           // 주민등록번호 (지원됨)
+    passport: false,      // 여권번호 (지원됨)
+    ip_address: false,    // IP주소 (지원됨)
+    email: false,         // 이메일 (지원됨)
+    account: false,       // 계좌번호 (지원됨)
+    school: false,        // 학교명 (지원됨)
     // AI 기반 탐지 (지원됨)
-    workplace: true,      // 직장명 (AI 모델 지원)
+    workplace: false,     // 직장명 (AI 모델 지원)
     // 비정형 데이터 (지원됨)
     name: false,          // 이름
-    address: true,        // 주소 (지원됨)
-    driverLicense: true,  // 운전면허번호 (지원됨)
-    postalCode: true      // 우편번호 (지원됨)
+    address: false,       // 주소 (지원됨)
+    driverLicense: false, // 운전면허번호 (지원됨)
+    postalCode: false     // 우편번호 (지원됨)
   });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -100,6 +100,27 @@ export default function UploadForm() {
       ...prev,
       [option]: !prev[option]
     }));
+  };
+
+  // 모두 체크/해제 함수들
+  const selectAllOptions = () => {
+    setDetectionOptions(prev => {
+      const newOptions = { ...prev };
+      Object.keys(newOptions).forEach(key => {
+        newOptions[key as keyof typeof newOptions] = true;
+      });
+      return newOptions;
+    });
+  };
+
+  const deselectAllOptions = () => {
+    setDetectionOptions(prev => {
+      const newOptions = { ...prev };
+      Object.keys(newOptions).forEach(key => {
+        newOptions[key as keyof typeof newOptions] = false;
+      });
+      return newOptions;
+    });
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
@@ -472,22 +493,22 @@ export default function UploadForm() {
     setBlurFingers(true);
     setShowFaces(true);
     
-    // 탐지 옵션 초기화
+    // 탐지 옵션 초기화 (모두 비활성화)
     setDetectionOptions({
-      face: true,
-      fingerprint: true,
-      phone: true,
-      rrn: true,
-      passport: true,
-      ip_address: true,
-      email: true,
-      account: true,
-      school: true,
+      face: false,
+      fingerprint: false,
+      phone: false,
+      rrn: false,
+      passport: false,
+      ip_address: false,
+      email: false,
+      account: false,
+      school: false,
       name: false,
-      address: true,
-      workplace: true,
-      driverLicense: true,
-      postalCode: true
+      address: false,
+      workplace: false,
+      driverLicense: false,
+      postalCode: false
     });
     
     // 에디터 초기화
@@ -582,6 +603,24 @@ export default function UploadForm() {
 
           <div className="input-group">
             <label className="input-label">민감 정보 탐지 옵션</label>
+            <div className="option-controls">
+              <button
+                type="button"
+                onClick={selectAllOptions}
+                disabled={loading}
+                className="option-button select-all"
+              >
+                모두 체크
+              </button>
+              <button
+                type="button"
+                onClick={deselectAllOptions}
+                disabled={loading}
+                className="option-button deselect-all"
+              >
+                모두 해제
+              </button>
+            </div>
             <div className="options-grid">
               {/* 지원되는 기능들 */}
               <label className="option-item">
@@ -680,15 +719,15 @@ export default function UploadForm() {
               </label>
               
               {/* 비정형 데이터 탐지 옵션들 (지원됨) */}
-              <label className="option-item disabled">
+              <label className="option-item">
                 <input
                   type="checkbox"
                   checked={detectionOptions.name}
-                  disabled={true}
+                  onChange={() => toggleDetectionOption('name')}
+                  disabled={loading}
                   className="option-checkbox"
                 />
                 <span className="option-text">이름</span>
-                <span className="coming-soon">준비 중</span>
               </label>
               <label className="option-item">
                 <input
@@ -894,6 +933,14 @@ export default function UploadForm() {
                       <span className="stat-label">직장명</span>
                       <span className={`stat-value ${(result.text_analysis?.structured_data?.categories?.workplace?.count || 0) > 0 ? 'detected' : 'safe'}`}>
                         {result.text_analysis?.structured_data?.categories?.workplace?.count || 0}개
+                      </span>
+                    </div>
+                    )}
+                    {detectionOptions.name && (
+                    <div className="stat-item">
+                      <span className="stat-label">이름</span>
+                      <span className={`stat-value ${(result.text_analysis?.structured_data?.categories?.name?.count || 0) > 0 ? 'detected' : 'safe'}`}>
+                        {result.text_analysis?.structured_data?.categories?.name?.count || 0}개
                       </span>
                     </div>
                     )}
@@ -1136,6 +1183,22 @@ export default function UploadForm() {
                                 <h5 className="category-name">직장명</h5>
                                 <div className="category-items">
                                   {result.text_analysis.structured_data.categories.workplace.items.map((item, index) => (
+                                    <div key={index} className="data-item">
+                                      <span className="data-type">[{item.type}]</span>
+                                      <span className="data-value">"{item.value}"</span>
+                                      {(item as any).score && (
+                                        <span className="data-score">(신뢰도: {((item as any).score * 100).toFixed(1)}%)</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {detectionOptions.name && result.text_analysis.structured_data.categories.name && (
+                              <div className="category-item">
+                                <h5 className="category-name">이름</h5>
+                                <div className="category-items">
+                                  {result.text_analysis.structured_data.categories.name.items.map((item, index) => (
                                     <div key={index} className="data-item">
                                       <span className="data-type">[{item.type}]</span>
                                       <span className="data-value">"{item.value}"</span>
