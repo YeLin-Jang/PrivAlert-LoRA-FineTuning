@@ -199,7 +199,10 @@ def analyze_content():
         'email': request.form.get('detect_email', 'false').lower() in ['true', '1', 'yes'],
         'account': request.form.get('detect_account', 'false').lower() in ['true', '1', 'yes'],
         'school': request.form.get('detect_school', 'false').lower() in ['true', '1', 'yes'],
-        'workplace': request.form.get('detect_workplace', 'false').lower() in ['true', '1', 'yes']
+        'workplace': request.form.get('detect_workplace', 'false').lower() in ['true', '1', 'yes'],
+        'address': request.form.get('detect_address', 'false').lower() in ['true', '1', 'yes'],
+        'driverLicense': request.form.get('detect_driverLicense', 'false').lower() in ['true', '1', 'yes'],
+        'postalCode': request.form.get('detect_postalCode', 'false').lower() in ['true', '1', 'yes']
     }
     
     # 서비스 인스턴스 생성

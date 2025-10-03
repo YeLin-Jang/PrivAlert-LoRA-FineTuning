@@ -133,13 +133,17 @@ class IntegratedFilterService:
     def get_available_filters(self) -> List[str]:
         """사용 가능한 필터 목록 반환"""
         return [
-            "phone",      # 전화번호
-            "rrn",        # 주민등록번호
-            "passport",   # 여권번호
-            "ip_address", # IP주소
-            "email",      # 이메일
-            "account",    # 계좌번호
-            "school"      # 학교명
+            "phone",         # 전화번호
+            "rrn",           # 주민등록번호
+            "passport",      # 여권번호
+            "ip_address",    # IP주소
+            "email",         # 이메일
+            "account",       # 계좌번호
+            "school",        # 학교명
+            "address",       # 주소
+            "driverLicense", # 운전면허번호
+            "postalCode",    # 우편번호
+            "workplace"      # 직장명 (AI 모델)
         ]
     
     def get_filter_statistics(self) -> Dict[str, Any]:

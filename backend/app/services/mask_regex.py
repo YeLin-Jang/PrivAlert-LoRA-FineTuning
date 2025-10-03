@@ -2,7 +2,9 @@
 import re
 import logging
 from typing import Dict, List
-from .schools import school_list
+from ..data.schools import school_list
+from ..data.addresses import address_list
+from .workplace_detection_service import workplace_detection_service
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,9 @@ class MaskRegexService:
             "rrn": [
                 # 주민등록번호 / 외국인 등록번호
                 ("RRN", re.compile(r"\d{6}-?\d{7}")),
+            ],
+            "driver_license": [
+                ("DRIVER_LICENSE", re.compile(r"\d{2}-\d{2}-\d{6}-\d{2}")),
             ],
             "passport": [
                 # 여권번호
@@ -58,7 +63,27 @@ class MaskRegexService:
                 # 학교명 패턴 (정규표현식 기반)
                 ("SCHOOL_FULL", re.compile(r"[가-힣]{2,}(?:초등학교|중학교|고등학교|대학교)")),
                 ("SCHOOL_SHORT", re.compile(r"[가-힣]{2,}(?:고교|대학|여대)")),
-            ]
+            ],
+            "address": [
+                # 주소
+                ("ADDRESS_AREA", re.compile(r"[가-힣]{2,}(특별시|광역시|특별자치도|특별자치시|읍)")),
+                ("ADDRESS_NUMBER", re.compile(r"\d{1,4}(-\d{1,4})?번지")),
+                ("ADDRESS_ROAD", re.compile(r"[가-힣]+(로|길)\s?\d{1,4}(-\d{1,4})?")),
+                ("ADDRESS_GIL", re.compile(r"\d+(?:-\d+)?길")),
+            ],
+            "driverLicense": [
+                # 운전면허번호: 12자리 숫자 (예: 123456-123456)
+                ("DRIVER_LICENSE", re.compile(r"\b\d{6}-\d{6}\b")),
+                # 운전면허번호: 12자리 연속 숫자
+                ("DRIVER_LICENSE_CONTINUOUS", re.compile(r"\b\d{12}\b")),
+            ],
+            "postalCode": [
+                # 우편번호: 5자리 숫자 (예: 12345)
+                ("POSTAL_CODE", re.compile(r"\b\d{5}\b")),
+                # 우편번호: 6자리 숫자 (예: 123-456)
+                ("POSTAL_CODE_HYPHEN", re.compile(r"\b\d{3}-\d{3}\b")),
+            ],
+            "workplace": None  # AI 모델 사용
         }
     
     def detect_sensitive_data(self, text: str, detection_options: Dict[str, bool]) -> Dict:
@@ -114,6 +139,53 @@ class MaskRegexService:
                 list_schools = self._detect_schools_from_list(text)
                 category_results.extend(list_schools)
                 category_count += len(list_schools)
+
+            elif category == "address":
+                # 1. 정규표현식으로 탐지
+                for pattern_name, pattern in self.patterns[category]:
+                    matches = pattern.findall(text)
+                    if matches:
+                        for match in matches:
+                            category_results.append({
+                                "type": pattern_name,
+                                "value": match,
+                                "category": category
+                            })
+                            category_count += 1
+
+                # 2. 사전 기반 탐지
+                for addr in address_list:
+                    start_pos = 0
+                    while True:
+                        pos = text.find(addr, start_pos)
+                        if pos == -1:
+                            break
+                        category_results.append({
+                            "type": "ADDRESS_LIST",
+                            "value": addr,
+                            "category": category,
+                            "start": pos,
+                            "end": pos + len(addr)
+                        })
+                        category_count += 1
+                        start_pos = pos + 1
+            elif category == "workplace":
+                # AI 모델을 사용한 직장명 탐지
+                try:
+                    workplace_result = workplace_detection_service.detect_workplaces(text)
+                    if workplace_result["detected"]:
+                        for workplace in workplace_result["workplaces"]:
+                            category_results.append({
+                                "type": "WORKPLACE_AI",
+                                "value": workplace["text"],
+                                "category": category,
+                                "start": workplace["start"],
+                                "end": workplace["end"],
+                                "score": workplace["score"]
+                            })
+                            category_count += 1
+                except Exception as e:
+                    logger.error(f"직장명 탐지 중 오류: {e}")
             else:
                 # 다른 카테고리는 기존 방식대로
                 for pattern_name, pattern in self.patterns[category]:
@@ -126,6 +198,7 @@ class MaskRegexService:
                                 "category": category
                             })
                             category_count += 1
+
             
             if category_results:
                 results["categories"][category] = {
@@ -192,7 +265,11 @@ class MaskRegexService:
                 "ip_address": "IP주소",
                 "email": "이메일",
                 "account": "계좌번호",
-                "school": "학교명"
+                "school": "학교명",
+                "address": "주소",
+                "driverLicense": "운전면허번호",
+                "postalCode": "우편번호",
+                "workplace": "직장명"
             }
             
             # 학교 마스킹의 경우 리스트도 함께 사용
@@ -207,6 +284,20 @@ class MaskRegexService:
                 for school in school_list:
                     if school in masked_text:
                         masked_text = masked_text.replace(school, f"[{category_labels.get(category, category.upper())}]")
+            elif category == "address":
+                # 1. 정규표현식으로 마스킹
+                for pattern_name, pattern in self.patterns[category]:
+                    masked_text = pattern.sub("[주소]", masked_text)
+
+                # 2. 사전 기반 마스킹
+                for addr in address_list:
+                    masked_text = masked_text.replace(addr, "[주소]")
+            elif category == "workplace":
+                # AI 모델을 사용한 직장명 마스킹
+                try:
+                    masked_text = workplace_detection_service.mask_workplaces(masked_text)
+                except Exception as e:
+                    logger.error(f"직장명 마스킹 중 오류: {e}")
             else:
                 # 다른 카테고리는 기존 방식대로
                 for pattern_name, pattern in self.patterns[category]:

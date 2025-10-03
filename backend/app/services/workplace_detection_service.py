@@ -2,8 +2,8 @@
 import os
 import logging
 import torch
-from typing import List, Dict, Tuple, Optional
-from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
+from typing import List, Dict
+from transformers import AutoTokenizer, AutoModelForTokenClassification
 from peft import PeftModel, PeftConfig
 
 logger = logging.getLogger(__name__)
@@ -43,14 +43,8 @@ class WorkplaceDetectionService:
             self.model = PeftModel.from_pretrained(base_model, self.model_path)
             self.model.eval()
             
-            # NER 파이프라인 생성
-            self.ner_pipeline = pipeline(
-                "ner",
-                model=self.model,
-                tokenizer=self.tokenizer,
-                aggregation_strategy="simple",
-                device=0 if torch.cuda.is_available() else -1
-            )
+            # NER 파이프라인은 PEFT 모델과 호환되지 않으므로 직접 추론 사용
+            # self.ner_pipeline = pipeline(...)  # 제거
             
             self.model_loaded = True
             logger.info("직장명 탐지 모델 로딩 완료")
@@ -96,8 +90,6 @@ class WorkplaceDetectionService:
             # LABEL_4 (직장명) 탐지
             workplaces = []
             current_entity = ""
-            current_start = 0
-            current_end = 0
             
             for i, (token, label, probs) in enumerate(zip(tokens, predicted_labels[0], predictions[0])):
                 if token in ['[CLS]', '[SEP]', '[PAD]']:
@@ -115,12 +107,9 @@ class WorkplaceDetectionService:
                     if current_entity == "":
                         # 새로운 엔티티 시작
                         current_entity = token_text
-                        current_start = i
-                        current_end = i
                     else:
                         # 기존 엔티티에 추가
                         current_entity += token_text
-                        current_end = i
                 else:
                     # 엔티티가 끝남
                     if current_entity != "":

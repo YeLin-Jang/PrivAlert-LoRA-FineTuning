@@ -27,3 +27,6 @@ transformers==4.36.2
 torch==2.1.2 
 tokenizers==0.15.0
 peft==0.7.1
+
+# GPT API를 위한 의존성
+openai==2.0.1

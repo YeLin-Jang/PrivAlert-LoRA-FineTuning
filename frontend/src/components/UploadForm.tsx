@@ -30,11 +30,11 @@ export default function UploadForm() {
     school: true,         // 학교명 (지원됨)
     // AI 기반 탐지 (지원됨)
     workplace: true,      // 직장명 (AI 모델 지원)
-    // 비정형 데이터 (아직 지원 안됨)
+    // 비정형 데이터 (지원됨)
     name: false,          // 이름
-    address: false,       // 주소
-    driverLicense: false, // 운전면허번호
-    postalCode: false     // 우편번호
+    address: true,        // 주소 (지원됨)
+    driverLicense: true,  // 운전면허번호 (지원됨)
+    postalCode: true      // 우편번호 (지원됨)
   });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -484,10 +484,10 @@ export default function UploadForm() {
       account: true,
       school: true,
       name: false,
-      address: false,
-      workplace: false,
-      driverLicense: false,
-      postalCode: false
+      address: true,
+      workplace: true,
+      driverLicense: true,
+      postalCode: true
     });
     
     // 에디터 초기화
@@ -615,7 +615,6 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">전화번호</span>
-                <span className="supported-badge">✓ 지원됨</span>
               </label>
               <label className="option-item">
                 <input
@@ -626,7 +625,6 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">주민등록번호</span>
-                <span className="supported-badge">✓ 지원됨</span>
               </label>
               <label className="option-item">
                 <input
@@ -637,7 +635,6 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">여권번호</span>
-                <span className="supported-badge">✓ 지원됨</span>
               </label>
               <label className="option-item">
                 <input
@@ -648,7 +645,6 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">IP주소</span>
-                <span className="supported-badge">✓ 지원됨</span>
               </label>
               <label className="option-item">
                 <input
@@ -659,7 +655,6 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">이메일</span>
-                <span className="supported-badge">✓ 지원됨</span>
               </label>
               <label className="option-item">
                 <input
@@ -670,7 +665,6 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">계좌번호</span>
-                <span className="supported-badge">✓ 지원됨</span>
               </label>
               
               {/* AI 기반 탐지 옵션들 (지원됨) */}
@@ -683,10 +677,9 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">직장명</span>
-                <span className="supported-badge">✓ AI 지원</span>
               </label>
               
-              {/* 비정형 데이터 탐지 옵션들 (준비 중) */}
+              {/* 비정형 데이터 탐지 옵션들 (지원됨) */}
               <label className="option-item disabled">
                 <input
                   type="checkbox"
@@ -697,15 +690,15 @@ export default function UploadForm() {
                 <span className="option-text">이름</span>
                 <span className="coming-soon">준비 중</span>
               </label>
-              <label className="option-item disabled">
+              <label className="option-item">
                 <input
                   type="checkbox"
                   checked={detectionOptions.address}
-                  disabled={true}
+                  onChange={() => toggleDetectionOption('address')}
+                  disabled={loading}
                   className="option-checkbox"
                 />
                 <span className="option-text">주소</span>
-                <span className="coming-soon">준비 중</span>
               </label>
               <label className="option-item">
                 <input
@@ -716,27 +709,26 @@ export default function UploadForm() {
                   className="option-checkbox"
                 />
                 <span className="option-text">학교명</span>
-                <span className="supported-badge">✓ 지원됨</span>
               </label>
-              <label className="option-item disabled">
+              <label className="option-item">
                 <input
                   type="checkbox"
                   checked={detectionOptions.driverLicense}
-                  disabled={true}
+                  onChange={() => toggleDetectionOption('driverLicense')}
+                  disabled={loading}
                   className="option-checkbox"
                 />
                 <span className="option-text">운전면허번호</span>
-                <span className="coming-soon">준비 중</span>
               </label>
-              <label className="option-item disabled">
+              <label className="option-item">
                 <input
                   type="checkbox"
                   checked={detectionOptions.postalCode}
-                  disabled={true}
+                  onChange={() => toggleDetectionOption('postalCode')}
+                  disabled={loading}
                   className="option-checkbox"
                 />
                 <span className="option-text">우편번호</span>
-                <span className="coming-soon">준비 중</span>
               </label>
             </div>
             
@@ -902,6 +894,30 @@ export default function UploadForm() {
                       <span className="stat-label">직장명</span>
                       <span className={`stat-value ${(result.text_analysis?.structured_data?.categories?.workplace?.count || 0) > 0 ? 'detected' : 'safe'}`}>
                         {result.text_analysis?.structured_data?.categories?.workplace?.count || 0}개
+                      </span>
+                    </div>
+                    )}
+                    {detectionOptions.address && (
+                    <div className="stat-item">
+                      <span className="stat-label">주소</span>
+                      <span className={`stat-value ${(result.text_analysis?.structured_data?.categories?.address?.count || 0) > 0 ? 'detected' : 'safe'}`}>
+                        {result.text_analysis?.structured_data?.categories?.address?.count || 0}개
+                      </span>
+                    </div>
+                    )}
+                    {detectionOptions.driverLicense && (
+                    <div className="stat-item">
+                      <span className="stat-label">운전면허번호</span>
+                      <span className={`stat-value ${(result.text_analysis?.structured_data?.categories?.driverLicense?.count || 0) > 0 ? 'detected' : 'safe'}`}>
+                        {result.text_analysis?.structured_data?.categories?.driverLicense?.count || 0}개
+                      </span>
+                    </div>
+                    )}
+                    {detectionOptions.postalCode && (
+                    <div className="stat-item">
+                      <span className="stat-label">우편번호</span>
+                      <span className={`stat-value ${(result.text_analysis?.structured_data?.categories?.postalCode?.count || 0) > 0 ? 'detected' : 'safe'}`}>
+                        {result.text_analysis?.structured_data?.categories?.postalCode?.count || 0}개
                       </span>
                     </div>
                     )}
@@ -1126,6 +1142,45 @@ export default function UploadForm() {
                                       {(item as any).score && (
                                         <span className="data-score">(신뢰도: {((item as any).score * 100).toFixed(1)}%)</span>
                                       )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {detectionOptions.address && result.text_analysis.structured_data.categories.address && (
+                              <div className="category-item">
+                                <h5 className="category-name">주소</h5>
+                                <div className="category-items">
+                                  {result.text_analysis.structured_data.categories.address.items.map((item, index) => (
+                                    <div key={index} className="data-item">
+                                      <span className="data-type">[{item.type}]</span>
+                                      <span className="data-value">"{item.value}"</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {detectionOptions.driverLicense && result.text_analysis.structured_data.categories.driverLicense && (
+                              <div className="category-item">
+                                <h5 className="category-name">운전면허번호</h5>
+                                <div className="category-items">
+                                  {result.text_analysis.structured_data.categories.driverLicense.items.map((item, index) => (
+                                    <div key={index} className="data-item">
+                                      <span className="data-type">[{item.type}]</span>
+                                      <span className="data-value">"{item.value}"</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {detectionOptions.postalCode && result.text_analysis.structured_data.categories.postalCode && (
+                              <div className="category-item">
+                                <h5 className="category-name">우편번호</h5>
+                                <div className="category-items">
+                                  {result.text_analysis.structured_data.categories.postalCode.items.map((item, index) => (
+                                    <div key={index} className="data-item">
+                                      <span className="data-type">[{item.type}]</span>
+                                      <span className="data-value">"{item.value}"</span>
                                     </div>
                                   ))}
                                 </div>
