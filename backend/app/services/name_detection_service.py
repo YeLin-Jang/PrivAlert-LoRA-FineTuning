@@ -73,8 +73,22 @@ class NameDetectionService:
             else:
                 logger.info("adapter_config_fixed.json을 사용합니다.")
             
-            self.model = PeftModel.from_pretrained(base_model, abs_model_path, config_path=config_path)
+            # 모델 파일 존재 확인
+            adapter_model_path = os.path.join(abs_model_path, "adapter_model.safetensors")
+            if not os.path.exists(adapter_model_path):
+                logger.error(f"adapter_model.safetensors 파일을 찾을 수 없습니다: {adapter_model_path}")
+                return False
+            
+            logger.info(f"LoRA 모델 로딩 시작: {abs_model_path}")
+            logger.info(f"설정 파일: {config_path}")
+            logger.info(f"모델 파일: {adapter_model_path}")
+            
+            self.model = PeftModel.from_pretrained(base_model, abs_model_path)
             self.model.eval()
+            
+            # 모델이 제대로 로드되었는지 확인
+            logger.info(f"LoRA 모델 로드 완료. 모델 타입: {type(self.model)}")
+            logger.info(f"모델 디바이스: {next(self.model.parameters()).device}")
             
             logger.info("LoRA 모델 로딩 완료")
             logger.info("NER 파이프라인 생성 시작")
@@ -112,8 +126,13 @@ class NameDetectionService:
         """
         if not self.is_loaded:
             if not self.load_model():
-                logger.warning("AI 모델 로드 실패, 정규표현식 방식으로 폴백")
-                return self._detect_names_regex(text)
+                logger.error("AI 모델 로드 실패, 이름 탐지를 수행할 수 없습니다.")
+                return {
+                    "success": False,
+                    "message": "AI 모델을 로드할 수 없어 이름 탐지를 수행할 수 없습니다.",
+                    "names": [],
+                    "count": 0
+                }
         
         try:
             if not text or not text.strip():
@@ -141,6 +160,7 @@ class NameDetectionService:
             names = []
             current_entity = ""
             current_start = 0
+            current_score = 0.0
             
             for i, (token, label, probs) in enumerate(zip(tokens, predicted_labels[0], predictions[0])):
                 if token in ['[CLS]', '[SEP]', '[PAD]']:
@@ -153,40 +173,48 @@ class NameDetectionService:
                     token_text = token
                     current_start = i
                 
-                # B-PERSON (1) 또는 I-PERSON (2)이고 신뢰도가 0.8 이상, 숫자나 특수문자 제외
-                if (label.item() == 1 or label.item() == 2) and probs[label].item() > 0.8 and token_text.isalpha():
-                    if current_entity == "":
-                        current_entity = token_text
-                    else:
-                        current_entity += token_text
+                label_id = label.item()
+                confidence = probs[label_id].item()
+                
+                # B-PERSON (1) 또는 I-PERSON (2)이고 신뢰도가 0.7 이상
+                if (label_id == 1 or label_id == 2) and confidence > 0.7:
+                    # 한국어 문자만 허용 (한글, 영문, 숫자 제외)
+                    if token_text and not token_text.isdigit() and not token_text in ['[UNK]', '[UNKNOWN]']:
+                        if current_entity == "":
+                            current_entity = token_text
+                            current_score = confidence
+                        else:
+                            current_entity += token_text
+                            current_score = max(current_score, confidence)
                 else:
                     # 엔티티가 끝남
-                    if current_entity != "":
+                    if current_entity != "" and len(current_entity) >= 2:  # 최소 2글자 이상
                         # 실제 텍스트에서 위치 찾기
                         entity_text = current_entity.replace('##', '')
-                        if entity_text in text:
+                        if entity_text in text and len(entity_text) >= 2:
                             start_pos = text.find(entity_text)
                             end_pos = start_pos + len(entity_text)
                             names.append({
                                 "text": entity_text,
                                 "start": start_pos,
                                 "end": end_pos,
-                                "score": probs[label].item(),
-                                "label": "B-PERSON" if label.item() == 1 else "I-PERSON"
+                                "score": current_score,
+                                "label": "B-PERSON"
                             })
                         current_entity = ""
+                        current_score = 0.0
             
             # 마지막 엔티티 처리
-            if current_entity != "":
+            if current_entity != "" and len(current_entity) >= 2:
                 entity_text = current_entity.replace('##', '')
-                if entity_text in text:
+                if entity_text in text and len(entity_text) >= 2:
                     start_pos = text.find(entity_text)
                     end_pos = start_pos + len(entity_text)
                     names.append({
                         "text": entity_text,
                         "start": start_pos,
                         "end": end_pos,
-                        "score": 0.8,
+                        "score": current_score,
                         "label": "B-PERSON"
                     })
             
@@ -259,46 +287,6 @@ class NameDetectionService:
                 "count": 0
             }
     
-    def _detect_names_regex(self, text: str) -> dict:
-        """정규표현식 기반 이름 탐지 (폴백용)"""
-        try:
-            import re
-            
-            # 한국어 이름 패턴 (2-4글자)
-            name_pattern = r'[가-힣]{2,4}'
-            matches = re.finditer(name_pattern, text)
-            
-            # 일반적인 한국 성씨
-            common_surnames = ['김', '이', '박', '최', '정', '강', '조', '윤', '장', '임', '한', '오', '서', '신', '권', '황', '안', '송', '전', '고', '문', '양', '손', '배', '백', '허', '유', '남', '심', '노', '하', '곽', '성', '차', '주', '우', '구', '원', '나', '민', '진', '지', '엄', '채', '천', '공', '현', '함', '변', '여', '추', '도', '소', '시', '선', '설', '마', '길', '연', '위', '표', '명', '기', '반', '왕', '금', '옥', '육', '인', '맹', '제', '모', '탁', '국', '어', '은', '편', '용']
-            
-            names = []
-            for match in matches:
-                name = match.group()
-                # 한국 성씨 체크 (최소 2글자, 최대 4글자, 숫자나 특수문자 제외)
-                if len(name) >= 2 and len(name) <= 4 and name[0] in common_surnames and name.isalpha():
-                    names.append({
-                        "text": name,
-                        "start": match.start(),
-                        "end": match.end(),
-                        "score": 0.8,
-                        "label": "B-PERSON"
-                    })
-            
-            return {
-                "success": True,
-                "message": f"{len(names)}개의 이름을 탐지했습니다. (정규표현식)",
-                "names": names,
-                "count": len(names)
-            }
-            
-        except Exception as e:
-            logger.error(f"정규표현식 이름 탐지 중 오류: {str(e)}")
-            return {
-                "success": False,
-                "message": f"이름 탐지 중 오류가 발생했습니다: {str(e)}",
-                "names": [],
-                "count": 0
-            }
 
 # 전역 인스턴스
 name_detection_service = NameDetectionService()
