@@ -121,8 +121,8 @@ class NameDetectionService:
                     token_text = token
                     current_start = i
                 
-                # B-PERSON (1) 또는 I-PERSON (2)이고 신뢰도가 0.5 이상
-                if (label.item() == 1 or label.item() == 2) and probs[label].item() > 0.5:
+                # B-PERSON (1) 또는 I-PERSON (2)이고 신뢰도가 0.8 이상, 숫자나 특수문자 제외
+                if (label.item() == 1 or label.item() == 2) and probs[label].item() > 0.8 and token_text.isalpha():
                     if current_entity == "":
                         current_entity = token_text
                     else:
@@ -242,8 +242,8 @@ class NameDetectionService:
             names = []
             for match in matches:
                 name = match.group()
-                # 한국 성씨 체크
-                if len(name) >= 2 and name[0] in common_surnames:
+                # 한국 성씨 체크 (최소 2글자, 최대 4글자, 숫자나 특수문자 제외)
+                if len(name) >= 2 and len(name) <= 4 and name[0] in common_surnames and name.isalpha():
                     names.append({
                         "text": name,
                         "start": match.start(),
