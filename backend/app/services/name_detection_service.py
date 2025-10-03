@@ -22,17 +22,32 @@ class NameDetectionService:
     def load_model(self):
         """모델을 로드합니다."""
         try:
-            # LoRA_DateSet의 모델 경로 사용 (절대 경로)
-            model_path = r"D:\도전보안벨\LoRA_DateSet\model"
-            
-            # 절대 경로로 변환하여 로깅
+            # 현재 파일의 디렉토리를 기준으로 절대 경로 생성
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            model_path = os.path.join(current_dir, "..", "..", "models", "LoRA_DataSet", "model")
             abs_model_path = os.path.abspath(model_path)
+            
             logger.info(f"모델 경로 확인: {abs_model_path}")
             logger.info(f"모델 경로 존재 여부: {os.path.exists(abs_model_path)}")
             
             if not os.path.exists(abs_model_path):
                 logger.error(f"모델 경로를 찾을 수 없습니다: {abs_model_path}")
-                return False
+                # 대안 경로들도 시도
+                alternative_paths = [
+                    os.path.join(current_dir, "..", "models", "LoRA_DataSet", "model"),
+                    os.path.join(os.getcwd(), "models", "LoRA_DataSet", "model"),
+                    os.path.join(os.getcwd(), "backend", "models", "LoRA_DataSet", "model")
+                ]
+                
+                for alt_path in alternative_paths:
+                    alt_abs_path = os.path.abspath(alt_path)
+                    if os.path.exists(alt_abs_path):
+                        abs_model_path = alt_abs_path
+                        logger.info(f"대안 경로 사용: {abs_model_path}")
+                        break
+                else:
+                    logger.error("모든 대안 경로에서 모델을 찾을 수 없습니다.")
+                    return False
                 
             # 기본 모델명 직접 지정 (PeftConfig 사용하지 않음)
             base_model_name = "klue/bert-base"
@@ -49,8 +64,16 @@ class NameDetectionService:
             logger.info("기본 모델 로딩 완료")
             logger.info(f"LoRA 모델 로딩 시작: {abs_model_path}")
             
-            # LoRA 모델 로드
-            self.model = PeftModel.from_pretrained(base_model, abs_model_path)
+            # LoRA 모델 로드 (adapter_config_fixed.json 사용)
+            # adapter_config_fixed.json이 더 완전한 설정이므로 우선 사용
+            config_path = os.path.join(abs_model_path, "adapter_config_fixed.json")
+            if not os.path.exists(config_path):
+                config_path = os.path.join(abs_model_path, "adapter_config.json")
+                logger.info("adapter_config_fixed.json을 찾을 수 없어 adapter_config.json을 사용합니다.")
+            else:
+                logger.info("adapter_config_fixed.json을 사용합니다.")
+            
+            self.model = PeftModel.from_pretrained(base_model, abs_model_path, config_path=config_path)
             self.model.eval()
             
             logger.info("LoRA 모델 로딩 완료")
@@ -64,8 +87,17 @@ class NameDetectionService:
             logger.info("이름 탐지 모델이 성공적으로 로드되었습니다.")
             return True
             
+        except FileNotFoundError as e:
+            logger.error(f"모델 파일을 찾을 수 없습니다: {str(e)}")
+            logger.error("모델 경로를 확인해주세요: " + abs_model_path)
+            return False
+        except ImportError as e:
+            logger.error(f"필요한 라이브러리가 설치되지 않았습니다: {str(e)}")
+            logger.error("pip install transformers peft torch 명령으로 설치해주세요.")
+            return False
         except Exception as e:
-            logger.error(f"모델 로드 중 오류 발생: {str(e)}")
+            logger.error(f"모델 로드 중 예상치 못한 오류 발생: {str(e)}")
+            logger.error(f"오류 타입: {type(e).__name__}")
             return False
     
     def detect_names(self, text: str) -> dict:
