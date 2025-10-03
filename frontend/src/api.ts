@@ -79,7 +79,7 @@ export const filterStructuredData = async (
 ): Promise<any> => {
   // 활성화된 필터들만 추출
   const activeFilters = Object.entries(detectionOptions)
-    .filter(([key, value]) => value && ['phone', 'rrn', 'passport', 'ip_address', 'email', 'account', 'school'].includes(key))
+    .filter(([key, value]) => value && ['phone', 'rrn', 'passport', 'ip_address', 'email', 'account', 'school', 'workplace', 'address', 'driverLicense', 'postalCode'].includes(key))
     .map(([key]) => key);
   
   const response = await api.post('/api/v1/filter/filter', {

@@ -150,6 +150,7 @@ def create_app(config_name=None):
     from app.routes.integrated_filter_routes import integrated_filter_bp
     from app.routes.integrated_analysis_routes import integrated_analysis_bp
     from app.routes.education_routes import education_bp
+    from app.routes.workplace_detection_routes import workplace_bp
     
     app.register_blueprint(face_bp, url_prefix="/api/v1/face")
     app.register_blueprint(hand_bp, url_prefix="/api/v1/hand")
@@ -157,7 +158,8 @@ def create_app(config_name=None):
     app.register_blueprint(image_sanitize_bp, url_prefix="/api/v1/images")
     app.register_blueprint(integrated_filter_bp, url_prefix="/api/v1/filter")
     app.register_blueprint(integrated_analysis_bp, url_prefix="/api/v1")
-    app.register_blueprint(education_bp, url_prefix="/api/v1/education")  
+    app.register_blueprint(education_bp, url_prefix="/api/v1/education")
+    app.register_blueprint(workplace_bp, url_prefix="/api/v1/workplace")  
     
     # 헬스체크 엔드포인트
     @app.route("/health")

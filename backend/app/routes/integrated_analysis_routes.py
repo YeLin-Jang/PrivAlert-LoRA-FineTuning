@@ -190,7 +190,7 @@ def analyze_content():
     blur_fingers = request.form.get('blur_fingers', 'true').lower() in ['true', '1', 'yes']
     show_faces = request.form.get('show_faces', 'false').lower() in ['true', '1', 'yes']
     
-    # 탐지 옵션 파라미터 (프론트엔드에서 전달) - 정형 데이터만
+    # 탐지 옵션 파라미터 (프론트엔드에서 전달) - 정형 데이터 + AI 탐지
     detection_options = {
         'phone': request.form.get('detect_phone', 'false').lower() in ['true', '1', 'yes'],
         'rrn': request.form.get('detect_rrn', 'false').lower() in ['true', '1', 'yes'],
@@ -198,7 +198,11 @@ def analyze_content():
         'ip_address': request.form.get('detect_ip_address', 'false').lower() in ['true', '1', 'yes'],
         'email': request.form.get('detect_email', 'false').lower() in ['true', '1', 'yes'],
         'account': request.form.get('detect_account', 'false').lower() in ['true', '1', 'yes'],
-        'school': request.form.get('detect_school', 'false').lower() in ['true', '1', 'yes']
+        'school': request.form.get('detect_school', 'false').lower() in ['true', '1', 'yes'],
+        'workplace': request.form.get('detect_workplace', 'false').lower() in ['true', '1', 'yes'],
+        'address': request.form.get('detect_address', 'false').lower() in ['true', '1', 'yes'],
+        'driverLicense': request.form.get('detect_driverLicense', 'false').lower() in ['true', '1', 'yes'],
+        'postalCode': request.form.get('detect_postalCode', 'false').lower() in ['true', '1', 'yes']
     }
     
     # 서비스 인스턴스 생성
