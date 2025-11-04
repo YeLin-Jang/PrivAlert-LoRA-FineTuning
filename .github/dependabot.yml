@@ -1,0 +1,44 @@
+# Dependabot 설정 파일
+# Dependabot은 프로젝트의 의존성을 자동으로 업데이트하고 취약점을 감지합니다.
+version: 2
+
+updates:
+  # ========== Python 의존성 업데이트 ==========
+  # backend 디렉토리의 requirements.txt를 모니터링합니다.
+  - package-ecosystem: "pip"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"  # 매주 자동으로 업데이트 확인
+    open-pull-requests-limit: 5  # 동시에 열 수 있는 PR 최대 개수
+    labels:  # 자동으로 붙는 라벨
+      - "dependencies"
+      - "python"
+    commit-message:  # PR 커밋 메시지 형식
+      prefix: "[DEPENDABOT]"  # 커밋 메시지 앞에 붙는 접두사
+      include: "scope"         # 패키지 이름을 포함
+
+  # ========== npm 의존성 업데이트 ==========
+  # frontend 디렉토리의 package.json을 모니터링합니다.
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"  # 매주 자동으로 업데이트 확인
+    open-pull-requests-limit: 5  # 동시에 열 수 있는 PR 최대 개수
+    labels:
+      - "dependencies"
+      - "javascript"
+    commit-message:
+      prefix: "[DEPENDABOT]"
+      include: "scope"
+
+  # ========== GitHub Actions 업데이트 ==========
+  # .github/workflows 디렉토리의 GitHub Actions를 모니터링합니다.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"  # 매주 자동으로 업데이트 확인
+    open-pull-requests-limit: 3  # Actions는 적게 유지 (3개)
+    labels:
+      - "dependencies"
+      - "github-actions"
+

@@ -1,119 +1,117 @@
+# CI(Continuous Integration) 워크플로우
+# 코드 품질 검사, 테스트, 빌드를 자동으로 실행합니다.
 name: CI
 
+# 워크플로우 실행 조건
 on:
+  # main 브랜치에 직접 push 시 실행
   push:
-    branches: [ main ]  # main에 직접 push 시 실행
+    branches: [ main ]
+  # main 브랜치로 향하는 Pull Request 시 실행
   pull_request:
-    branches: [ main ]  # main으로 향하는 PR에서만 실행
+    branches: [ main ]
 
 jobs:
+  # ========== 백엔드 테스트 및 코드 품질 검사 ==========
   backend-tests:
     name: Backend Tests
     runs-on: ubuntu-latest
     
     steps:
+    # 코드 체크아웃
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        token: ${{ secrets.GH_TOKEN }}
+        token: ${{ secrets.GH_TOKEN }}  # GitHub 토큰으로 인증
     
+    # Python 환경 설정
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
-        cache: 'pip'
+        python-version: '3.11'  # 백엔드에서 사용하는 Python 버전
+        cache: 'pip'            # pip 캐시 사용으로 설치 속도 향상
     
+    # 시스템 의존성 설치 (백엔드에서 필요한 라이브러리)
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libmagic1 ffmpeg
+        sudo apt-get install -y libmagic1 ffmpeg  # libmagic1: 파일 타입 감지, ffmpeg: 비디오 처리
     
+    # Python 패키지 설치
     - name: Install Python dependencies
       working-directory: ./backend
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
+    # 백엔드 테스트 실행
     - name: Run tests
       working-directory: ./backend
       run: |
         python -m pytest tests/ -v || echo "테스트 실행 완료"
       env:
         FLASK_ENV: test
-        FLASK_SECRET_KEY: test-secret-key-for-ci
+        FLASK_SECRET_KEY: test-secret-key-for-ci  # CI용 테스트 시크릿 키
     
+    # 코드 스타일 검사 (flake8 사용)
     - name: Check code style (if flake8 exists)
       working-directory: ./backend
       run: |
         pip install flake8 || echo "flake8 설치 생략"
+        # 치명적 오류 검사 (E9: 문법 오류, F63: print 문, F7: 잘못된 문법, F82: 정의되지 않은 이름)
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || echo "코드 스타일 검사 생략"
+        # 일반적인 코드 스타일 검사 (오류는 발생시키지 않고 통계만 출력)
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics || echo "코드 스타일 검사 완료"
-      continue-on-error: true
+      continue-on-error: true  # 코드 스타일 오류가 있어도 빌드 실패로 처리하지 않음
 
+  # ========== 프론트엔드 빌드 및 코드 품질 검사 ==========
   frontend-build:
     name: Frontend Build & Lint
     runs-on: ubuntu-latest
     
     steps:
+    # 코드 체크아웃
     - name: Checkout code
       uses: actions/checkout@v4
       with:
         token: ${{ secrets.GH_TOKEN }}
     
+    # Node.js 환경 설정
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '20'
-        cache: 'npm'
+        node-version: '20'  # 프론트엔드에서 사용하는 Node.js 버전
+        cache: 'npm'        # npm 캐시 사용으로 설치 속도 향상
         cache-dependency-path: frontend/package-lock.json
     
+    # npm 의존성 설치
     - name: Install dependencies
       working-directory: ./frontend
-      run: npm ci
+      run: npm ci  # package-lock.json 기반으로 정확한 버전 설치
     
+    # ESLint를 사용한 코드 린팅 (코드 스타일 및 품질 검사)
     - name: Run linter
       working-directory: ./frontend
       run: npm run lint || echo "Linting 완료"
-      continue-on-error: true
+      continue-on-error: true  # 린팅 오류가 있어도 빌드 계속 진행
     
+    # TypeScript 타입 체크 (개발 모드로 빌드하여 타입 오류 확인)
     - name: Type check
       working-directory: ./frontend
       run: npm run build -- --mode development || echo "타입 체크 완료"
-      continue-on-error: true
+      continue-on-error: true  # 타입 오류가 있어도 빌드 계속 진행
     
+    # 프로덕션 빌드 (배포용 빌드 파일 생성)
     - name: Build
       working-directory: ./frontend
       run: npm run build
     
+    # 빌드 결과물을 Artifacts로 업로드 (7일간 보관)
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: frontend-dist
-        path: frontend/dist
-        retention-days: 7
+        name: frontend-dist  # Artifact 이름
+        path: frontend/dist  # 빌드된 파일 위치
+        retention-days: 7    # 7일간 보관
 
-  security-scan:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GH_TOKEN }}
-    
-    - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
-      with:
-        scan-type: 'fs'
-        scan-ref: '.'
-        format: 'sarif'
-        output: 'trivy-results.sarif'
-      continue-on-error: true
-    
-    - name: Upload Trivy results to GitHub Security
-      uses: github/codeql-action/upload-sarif@v3
-      if: always()
-      with:
-        sarif_file: 'trivy-results.sarif'
-      continue-on-error: true
+  # 참고: 보안 스캔은 별도 워크플로우(security-scan.yml)로 분리되어 있습니다.

@@ -1,0 +1,184 @@
+# 보안 스캔 및 SBOM(Software Bill of Materials) 생성 워크플로우
+# 이 워크플로우는 프로젝트의 취약점을 스캔하고 소프트웨어 구성 요소 목록을 생성합니다.
+name: Security Scan & SBOM
+
+# 워크플로우 실행 조건
+on:
+  # main 브랜치에 직접 push 시 실행
+  push:
+    branches: [ main ]
+  # main 브랜치로 향하는 Pull Request 시 실행
+  pull_request:
+    branches: [ main ]
+  # 수동 실행 가능 (GitHub Actions 탭에서 직접 실행)
+  workflow_dispatch:
+
+# 필요한 권한 설정
+permissions:
+  contents: read              # 코드 읽기 권한
+  security-events: write      # 보안 이벤트 작성 권한 (SARIF 업로드용)
+  actions: read               # Actions 읽기 권한
+
+jobs:
+  # 취약점 스캔 작업
+  vulnerability-scan:
+    name: Vulnerability Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    # 코드 체크아웃
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GH_TOKEN }}  # GitHub 토큰으로 인증 (필수)
+    
+    # ========== Python 의존성 취약점 스캔 ==========
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'  # 백엔드에서 사용하는 Python 버전
+    
+    # Python 의존성 설치 (safety 도구 포함)
+    - name: Install Python dependencies
+      working-directory: ./backend
+      run: |
+        python -m pip install --upgrade pip
+        pip install safety || echo "safety 설치 실패"  # safety: Python 패키지 취약점 스캔 도구
+    
+    # Safety를 사용한 Python 패키지 취약점 스캔
+    - name: Run Safety check (Python)
+      working-directory: ./backend
+      run: |
+        safety check --file requirements.txt || echo "Python 취약점 스캔 완료"
+      continue-on-error: true  # 오류가 있어도 워크플로우 계속 진행
+    
+    # ========== npm 의존성 취약점 스캔 ==========
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'  # 프론트엔드에서 사용하는 Node.js 버전
+        cache: 'npm'        # npm 캐시 사용으로 설치 속도 향상
+        cache-dependency-path: frontend/package-lock.json
+    
+    # npm 의존성 설치
+    - name: Install npm dependencies
+      working-directory: ./frontend
+      run: npm ci  # package-lock.json 기반으로 정확한 버전 설치
+    
+    # npm audit를 사용한 취약점 스캔 (중간 이상 심각도)
+    - name: Run npm audit
+      working-directory: ./frontend
+      run: |
+        npm audit --audit-level=moderate --json > npm-audit.json || echo "npm audit 완료"
+      continue-on-error: true
+    
+    # ========== Trivy 취약점 스캔 (파일 시스템 전체) ==========
+    # Trivy는 파일 시스템 전체를 스캔하여 모든 취약점을 검사합니다.
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'                    # 파일 시스템 스캔
+        scan-ref: '.'                      # 현재 디렉토리 전체 스캔
+        format: 'sarif'                    # SARIF 형식으로 결과 출력 (GitHub Security 호환)
+        output: 'trivy-results.sarif'      # 결과 파일명
+        severity: 'CRITICAL,HIGH,MEDIUM'   # 심각도가 높은 취약점만 검사
+      continue-on-error: true
+    
+    # Trivy 스캔 결과를 GitHub Security 탭에 업로드
+    - name: Upload Trivy results to GitHub Security
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()  # 스캔 성공/실패 여부와 관계없이 항상 실행
+      with:
+        sarif_file: 'trivy-results.sarif'  # SARIF 형식의 스캔 결과 파일
+      continue-on-error: true
+
+  # SBOM(Software Bill of Materials) 생성 작업
+  # SBOM은 프로젝트에 사용된 모든 소프트웨어 구성 요소의 목록입니다.
+  generate-sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    
+    steps:
+    # 코드 체크아웃
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GH_TOKEN }}
+    
+    # ========== Python SBOM 생성 ==========
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    # pip-audit 설치 (Python SBOM 생성 도구)
+    - name: Install pip-audit for Python SBOM
+      working-directory: ./backend
+      run: |
+        python -m pip install --upgrade pip
+        pip install pip-audit || echo "pip-audit 설치 실패"
+      continue-on-error: true
+    
+    # Python 패키지 목록을 JSON 형식의 SBOM으로 생성
+    - name: Generate Python SBOM
+      working-directory: ./backend
+      run: |
+        pip-audit --requirement requirements.txt --format json --output python-sbom.json || echo "Python SBOM 생성 완료"
+      continue-on-error: true
+    
+    # ========== npm SBOM 생성 ==========
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    
+    # npm 의존성 설치
+    - name: Install npm dependencies
+      working-directory: ./frontend
+      run: npm ci
+    
+    # CycloneDX 형식으로 npm 패키지 SBOM 생성
+    - name: Generate npm SBOM
+      working-directory: ./frontend
+      run: |
+        npm run build || echo "빌드 생략"  # 빌드는 선택적 (SBOM 생성에 필수 아님)
+        # CycloneDX는 표준 SBOM 형식 중 하나입니다.
+        npx @cyclonedx/cyclonedx-npm --output-file npm-sbom.json || echo "npm SBOM 생성 완료"
+      continue-on-error: true
+    
+    # ========== Trivy로 통합 SBOM 생성 ==========
+    # Trivy는 프로젝트 전체를 스캔하여 통합 SBOM을 생성합니다.
+    - name: Generate SBOM with Trivy
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'              # 파일 시스템 스캔
+        scan-ref: '.'                # 현재 디렉토리 전체
+        format: 'cyclonedx'          # CycloneDX 형식 (표준 SBOM 형식)
+        output: 'sbom-cyclonedx.json' # 통합 SBOM 파일
+      continue-on-error: true
+    
+    # 생성된 모든 SBOM 파일을 Artifacts로 업로드 (30일 보관)
+    - name: Upload SBOM artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: sbom-files              # Artifact 이름
+        path: |                       # 업로드할 파일 목록
+          backend/python-sbom.json
+          frontend/npm-sbom.json
+          sbom-cyclonedx.json
+        retention-days: 30            # 30일간 보관
+      continue-on-error: true
+    
+    # 통합 SBOM을 별도 Artifact로 업로드 (90일 보관)
+    - name: Upload SBOM to GitHub
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: sbom                    # 통합 SBOM 전용 Artifact
+        path: sbom-cyclonedx.json     # CycloneDX 형식의 통합 SBOM
+        retention-days: 90            # 90일간 보관 (더 오래 보관)
+      continue-on-error: true
+
