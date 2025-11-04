@@ -1,6 +1,5 @@
 import React from 'react';
 import type { DetectionOptions } from '../types';
-import { DETECTION_OPTIONS } from '../constants';
 
 interface DetectionOptionsPanelProps {
   detectionOptions: DetectionOptions;

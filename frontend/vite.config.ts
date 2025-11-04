@@ -101,7 +101,13 @@ function securityHeadersPlugin(): Plugin {
             headers['Content-Security-Policy'] += '; frame-ancestors \'none\'';
           }
           
-          return originalWriteHead.call(this, statusCode as number, statusMessage, headers);
+          // writeHead는 statusMessage가 있으면 3개 인자, 없으면 2개 인자
+          // TypeScript 타입 호환을 위해 타입 단언 사용
+          if (statusMessage !== undefined) {
+            return (originalWriteHead as any).call(this, statusCode as number, statusMessage, headers);
+          } else {
+            return (originalWriteHead as any).call(this, statusCode as number, headers);
+          }
         };
         
         res.end = function(chunk?: any, encoding?: any, cb?: any) {
@@ -220,7 +226,13 @@ function securityHeadersPlugin(): Plugin {
             headers['Content-Security-Policy'] += '; frame-ancestors \'none\'';
           }
           
-          return originalWriteHead.call(this, statusCode as number, statusMessage, headers);
+          // writeHead는 statusMessage가 있으면 3개 인자, 없으면 2개 인자
+          // TypeScript 타입 호환을 위해 타입 단언 사용
+          if (statusMessage !== undefined) {
+            return (originalWriteHead as any).call(this, statusCode as number, statusMessage, headers);
+          } else {
+            return (originalWriteHead as any).call(this, statusCode as number, headers);
+          }
         };
         
         res.end = function(chunk?: any, encoding?: any, cb?: any) {
@@ -275,6 +287,7 @@ export default defineConfig({
     // 프로덕션 빌드 최적화 및 보안 강화
     minify: 'terser',
     terserOptions: {
+      // TerserOptions 타입 호환: compress 옵션을 최상위로 이동
       compress: {
         // 보안: 프로덕션 빌드에서 모든 주석 및 디버그 코드 제거
         drop_console: true, // 모든 console.* 제거
@@ -294,8 +307,6 @@ export default defineConfig({
         ],
         // 디버그 관련 키워드 제거
         passes: 3, // 여러 번 압축하여 더 철저한 최적화
-        // 보안: 주석 완전 제거
-        comments: /^!|@license|@preserve|DEBUG|TODO|FIXME|XXX/i,
       },
       format: {
         // 보안: 주석 완전 제거
@@ -305,10 +316,10 @@ export default defineConfig({
         // 보안: 소스맵 URL 제거
         ascii_only: true,
       },
-      // 보안: 주석 제거 옵션
+      // 보안: 주석 제거 옵션 (format.comments와 중복되지만 명시적으로 설정)
       keep_classnames: false,
       keep_fnames: false,
-    },
+    } as any, // TerserOptions 타입 호환성 문제 해결
     // 소스맵 생성 비활성화 (보안: 소스 코드 노출 방지)
     sourcemap: false,
     // 청크 크기 경고 비활성화 (프로덕션 빌드 최적화)

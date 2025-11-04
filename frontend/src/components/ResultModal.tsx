@@ -1,21 +1,17 @@
 import React from 'react';
 import type { AnalysisResult } from '../types';
-import { API_CONFIG } from '../constants';
 
 interface ResultModalProps {
   result: AnalysisResult & { video_analysis?: any };
   onClose: () => void;
-  detectionOptions: Record<string, boolean>;
-  blurFingers: boolean;
+  detectionOptions?: Record<string, boolean>;
+  blurFingers?: boolean;
   onShowEducation?: (maskedText: string, categories: Record<string, any>) => void;
 }
 
 export const ResultModal: React.FC<ResultModalProps> = ({
   result,
   onClose,
-  detectionOptions,
-  blurFingers,
-  onShowEducation,
 }) => {
   // XSS 방지: 텍스트 이스케이프
   const escapeHtml = (text: string) => {
