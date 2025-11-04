@@ -1,0 +1,42 @@
+# Git
+.git/
+.gitignore
+.github/
+
+# Docker
+docker-compose*.yml
+Dockerfile
+.dockerignore
+
+# 환경 변수
+.env
+.env.local
+.env.*.local
+
+# 문서
+*.md
+README.md
+DOCKER_SETUP.md
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 로그
+*.log
+logs/
+
+# 테스트
+tests/
+coverage/
+
+# 임시 파일
+*.tmp
+*.bak
+

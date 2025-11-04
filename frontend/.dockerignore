@@ -1,0 +1,33 @@
+node_modules
+dist
+.DS_Store
+*.log
+.env
+.env.local
+.env.*.local
+.git
+.gitignore
+README.md
+.eslintrc*
+.prettierrc
+.prettierignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 테스트
+coverage/
+.nyc_output/
+
+# 빌드
+build/
+dist/
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+

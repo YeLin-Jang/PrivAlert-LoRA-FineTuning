@@ -40,12 +40,12 @@ def save_path_with_timestamp(base_dir: str, prefix: str, ext: str = ".jpg") -> s
         raise ValueError("경로 조작 시도가 감지되었습니다")
     return abs_path
 
-def to_public_url(static_relative_path: str) -> str:
-    """/static/... 형태 웹 경로 반환"""
-    static_relative_path = static_relative_path.replace("\\", "/")
-    if not static_relative_path.startswith("/"):
-        static_relative_path = "/" + static_relative_path
-    return static_relative_path
+def to_public_url(data_relative_path: str) -> str:
+    """/data/... 형태 웹 경로 반환"""
+    data_relative_path = data_relative_path.replace("\\", "/")
+    if not data_relative_path.startswith("/"):
+        data_relative_path = "/" + data_relative_path
+    return data_relative_path
 
 def save_json_with_timestamp(base_dir: str, data: dict, prefix: str = "result", ext: str = ".json") -> dict:
     """JSON 저장 + 경로/URL 반환"""
@@ -56,7 +56,9 @@ def save_json_with_timestamp(base_dir: str, data: dict, prefix: str = "result", 
 
     url = None
     norm = abs_path.replace("\\", "/")
-    if "/static/" in norm or norm.endswith("/static"):
-        rel_path = norm.split("/static", 1)[-1]
-        url = to_public_url("static" + rel_path)
+    if "/data/results/" in norm:
+        # data/results 디렉토리 내 파일인 경우 URL 생성
+        # BASE_DATA_DIR은 backend/data/results이므로, URL은 /data/results/... 형태
+        rel_path = norm.split("/data/results/", 1)[-1]
+        url = to_public_url("data/results/" + rel_path)
     return {"path": abs_path, "url": url}

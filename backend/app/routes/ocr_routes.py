@@ -48,7 +48,7 @@ def extract_text():
                 "message": f"텍스트가 감지되었습니다 ({len(text)}자)"
             }
 
-            # OCR 결과를 static/temp에 JSON 파일로 저장 (경로 + URL 반환)
+            # OCR 결과를 data/ocr에 JSON 파일로 저장 (경로 + URL 반환)
             saved = save_json_with_timestamp(
                 os.path.join(BASE_DATA_DIR, "ocr"),
                 result,
