@@ -225,7 +225,7 @@ class LLMService:
       "risk_scenarios": [
         "학생 신원 추적",
         "피싱/사칭 공격",
-        "학원 정보 노출"
+      
       ],
       "tips": [
         "학교명 대신 일반적 표현 사용",
