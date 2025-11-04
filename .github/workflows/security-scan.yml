@@ -28,7 +28,7 @@ jobs:
     steps:
     # 코드 체크아웃
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         token: ${{ secrets.GH_TOKEN }}  # GitHub 토큰으로 인증 (필수)
     
@@ -101,7 +101,7 @@ jobs:
     steps:
     # 코드 체크아웃
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         token: ${{ secrets.GH_TOKEN }}
     
