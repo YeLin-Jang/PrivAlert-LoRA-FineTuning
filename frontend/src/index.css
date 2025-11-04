@@ -69,3 +69,12 @@ a:hover {
 
 /* Noto Sans KR 폰트 로드 */
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap');
+
+/* CSP 준수를 위한 인라인 스타일 제거 - CSS 클래스로 대체 */
+.file-input-hidden {
+  display: none;
+}
+
+.edu-revised-margin {
+  margin-bottom: 20px;
+}

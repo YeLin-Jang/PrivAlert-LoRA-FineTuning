@@ -87,7 +87,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
         accept={accept || (isVideo ? 'video/*' : 'image/*')}
         multiple={multiple}
         onChange={handleFileChange}
-        style={{ display: 'none' }}
+        className="file-input-hidden"
         aria-label="파일 업로드"
       />
       

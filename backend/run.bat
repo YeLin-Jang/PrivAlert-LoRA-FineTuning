@@ -6,3 +6,4 @@ if exist .venv\Scripts\activate.bat (
 python wsgi.py
 pause
 
+
