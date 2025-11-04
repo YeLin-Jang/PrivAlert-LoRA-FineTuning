@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
 import { getDashboardOverview } from '../../services/adminApi';
+import { safeRedirect } from '../../utils/urlSecurity';
 import './Dashboard.css';
 
 const Dashboard: React.FC = () => {
@@ -28,7 +29,8 @@ const Dashboard: React.FC = () => {
   const handleLogout = async () => {
     try {
       await logout();
-      window.location.href = '/admin/login';
+      // 보안: URL에서 민감 정보 제거 후 안전한 리다이렉트
+      safeRedirect('/admin/login');
     } catch (err) {
       console.error('로그아웃 오류:', err);
     }

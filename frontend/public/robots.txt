@@ -1,0 +1,11 @@
+# robots.txt for PrivAlert
+# 보안을 위해 관리자 페이지는 크롤링 차단
+
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+
+# 사이트맵 위치
+Sitemap: https://yourdomain.com/sitemap.xml
+

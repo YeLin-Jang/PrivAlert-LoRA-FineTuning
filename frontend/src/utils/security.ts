@@ -33,9 +33,10 @@ export const secureFilesCleanup = (files: File[]): void => {
  * 텍스트 데이터를 안전하게 제거
  * 민감한 텍스트를 메모리에서 덮어쓰기
  */
-export const secureTextCleanup = (text: string): string => {
+export const secureTextCleanup = (_text: string): string => {
   // 텍스트를 빈 문자열로 대체
   // 실제로는 변수가 재할당되면 GC가 처리하지만, 명시적으로 처리
+  // 언더스코어 접두사로 미사용 매개변수 표시
   return '';
 };
 
@@ -77,7 +78,8 @@ export const secureObjectCleanup = <T extends Record<string, any>>(obj: T): void
     Object.keys(obj).forEach(key => {
       const value = obj[key];
       if (typeof value === 'string') {
-        obj[key] = '' as any;
+        // 제네릭 타입 T에 쓰기: 타입 단언 사용
+        (obj as Record<string, any>)[key] = '';
       } else if (value instanceof File) {
         secureFileCleanup(value);
       } else if (Array.isArray(value)) {

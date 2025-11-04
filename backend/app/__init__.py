@@ -125,9 +125,12 @@ def create_app(config_name=None):
     )
     
     # 보안 헤더 설정 (OWASP 보안 가이드라인 준수)
+    # 모든 응답(에러 포함)에 보안 헤더 적용
     @app.after_request
     def set_security_headers(response):
-        """보안 헤더를 설정하고 버전 정보 유출을 방지합니다."""
+        """보안 헤더를 설정하고 버전 정보 유출을 방지합니다.
+        모든 응답(정상 응답, 에러 응답, 정적 파일 포함)에 적용됩니다.
+        """
         # Server 헤더 제거 후 브랜드명으로 교체
         response.headers.pop('Server', None)
         response.headers['Server'] = 'PrivAlert'
@@ -151,18 +154,45 @@ def create_app(config_name=None):
             'magnetometer=(), gyroscope=(), speaker=()'
         )
         
+        # 요청 경로 확인
+        request_path = request.path if request else ''
+        is_admin_path = request_path.startswith('/admin') or request_path.startswith('/api/v1/admin')
+        
         # Content Security Policy
-        csp = (
-            "default-src 'self'; "
-            "script-src 'self'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data: https:; "
-            "font-src 'self' data:; "
-            "connect-src 'self'; "
-            "frame-ancestors 'none'; "
-            "base-uri 'self'; "
-            "form-action 'self'"
-        )
+        # 관리자 페이지에 대해 더 엄격한 CSP 적용
+        if is_admin_path:
+            # 관리자 페이지용 엄격한 CSP 정책
+            csp = (
+                "default-src 'self'; "
+                "script-src 'self'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data:; "
+                "font-src 'self' data:; "
+                "connect-src 'self'; "
+                "frame-ancestors 'none'; "
+                "base-uri 'self'; "
+                "form-action 'self'; "
+                "object-src 'none'; "
+                "media-src 'none'; "
+                "worker-src 'none'; "
+                "manifest-src 'self'; "
+                "upgrade-insecure-requests"
+            )
+        else:
+            # 일반 페이지용 CSP 정책
+            # 보안: 와일드카드 제거, 'self'와 data:만 허용 (외부 이미지가 필요하면 특정 도메인 명시)
+            csp = (
+                "default-src 'self'; "
+                "script-src 'self'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data:; "
+                "font-src 'self' data:; "
+                "connect-src 'self'; "
+                "frame-ancestors 'none'; "
+                "base-uri 'self'; "
+                "form-action 'self'"
+            )
+        
         response.headers['Content-Security-Policy'] = csp
         
         # 프로덕션 환경에서만 HSTS 활성화
@@ -194,7 +224,10 @@ def create_app(config_name=None):
             abort(403)
         
         try:
-            return send_from_directory(BASE_DATA_DIR, filename)
+            response = send_from_directory(BASE_DATA_DIR, filename)
+            # 보안: 정적 파일에도 X-Content-Type-Options 헤더 명시적 설정 (이중 보장)
+            response.headers['X-Content-Type-Options'] = 'nosniff'
+            return response
         except FileNotFoundError:
             abort(404)
     
@@ -354,24 +387,53 @@ def create_app(config_name=None):
             "version": "1.0.0"
         })
     
-    # 에러 핸들러
+    # 에러 핸들러 (모든 에러 응답에도 보안 헤더가 적용됨 - @app.after_request를 통해)
     @app.errorhandler(400)
     def bad_request(error):
-        return jsonify({"success": False, "error": "잘못된 요청입니다", "code": 400}), 400
+        response = jsonify({"success": False, "error": "잘못된 요청입니다", "code": 400})
+        # 보안: X-Content-Type-Options 헤더 명시적 설정 (이중 보장)
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        return response, 400
+    
+    @app.errorhandler(401)
+    def unauthorized(error):
+        """인증 필요 핸들러"""
+        response = jsonify({
+            "success": False,
+            "error": "인증이 필요합니다",
+            "code": 401
+        })
+        # 보안: X-Content-Type-Options 헤더 명시적 설정 (이중 보장)
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        return response, 401
+    
+    @app.errorhandler(403)
+    def forbidden(error):
+        """접근 거부 핸들러"""
+        response = jsonify({"success": False, "error": "접근이 거부되었습니다", "code": 403})
+        # 보안: X-Content-Type-Options 헤더 명시적 설정 (이중 보장)
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        return response, 403
     
     @app.errorhandler(404)
     def not_found(error):
-        return jsonify({
+        response = jsonify({
             "success": False, 
             "error": "요청한 리소스를 찾을 수 없습니다", 
             "code": 404,
             "message": "사용 가능한 엔드포인트 목록은 루트 경로(/)를 참조하세요."
-        }), 404
+        })
+        # 보안: X-Content-Type-Options 헤더 명시적 설정 (이중 보장)
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        return response, 404
     
     @app.errorhandler(413)
     def payload_too_large(error):
         """페이로드 크기 초과 핸들러"""
-        return jsonify({"success": False, "error": "파일 크기가 너무 큽니다 (최대 10MB)", "code": 413}), 413
+        response = jsonify({"success": False, "error": "파일 크기가 너무 큽니다 (최대 10MB)", "code": 413})
+        # 보안: X-Content-Type-Options 헤더 명시적 설정 (이중 보장)
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        return response, 413
     
     @app.errorhandler(500)
     def internal_server_error(error):
@@ -379,11 +441,18 @@ def create_app(config_name=None):
         # 상세한 에러 정보는 로그에만 기록
         app.logger.error(f"서버 오류: {error}", exc_info=True)
         # 클라이언트에는 일반적인 메시지만 반환
-        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다", "code": 500}), 500
+        response = jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다", "code": 500})
+        # 보안: X-Content-Type-Options 헤더 명시적 설정 (이중 보장)
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        return response, 500
     
-    @app.errorhandler(403)
-    def forbidden(error):
-        """접근 거부 핸들러"""
-        return jsonify({"success": False, "error": "접근이 거부되었습니다", "code": 403}), 403
+    @app.errorhandler(Exception)
+    def handle_exception(error):
+        """모든 예외 처리 (보안: 상세 정보 노출 방지)"""
+        app.logger.error(f"예외 발생: {error}", exc_info=True)
+        response = jsonify({"success": False, "error": "서버 오류가 발생했습니다", "code": 500})
+        # 보안: X-Content-Type-Options 헤더 명시적 설정 (이중 보장)
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        return response, 500
     
     return app

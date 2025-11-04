@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { validateFile, validateFileCount, validateVideoFile } from '../utils/validation';
 import { formatFileSize } from '../utils/formatters';
-import { UPLOAD_LIMITS, ERROR_MESSAGES } from '../constants';
+import { UPLOAD_LIMITS } from '../constants';
 
 interface FileUploaderProps {
   files: File[];
@@ -87,7 +87,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
         accept={accept || (isVideo ? 'video/*' : 'image/*')}
         multiple={multiple}
         onChange={handleFileChange}
-        style={{ display: 'none' }}
+        className="file-input-hidden"
         aria-label="파일 업로드"
       />
       

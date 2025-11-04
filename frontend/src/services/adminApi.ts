@@ -1,5 +1,6 @@
 import axios from 'axios';
 import type { ApiResponse } from '../types';
+import { removeSensitiveParams, safeRedirect } from '../utils/urlSecurity';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
@@ -12,13 +13,31 @@ const adminApi = axios.create({
   withCredentials: true, // 쿠키 전송을 위해 필요
 });
 
-// 요청 인터셉터: JWT 토큰을 헤더에 추가
+// 요청 인터셉터: JWT 토큰을 헤더에 추가 (URL에는 절대 포함하지 않음)
 adminApi.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('admin_access_token');
     if (token) {
+      // 보안: 토큰은 Authorization 헤더에만 포함, URL에는 절대 포함하지 않음
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // 보안: URL에서 민감 정보 제거 (토큰, 비밀번호 등)
+    if (config.url) {
+      const fullUrl = config.baseURL 
+        ? `${config.baseURL}${config.url.startsWith('/') ? '' : '/'}${config.url}`
+        : `${API_BASE}${config.url.startsWith('/') ? '' : '/'}${config.url}`;
+      config.url = removeSensitiveParams(fullUrl).replace(config.baseURL || API_BASE, '');
+    }
+    
+    // 보안: params에서도 민감 정보 제거
+    if (config.params) {
+      const sensitiveParams = ['token', 'access_token', 'refresh_token', 'auth_token', 'password', 'secret', 'key'];
+      sensitiveParams.forEach(param => {
+        delete config.params[param];
+      });
+    }
+    
     return config;
   },
   (error) => {
@@ -51,7 +70,8 @@ adminApi.interceptors.response.use(
       } catch (refreshError) {
         // Refresh 실패 시 로그아웃 처리
         localStorage.removeItem('admin_access_token');
-        window.location.href = '/admin/login';
+        // 보안: URL에서 민감 정보 제거 후 안전한 리다이렉트
+        safeRedirect('/admin/login');
         return Promise.reject(refreshError);
       }
     }
