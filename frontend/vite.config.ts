@@ -13,9 +13,12 @@ function securityHeadersPlugin(): Plugin {
       // robots.txt 전용 - 텍스트 파일 (스크립트 불필요)
       const robotsCSP = "default-src 'none'; script-src 'none'; style-src 'none'; connect-src 'none'; frame-ancestors 'none'";
       
-      // HTML 페이지용 - unsafe-inline, unsafe-eval 제거 (개발 환경에서만 WebSocket 허용)
-      // 보안: 와일드카드 제거, 'self'와 data:만 허용 (외부 이미지가 필요하면 특정 도메인 명시)
-      const htmlCSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' http://localhost:5000 ws://localhost:3000 ws://localhost:5173; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; worker-src 'none'; manifest-src 'self'";
+      // HTML 페이지용 - 개발 환경에서는 Vite HMR을 위해 unsafe-inline 허용
+      // 보안: 프로덕션에서는 unsafe-inline 제거, 개발 환경에서는 Vite 작동을 위해 필요
+      const isDev = process.env.NODE_ENV !== 'production';
+      const htmlCSP = isDev
+        ? "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data: https:; connect-src 'self' http://localhost:5000 ws://localhost:3000 ws://localhost:5173; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; worker-src 'none'; manifest-src 'self'"
+        : "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' http://localhost:5000 ws://localhost:3000 ws://localhost:5173; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; worker-src 'none'; manifest-src 'self'";
       
       // 관리자 페이지용 - 더 엄격한 CSP (unsafe-inline 완전 제거)
       const adminCSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'none'; worker-src 'none'; manifest-src 'self'; upgrade-insecure-requests";
@@ -343,15 +346,7 @@ export default defineConfig({
     cssCodeSplit: true,
     cssMinify: true,
   },
-  // 환경 변수 설정
-  define: {
-    // 보안: 프로덕션에서 개발 모드 비활성화
-    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
-    // React 개발 모드 비활성화
-    __DEV__: false,
-    __PROD__: true,
-    // 보안: 디버그 모드 비활성화
-    'import.meta.env.DEV': false,
-    'import.meta.env.PROD': true,
-  },
+  // 환경 변수 설정 (빌드 시에만 적용, 개발 모드에서는 Vite가 자동으로 처리)
+  // define 옵션은 빌드 시에만 필요한 경우에만 사용
+  // 개발 모드에서는 Vite가 자동으로 import.meta.env.DEV를 true로 설정
 });

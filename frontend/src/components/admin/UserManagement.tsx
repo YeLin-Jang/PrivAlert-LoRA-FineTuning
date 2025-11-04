@@ -112,6 +112,11 @@ const UserManagement: React.FC = () => {
 
       {loading ? (
         <div className="loading">로딩 중...</div>
+      ) : users.length === 0 ? (
+        <div className="empty-state">
+          <p>등록된 사용자가 없습니다.</p>
+          <p className="empty-state-hint">사용자가 회원가입하면 여기에 표시됩니다.</p>
+        </div>
       ) : (
         <>
           <table className="users-table">
