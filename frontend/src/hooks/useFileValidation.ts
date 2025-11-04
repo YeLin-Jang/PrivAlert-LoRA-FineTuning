@@ -1,7 +1,5 @@
 import { useState, useCallback } from 'react';
 import { validateFile, validateFileCount, validateTextLength } from '../utils/validation';
-import type { ValidationResult } from '../utils/validation';
-import { UPLOAD_LIMITS } from '../constants';
 
 export const useFileValidation = () => {
   const [errors, setErrors] = useState<string[]>([]);

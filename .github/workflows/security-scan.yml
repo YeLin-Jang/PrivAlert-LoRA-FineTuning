@@ -29,8 +29,6 @@ jobs:
     # 코드 체크아웃
     - name: Checkout code
       uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GH_TOKEN }}  # GitHub 토큰으로 인증 (필수)
     
     # ========== Python 의존성 취약점 스캔 ==========
     - name: Set up Python
@@ -102,8 +100,6 @@ jobs:
     # 코드 체크아웃
     - name: Checkout code
       uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GH_TOKEN }}
     
     # ========== Python SBOM 생성 ==========
     - name: Set up Python
