@@ -12,6 +12,9 @@ interface ResultModalProps {
 export const ResultModal: React.FC<ResultModalProps> = ({
   result,
   onClose,
+  detectionOptions: _detectionOptions,
+  blurFingers: _blurFingers,
+  onShowEducation: _onShowEducation,
 }) => {
   // XSS 방지: 텍스트 이스케이프
   const escapeHtml = (text: string) => {

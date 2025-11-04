@@ -44,17 +44,17 @@ export const validateVideoDuration = async (file: File): Promise<ValidationResul
  */
 export const validateFileType = (file: File, isVideo: boolean = false): ValidationResult => {
   const allowedTypes = isVideo ? UPLOAD_LIMITS.ALLOWED_VIDEO_TYPES : UPLOAD_LIMITS.ALLOWED_IMAGE_TYPES;
+  const fileType: string = file.type;
   
-  // 타입 단언: file.type을 string으로 캐스팅하여 includes 메서드 사용
-  const fileType = file.type as string;
-  const allowedTypesArray = allowedTypes as readonly string[];
+  // 타입 안전성을 위해 배열을 string 배열로 변환하여 체크
+  const allowedTypesArray: readonly string[] = allowedTypes;
   
   if (!allowedTypesArray.includes(fileType)) {
-    // 타입 단언: 이미지 타입 체크
-    const imageTypes = UPLOAD_LIMITS.ALLOWED_IMAGE_TYPES as readonly string[];
+    const imageTypesArray: readonly string[] = UPLOAD_LIMITS.ALLOWED_IMAGE_TYPES;
+    const isImageType = imageTypesArray.includes(fileType);
     return {
       isValid: false,
-      error: imageTypes.includes(fileType)
+      error: isImageType 
         ? '이미지 파일만 업로드할 수 있습니다'
         : '비디오 파일만 업로드할 수 있습니다',
     };

@@ -78,7 +78,7 @@ export const secureObjectCleanup = <T extends Record<string, any>>(obj: T): void
     Object.keys(obj).forEach(key => {
       const value = obj[key];
       if (typeof value === 'string') {
-        // 제네릭 타입 T에 쓰기: 타입 단언 사용
+        // 타입 안전성을 위해 타입 단언 사용
         (obj as Record<string, any>)[key] = '';
       } else if (value instanceof File) {
         secureFileCleanup(value);

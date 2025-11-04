@@ -35,7 +35,6 @@ const createApiInstance = (): AxiosInstance => {
   instance.interceptors.response.use(
     (response) => response,
     (error: AxiosError) => {
-      // 보안: 상세한 에러 정보는 클라이언트에 노출하지 않음
       if (error.response) {
         const data = error.response.data as any;
         

@@ -21,8 +21,6 @@ jobs:
     # 코드 체크아웃
     - name: Checkout code
       uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GH_TOKEN }}  # GitHub 토큰으로 인증
     
     # Python 환경 설정
     - name: Set up Python
@@ -65,8 +63,6 @@ jobs:
     # 코드 체크아웃
     - name: Checkout code
       uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GH_TOKEN }}
     
     # Node.js 환경 설정
     - name: Set up Node.js
