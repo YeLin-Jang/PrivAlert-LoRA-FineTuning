@@ -7,9 +7,26 @@ import uuid
 from io import BytesIO
 from flask import Blueprint, request
 from werkzeug.datastructures import FileStorage
-from app.services.face_detection_service import FaceDetectionService
-from app.services.hand_detection_service import HandDetectionService
-from app.services.ocr_service import OCRService
+try:
+    from app.services.face_detection_service import FaceDetectionService
+    FACE_DETECTION_AVAILABLE = True
+except ImportError:
+    FACE_DETECTION_AVAILABLE = False
+    FaceDetectionService = None
+
+try:
+    from app.services.hand_detection_service import HandDetectionService
+    HAND_DETECTION_AVAILABLE = True
+except ImportError:
+    HAND_DETECTION_AVAILABLE = False
+    HandDetectionService = None
+
+try:
+    from app.services.ocr_service import OCRService
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
+    OCRService = None
 from app.services.integrated_filter_service import IntegratedFilterService
 from app.services.mask_regex import mask_regex_service
 from app.utils.api_utils import APIResponse, handle_api_exception
@@ -225,10 +242,10 @@ def analyze_content():
         'postalCode': request.form.get('detect_postalCode', 'false').lower() in ['true', '1', 'yes']
     }
     
-    # 서비스 인스턴스 생성
-    face_service = FaceDetectionService()
-    hand_service = HandDetectionService()
-    ocr_service = OCRService()
+    # 서비스 인스턴스 생성 (사용 가능한 것만)
+    face_service = FaceDetectionService() if FACE_DETECTION_AVAILABLE else None
+    hand_service = HandDetectionService() if HAND_DETECTION_AVAILABLE else None
+    ocr_service = OCRService() if OCR_AVAILABLE else None
     filter_service = IntegratedFilterService()
     
     # 결과 초기화
@@ -317,12 +334,15 @@ def analyze_content():
             except Exception as e:
                 logger.warning(f"이미지 {idx + 1} EXIF 정제 중 오류: {e}")
             
-            # 얼굴 검출
-            face_result = face_service.detect_faces(image_file, save_result=True, return_image=show_faces)
-            if show_faces and isinstance(face_result, tuple):
-                face_data, _ = face_result
+            # 얼굴 검출 (사용 가능한 경우만)
+            if face_service:
+                face_result = face_service.detect_faces(image_file, save_result=True, return_image=show_faces)
+                if show_faces and isinstance(face_result, tuple):
+                    face_data, _ = face_result
+                else:
+                    face_data = face_result
             else:
-                face_data = face_result
+                face_data = {"success": False, "message": "얼굴 탐지 서비스를 사용할 수 없습니다 (OpenCV 미설치)"}
                 
             if face_data.get("success"):
                 all_face_count += face_data["count"]
