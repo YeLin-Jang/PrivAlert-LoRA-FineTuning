@@ -8,31 +8,15 @@ from flask_jwt_extended import (
     get_jwt,
     unset_jwt_cookies
 )
-from werkzeug.security import check_password_hash, generate_password_hash
-from datetime import timedelta
+from datetime import timedelta, datetime
 from app.utils.logger import get_logger
+from app.models.admin import AdminUser
+from app.extensions.database import db
 import os
 
 logger = get_logger(__name__)
 
 admin_auth_bp = Blueprint('admin_auth', __name__)
-
-# 임시 관리자 계정 (실제로는 데이터베이스에서 조회해야 함)
-# 프로덕션에서는 반드시 데이터베이스 사용
-ADMIN_USERS = {
-    "admin": {
-        "password_hash": generate_password_hash("admin123!"),  # 기본 비밀번호 (변경 필요)
-        "role": "admin",
-        "id": 1,
-        "username": "admin"
-    },
-    "super_admin": {
-        "password_hash": generate_password_hash("super123!"),  # 기본 비밀번호 (변경 필요)
-        "role": "super_admin",
-        "id": 2,
-        "username": "super_admin"
-    }
-}
 
 @admin_auth_bp.route('/login', methods=['POST'])
 def admin_login():
@@ -49,44 +33,53 @@ def admin_login():
                 "code": 400
             }), 400
         
-        # 임시 관리자 계정 확인 (실제로는 DB에서 조회)
-        user = ADMIN_USERS.get(username)
-        if not user or not check_password_hash(user['password_hash'], password):
-            logger.warning(f"관리자 로그인 실패: username={username}")
+        # 보안: 데이터베이스에서 사용자 조회 (SQL 인젝션 방지)
+        user = AdminUser.find_by_username(username)
+        if not user or not user.is_active:
+            logger.warning(f"관리자 로그인 실패: username={username} (사용자 없음 또는 비활성)")
             return jsonify({
                 "success": False,
                 "error": "잘못된 사용자명 또는 비밀번호입니다",
                 "code": 401
             }), 401
         
+        # 보안: 비밀번호 확인 (타임링 공격 방지)
+        if not user.check_password(password):
+            logger.warning(f"관리자 로그인 실패: username={username} (비밀번호 불일치)")
+            return jsonify({
+                "success": False,
+                "error": "잘못된 사용자명 또는 비밀번호입니다",
+                "code": 401
+            }), 401
+        
+        # 보안: 마지막 로그인 시간 업데이트
+        user.last_login = datetime.utcnow()
+        db.session.commit()
+        
         # JWT 토큰 생성
         additional_claims = {
-            "role": user['role'],
-            "username": user['username']
+            "role": user.role,
+            "username": user.username
         }
         
         access_token = create_access_token(
-            identity=str(user['id']),
+            identity=str(user.id),
             additional_claims=additional_claims,
             expires_delta=timedelta(minutes=15)
         )
         refresh_token = create_refresh_token(
-            identity=str(user['id']),
+            identity=str(user.id),
             additional_claims=additional_claims,
             expires_delta=timedelta(days=7)
         )
         
-        logger.info(f"관리자 로그인 성공: username={username}, role={user['role']}")
+        logger.info(f"관리자 로그인 성공: username={username}, role={user.role}")
         
         response = jsonify({
             "success": True,
             "data": {
                 "access_token": access_token,
-                "user": {
-                    "id": user['id'],
-                    "username": user['username'],
-                    "role": user['role']
-                }
+                "user": user.to_dict()
             }
         })
         
@@ -170,10 +163,11 @@ def get_current_admin():
     try:
         claims = get_jwt()
         user_id = get_jwt_identity()
+        username = claims.get('username', '')
         
-        # 실제로는 DB에서 조회
-        user = ADMIN_USERS.get(claims.get('username', ''))
-        if not user:
+        # 보안: 데이터베이스에서 사용자 조회
+        user = AdminUser.find_by_username(username)
+        if not user or not user.is_active:
             return jsonify({
                 "success": False,
                 "error": "사용자를 찾을 수 없습니다",
@@ -182,11 +176,7 @@ def get_current_admin():
         
         return jsonify({
             "success": True,
-            "data": {
-                "id": user['id'],
-                "username": user['username'],
-                "role": user['role']
-            }
+            "data": user.to_dict()
         }), 200
     except Exception as e:
         logger.error(f"사용자 정보 조회 오류: {e}")
@@ -221,17 +211,28 @@ def change_password():
         
         claims = get_jwt()
         username = claims.get('username')
+        user_id = int(get_jwt_identity())
         
-        user = ADMIN_USERS.get(username)
-        if not user or not check_password_hash(user['password_hash'], current_password):
+        # 보안: 데이터베이스에서 사용자 조회
+        user = AdminUser.query.get(user_id)
+        if not user or user.username != username:
+            return jsonify({
+                "success": False,
+                "error": "사용자를 찾을 수 없습니다",
+                "code": 404
+            }), 404
+        
+        # 보안: 현재 비밀번호 확인
+        if not user.check_password(current_password):
             return jsonify({
                 "success": False,
                 "error": "현재 비밀번호가 올바르지 않습니다",
                 "code": 401
             }), 401
         
-        # 비밀번호 업데이트 (실제로는 DB에 저장)
-        ADMIN_USERS[username]['password_hash'] = generate_password_hash(new_password)
+        # 보안: 비밀번호 업데이트 (데이터베이스에 저장)
+        user.set_password(new_password)
+        db.session.commit()
         
         logger.info(f"비밀번호 변경 성공: username={username}")
         return jsonify({

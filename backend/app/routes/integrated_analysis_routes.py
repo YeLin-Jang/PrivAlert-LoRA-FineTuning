@@ -2,7 +2,6 @@
 
 import logging
 import os
-import tempfile
 import uuid
 from io import BytesIO
 from flask import Blueprint, request
@@ -110,7 +109,7 @@ def analyze_content():
                           type: object
                       result_image_url:
                         type: string
-                        example: "/static/results/face/face_abc123.jpg"
+                        example: "/data/results/face/face_abc123.jpg"
             hand_detection:
               type: object
               properties:
@@ -140,7 +139,7 @@ def analyze_content():
                           type: object
                       result_image_url:
                         type: string
-                        example: "/static/results/hand/hand_abc123.jpg"
+                        example: "/data/results/hand/hand_abc123.jpg"
             text_analysis:
               type: object
               properties:
@@ -273,10 +272,15 @@ def analyze_content():
             logger.info(f"이미지 {idx + 1} 분석 시작: {image_file.filename}")
 
             # 0) 업로드 즉시 EXIF/메타데이터 제거 (프론트 수정 없이 투명 처리)
+            original_bytes = None
+            cleaned_bytes = None
             try:
                 image_file.seek(0)
                 original_bytes = image_file.read()
                 cleaned_bytes, cleaned_ext, report = sanitize_image(original_bytes, keep_icc=True, target_format=None)
+
+                # 보안: 원본 바이트 데이터 메모리에서 즉시 정리
+                original_bytes = None
 
                 # 결과 저장 (결과 페이지에서 다운로드할 수 있도록 URL 제공)
                 os.makedirs(os.path.join(BASE_DATA_DIR, "image"), exist_ok=True)
@@ -284,7 +288,10 @@ def analyze_content():
                 save_path = os.path.join(BASE_DATA_DIR, "image", new_name)
                 with open(save_path, "wb") as f:
                     f.write(cleaned_bytes)
-                sanitized_url = f"/data/image/{new_name}"
+                sanitized_url = f"/data/results/image/{new_name}"
+
+                # 보안: 정제된 바이트도 메모리에서 정리 (파일 저장 후)
+                cleaned_bytes = None
 
                 # 한국어 요약 생성
                 def _human_size(n: int) -> str:
@@ -329,10 +336,19 @@ def analyze_content():
                     }
                 })
 
-                # 이후 파이프라인은 정제된 바이트로 진행
-                image_file = FileStorage(stream=BytesIO(cleaned_bytes), filename=new_name, content_type=f"image/{cleaned_ext}")
+                # 이후 파이프라인은 정제된 파일을 읽어서 사용
+                # 보안: 파일 저장 후 원본/정제 바이트 메모리 정리 완료
+                # FileStorage는 파일에서 읽어오도록 변경
+                with open(save_path, "rb") as f:
+                    cleaned_stream = BytesIO(f.read())
+                cleaned_stream.seek(0)
+                image_file = FileStorage(stream=cleaned_stream, filename=new_name, content_type=f"image/{cleaned_ext}")
+                # cleaned_stream은 FileStorage가 관리하므로 자동으로 정리됨
             except Exception as e:
                 logger.warning(f"이미지 {idx + 1} EXIF 정제 중 오류: {e}")
+                # 보안: 오류 발생 시에도 메모리 정리
+                original_bytes = None
+                cleaned_bytes = None
             
             # 얼굴 검출 (사용 가능한 경우만)
             if face_service:
@@ -521,6 +537,19 @@ def analyze_content():
     # 이미 처리된 파일들은 메모리에서 제거됨
     # 참고: Flask의 FileStorage는 요청 완료 후 자동으로 정리되지만, 명시적으로 처리
     import gc
+    
+    # 보안: 민감한 텍스트 데이터 메모리 정리
+    if text_input:
+        text_input = ""  # 참조 제거
+    
+    # 보안: 파일 객체 참조 제거
+    for img_file in valid_images:
+        if hasattr(img_file, 'close'):
+            try:
+                img_file.close()
+            except:
+                pass
+    
     gc.collect()  # 가비지 컬렉션 강제 실행
     
     return APIResponse.success({"data": results}, results["summary"]["message"])

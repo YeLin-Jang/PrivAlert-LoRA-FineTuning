@@ -9,10 +9,16 @@ from flask_jwt_extended import JWTManager
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from app.utils.file_utils import ensure_dir
+from app.extensions.database import init_db, db
 from config import BASE_DATA_DIR, BASE_DIR
 
-# 환경변수 로드
-load_dotenv()
+# 환경변수 로드 (루트 디렉토리의 .env 파일)
+# 프로젝트 루트로 이동하여 .env 파일 찾기
+import sys
+from pathlib import Path
+root_dir = Path(__file__).parent.parent.parent  # backend/app/__init__.py -> 프로젝트 루트
+env_path = root_dir / '.env'
+load_dotenv(dotenv_path=env_path)
 
 # 보안: 환경 변수 검증
 def validate_environment():
@@ -44,9 +50,8 @@ def create_app(config_name=None):
     """Flask 애플리케이션 팩토리"""
     # 환경 변수 검증
     validate_environment()
-    
-    static_folder_path = os.path.join(BASE_DIR, 'static')
-    app = Flask(__name__, static_folder=static_folder_path, static_url_path='/static')
+
+    app = Flask(__name__)
     
     # 환경 설정
     flask_env = os.getenv("FLASK_ENV", "development")
@@ -116,6 +121,16 @@ def create_app(config_name=None):
     
     jwt = JWTManager(app)
     
+    # 데이터베이스 초기화
+    try:
+        init_db(app)
+        app.logger.info("데이터베이스 연결 성공")
+    except Exception as e:
+        app.logger.error(f"데이터베이스 연결 실패: {e}")
+        # 개발 환경에서는 데이터베이스 없이도 실행 가능
+        if flask_env == "production":
+            raise
+    
     # Rate Limiter 설정
     limiter = Limiter(
         app=app,
@@ -124,8 +139,7 @@ def create_app(config_name=None):
         storage_uri="memory://"  # 개발 환경 (프로덕션에서는 Redis 사용 권장)
     )
     
-    # 보안 헤더 설정 (OWASP 보안 가이드라인 준수)
-    # 모든 응답(에러 포함)에 보안 헤더 적용
+    # 보안 헤더 설정
     @app.after_request
     def set_security_headers(response):
         """보안 헤더를 설정하고 버전 정보 유출을 방지합니다.
@@ -209,15 +223,45 @@ def create_app(config_name=None):
         
         return response
     
+    # 헬스체크 엔드포인트 (Docker healthcheck용)
+    @app.route('/health', methods=['GET'])
+    def health_check():
+        """
+        헬스체크 엔드포인트
+        보안: 민감 정보 노출 방지
+        """
+        try:
+            # 데이터베이스 연결 확인
+            db_status = "healthy"
+            try:
+                from sqlalchemy import text
+                db.session.execute(text("SELECT 1"))
+            except Exception as e:
+                app.logger.warning(f"데이터베이스 연결 확인 실패: {e}")
+                db_status = "unhealthy"
+            
+            return jsonify({
+                "status": "healthy" if db_status == "healthy" else "degraded",
+                "database": db_status,
+                "service": "PrivAlert Backend"
+            }), 200 if db_status == "healthy" else 503
+        except Exception as e:
+            app.logger.error(f"헬스체크 오류: {e}")
+            return jsonify({
+                "status": "unhealthy",
+                "error": "Internal error"
+            }), 503
+    
     # data 디렉토리도 정적 파일로 서빙 (원본 파일용)
     # 보안: 경로 조작 방지
     from flask import send_from_directory, abort
     from app.utils.security_utils import validate_path
     
-    @app.route('/data/<path:filename>')
+    @app.route('/data/results/<path:filename>')
     def serve_data(filename):
         """보안이 적용된 정적 파일 서빙"""
         # 경로 조작 방지
+        # filename은 results/ 하위의 상대 경로 (예: face/face_xxx.jpg)
         is_valid, error = validate_path(BASE_DATA_DIR, filename)
         if not is_valid:
             app.logger.warning(f"경로 조작 시도 감지: {filename}")
@@ -351,7 +395,16 @@ def create_app(config_name=None):
     app.register_blueprint(name_detection_bp, url_prefix="/api/v1/name")
     app.register_blueprint(admin_auth_bp, url_prefix="/api/v1/admin/auth")
     app.register_blueprint(admin_bp, url_prefix="/api/v1/admin")  
-    app.register_blueprint(video_bp, url_prefix="/api/v1/video")  
+    app.register_blueprint(video_bp, url_prefix="/api/v1/video")
+    
+    # 데이터베이스 초기화 (테이블 생성 및 기본 계정 생성)
+    with app.app_context():
+        try:
+            from app.utils.db_init import init_database
+            init_database()
+        except Exception as e:
+            app.logger.warning(f"데이터베이스 초기화 실패 (건너뜀): {e}")
+            # 개발 환경에서는 데이터베이스 없이도 실행 가능  
     
     # 루트 경로
     @app.route("/")
@@ -376,15 +429,6 @@ def create_app(config_name=None):
                 "admin_auth": "/api/v1/admin/auth",
                 "admin": "/api/v1/admin"
             }
-        })
-    
-    # 헬스체크 엔드포인트
-    @app.route("/health")
-    def health_check():
-        return jsonify({
-            "status": "healthy",
-            "service": "PrivAlert",
-            "version": "1.0.0"
         })
     
     # 에러 핸들러 (모든 에러 응답에도 보안 헤더가 적용됨 - @app.after_request를 통해)

@@ -1,4 +1,4 @@
-# backend (Flack) 관련
+# ========== Backend (Python/Flask) ==========
 backend/__pycache__/
 backend/**/*.pyc
 backend/**/*.pyo
@@ -8,9 +8,10 @@ backend/.dist/
 backend/build/
 backend/dist/
 
-# Backend 환경변수
-backend/.env
-backend/.env*
+# 환경 변수 (루트 통일)
+.env
+.env.local
+.env.*.local
 
 # 가상환경
 backend/.venv/
@@ -31,9 +32,6 @@ backend/Thumbs.db
 backend/.vscode/
 backend/.idea/
 
-# Flask static 빌드 결과물
-backend/static/
-
 # 데이터/DB 
 backend/data/
 backend/static/temp/
@@ -44,26 +42,40 @@ backend/*.db
 backend/logs/
 backend/*.log
 
-#테스트 관련
-backend/tests/
-
-# - - - - - - - - - - - - - - - - - 
-# frontend (Node/React) 관련
+# ========== Frontend (Node/React) ==========
 frontend/node_modules/
 frontend/build/
 frontend/dist/
 frontend/.cache/
 frontend/.next/
 
-# Frontend 환경변수
-frontend/.env
-frontend/.env*
+# TypeScript 빌드 정보
+frontend/*.tsbuildinfo
 
-# === OS / Editor ===
+# ========== OS / Editor ==========
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
 
-# === 공통 ===
+# ========== 공통 ==========
 *.log
+*.tmp
+*.bak
+
+# ========== Docker ==========
+# (환경 변수는 루트 .env 사용)
+
+# ========== Python ==========
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# ========== Node.js ==========
+package-lock.json
+yarn.lock

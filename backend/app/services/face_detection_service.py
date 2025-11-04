@@ -4,6 +4,7 @@ import os
 import mediapipe as mp
 from werkzeug.datastructures import FileStorage
 from app.utils.file_utils import save_path_with_timestamp, to_public_url
+from config import BASE_DATA_DIR
 
 
 class FaceDetectionService:
@@ -12,10 +13,8 @@ class FaceDetectionService:
         self.det_short = self.mp_face.FaceDetection(model_selection=0, min_detection_confidence=0.3)
         self.det_long = self.mp_face.FaceDetection(model_selection=1, min_detection_confidence=0.3)
 
-        # 내부 민감 데이터 저장소 (원본 보관, 외부 공개 ❌)
-        self.save_dir_internal = os.path.join("data", "results", "face")
-        # 외부 공개 프리뷰 저장소 (박스 덧씌운 결과만 저장)
-        self.save_dir_public = os.path.join("static", "results", "face")
+        # 민감 데이터 저장소 (data 디렉토리로 통일)
+        self.save_dir = os.path.join(BASE_DATA_DIR, "face")
 
     def _enhance_contrast(self, bgr: np.ndarray) -> np.ndarray:
         ycrcb = cv2.cvtColor(bgr, cv2.COLOR_BGR2YCrCb)
@@ -83,20 +82,17 @@ class FaceDetectionService:
 
             result_image_url = None
             if save_result:
-                # 내부 민감 데이터 저장 (원본)
-                internal_path = save_path_with_timestamp(
-                    self.save_dir_internal, prefix="face", ext=".jpg"
+                # 결과 이미지 저장 (박스 덧씌운 프리뷰)
+                saved_path = save_path_with_timestamp(
+                    self.save_dir, prefix="face", ext=".jpg"
                 )
-                cv2.imwrite(internal_path, image)
+                cv2.imwrite(saved_path, preview_img)
 
-                # 외부 공개 프리뷰 저장 (박스 덧씌운 결과)
-                public_path = save_path_with_timestamp(
-                    self.save_dir_public, prefix="face", ext=".jpg"
-                )
-                cv2.imwrite(public_path, preview_img)
-
-                rel_path = os.path.join("static", "results", "face", os.path.basename(public_path))
-                result_image_url = to_public_url(rel_path)
+                # /data/... 형태의 URL 생성
+                # BASE_DATA_DIR은 backend/data/results이고, URL은 /data/results/face/... 형태여야 함
+                # saved_path에서 BASE_DATA_DIR을 제거한 나머지 경로를 사용
+                rel_to_base = os.path.relpath(saved_path, BASE_DATA_DIR)
+                result_image_url = f"/data/results/{rel_to_base.replace(os.sep, '/')}"
 
             response = {
                 "success": True,
