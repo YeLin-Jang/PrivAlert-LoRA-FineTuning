@@ -34,7 +34,7 @@ jobs:
     
     # ========== Python 의존성 취약점 스캔 ==========
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: '3.11'  # 백엔드에서 사용하는 Python 버전
     
@@ -107,7 +107,7 @@ jobs:
     
     # ========== Python SBOM 생성 ==========
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: '3.11'
     
