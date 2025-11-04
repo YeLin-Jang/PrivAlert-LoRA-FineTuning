@@ -108,7 +108,7 @@ jobs:
     
     # 빌드 결과물을 Artifacts로 업로드 (7일간 보관)
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: frontend-dist  # Artifact 이름
         path: frontend/dist  # 빌드된 파일 위치

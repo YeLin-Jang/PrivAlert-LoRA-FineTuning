@@ -161,7 +161,7 @@ jobs:
     
     # 생성된 모든 SBOM 파일을 Artifacts로 업로드 (30일 보관)
     - name: Upload SBOM artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       if: always()
       with:
         name: sbom-files              # Artifact 이름
@@ -174,7 +174,7 @@ jobs:
     
     # 통합 SBOM을 별도 Artifact로 업로드 (90일 보관)
     - name: Upload SBOM to GitHub
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       if: always()
       with:
         name: sbom                    # 통합 SBOM 전용 Artifact
