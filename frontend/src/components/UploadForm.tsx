@@ -1376,7 +1376,7 @@ export default function UploadForm() {
               <div className="edu-list">
                 {/* 수정 문장 - 맨 위에 한 번만 표시 */}
                 {revisedSentence && (
-                  <div className="edu-revised-section" style={{ marginBottom: '20px' }}>
+                  <div className="edu-revised-section edu-revised-margin">
                     <div className="section-header">
                       <span className="section-icon">✏️</span>
                       <span className="section-title">수정 문장</span>

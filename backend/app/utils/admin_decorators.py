@@ -71,3 +71,4 @@ def role_required(*allowed_roles):
         return decorated_function
     return decorator
 
+

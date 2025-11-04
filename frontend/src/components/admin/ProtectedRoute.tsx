@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
+import './ProtectedRoute.css';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -12,7 +13,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireSuperA
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+      <div className="protected-route-loading">
         <div>로딩 중...</div>
       </div>
     );
@@ -34,4 +35,5 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireSuperA
 };
 
 export default ProtectedRoute;
+
 

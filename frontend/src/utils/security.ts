@@ -36,6 +36,7 @@ export const secureFilesCleanup = (files: File[]): void => {
 export const secureTextCleanup = (_text: string): string => {
   // 텍스트를 빈 문자열로 대체
   // 실제로는 변수가 재할당되면 GC가 처리하지만, 명시적으로 처리
+  // 언더스코어 접두사로 미사용 매개변수 표시
   return '';
 };
 
