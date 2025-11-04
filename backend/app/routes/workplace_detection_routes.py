@@ -97,8 +97,8 @@ def detect_workplaces():
             return APIResponse.error("텍스트가 비어있습니다", code=400)
         
         # 텍스트 길이 제한
-        if len(text) > 10000:
-            return APIResponse.error("텍스트가 너무 깁니다 (최대 10,000자)", code=400)
+        if len(text) > 3000:
+            return APIResponse.error("텍스트가 너무 깁니다 (최대 3,000자)", code=400)
         
         # 직장명 탐지 실행
         result = workplace_detection_service.detect_workplaces(text)
@@ -159,8 +159,8 @@ def mask_workplaces():
             return APIResponse.error("텍스트가 비어있습니다", code=400)
         
         # 텍스트 길이 제한
-        if len(text) > 10000:
-            return APIResponse.error("텍스트가 너무 깁니다 (최대 10,000자)", code=400)
+        if len(text) > 3000:
+            return APIResponse.error("텍스트가 너무 깁니다 (최대 3,000자)", code=400)
         
         # 직장명 탐지 및 마스킹
         detection_result = workplace_detection_service.detect_workplaces(text)

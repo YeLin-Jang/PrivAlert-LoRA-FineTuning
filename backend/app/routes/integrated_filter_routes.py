@@ -58,8 +58,8 @@ def filter_text():
     if not isinstance(data, dict):
         return APIResponse.error("요청 데이터 형식이 올바르지 않습니다", code=400)
     
-    # 텍스트 입력 검증
-    is_valid, result = validate_text_input(data, 'text', 10000)
+    # 텍스트 입력 검증 (최대 3000자)
+    is_valid, result = validate_text_input(data, 'text', 3000)
     if not is_valid:
         return result
     

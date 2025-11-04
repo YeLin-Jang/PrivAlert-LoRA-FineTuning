@@ -9,28 +9,74 @@ Flask 기반 **위험정보(개인정보 등) 탐지 웹서비스** 프로젝트
 ---
 
 ## 📌 프로젝트 개요
-- 업로드된 텍스트/이미지에서 개인정보 가능성이 있는 패턴 탐지  
-- 위험도(0~100) 산정 및 수정 문구 제안  
-- 아키텍처(예정): React (Frontend) + Flask (Backend) + MySQL (DB) + AI 분석 파이프라인  
+- 업로드된 텍스트/이미지/비디오에서 개인정보 가능성이 있는 패턴 탐지  
+- 위험도 산정 및 수정 문구 제안  
+- **아키텍처**: React + TypeScript (Frontend) + Flask (Backend) + AI 분석 파이프라인
+- **주요 기능**: 
+  - 이미지에서 얼굴/손가락 검출 (MediaPipe)
+  - 텍스트에서 정형/비정형 데이터 탐지 (정규식 + AI 모델)
+  - 이미지 메타데이터(EXIF) 제거
+  - 비디오 분석 (프레임 추출, 오디오 추출)
+  - GPT 기반 교육 콘텐츠 생성  
 
 ---
 
 ## ⚙️ 초기 세팅 방법
+
+### 1. 저장소 클론
 ```bash
 git clone https://github.com/yelin1197/PrivAlert.git
 cd PrivAlert
 ```
 
-### Windows(CMD/PowerShell) 설치 및 실행
+### 2. Backend 설정 및 실행
+
+#### Windows(CMD/PowerShell)
 ```cmd
-py -3.10 -m venv .venv || py -3.13 -m venv .venv
-.\.venv\Scripts\activate
+cd backend
+py -3.10 -m venv venv || py -3.13 -m venv venv
+.\venv\Scripts\activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-python app.py
+
+# 환경변수 설정 (.env 파일 생성)
+# 노션 참고하여 필요한 API 키 설정
+
+# 서버 실행
+python wsgi.py
 ```
 
-주의: `python-magic`가 Windows에서 동작하지 않을 경우 `python-magic-bin` 사용을 고려하세요.
+#### Linux/Mac
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# 환경변수 설정
+# .env 파일 생성 및 필요한 API 키 설정
+
+# 서버 실행
+python wsgi.py
+```
+
+**주의사항:**
+- `python-magic`가 Windows에서 동작하지 않을 경우 `python-magic-bin` 사용을 고려하세요.
+- 환경변수 설정이 필요합니다 (Google Cloud Vision API, OpenAI API 키 등)
+
+### 3. Frontend 설정 및 실행
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### 4. 접속 URL
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:5000
+- **API 문서 (Swagger)**: http://localhost:5000/api-docs/
 
 ---
 
@@ -60,9 +106,42 @@ python app.py
 
 ---
 
-## 🧹 이미지 메타데이터 정제 API
+## 📡 API 엔드포인트
 
-### 엔드포인트
+### 주요 엔드포인트
+
+#### 통합 분석
+- `POST /api/v1/analyze` - 이미지와 텍스트를 통합 분석하여 민감 정보 탐지
+
+#### 이미지 분석
+- `POST /api/v1/face/detect` - 얼굴 검출
+- `POST /api/v1/hand/detect` - 손가락 검출
+- `POST /api/v1/ocr/text` - OCR 텍스트 추출
+
+#### 이미지 정제
+- `POST /api/v1/images/sanitize` - EXIF/메타데이터 제거 (다운로드)
+- `POST /api/v1/images/sanitize:report` - 정제 리포트 (JSON)
+
+#### 텍스트 분석
+- `POST /api/v1/filter/filter` - 정형 데이터 필터링
+- `POST /api/v1/name/detect` - 이름 탐지
+- `POST /api/v1/name/mask` - 이름 마스킹
+- `POST /api/v1/workplace/detect` - 직장명 탐지 (AI 모델)
+- `POST /api/v1/workplace/mask` - 직장명 마스킹
+
+#### 비디오 분석
+- `POST /api/v1/video/analyze` - 비디오 분석 (프레임 추출, 오디오 추출)
+
+#### 교육 콘텐츠
+- `POST /api/v1/education/suggest` - GPT 기반 수정 문장 및 교육 자료 생성
+
+#### 유틸리티
+- `GET /api/v1/filter/filters` - 사용 가능한 필터 목록
+- `GET /health` - 헬스체크
+
+### 이미지 메타데이터 정제 API 상세
+
+#### 엔드포인트
 - `POST /api/v1/images/sanitize`: multipart/form-data로 `file` 업로드 → 정제된 이미지를 즉시 다운로드 응답(as_attachment)
 - `POST /api/v1/images/sanitize:report`: 동일 입력 → JSON 리포트 반환
 

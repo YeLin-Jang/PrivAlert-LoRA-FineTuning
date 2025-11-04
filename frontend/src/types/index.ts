@@ -157,7 +157,6 @@ export interface Finger {
   };
 }
 
-
 // 필터 통계
 export interface FilterStats {
   total_detected: number;
@@ -165,3 +164,85 @@ export interface FilterStats {
   detection_rate: number;
   applied_filters: string[];
 }
+
+// 탐지 옵션 타입
+export interface DetectionOptions extends Record<string, boolean> {
+  face: boolean;
+  fingerprint: boolean;
+  phone: boolean;
+  rrn: boolean;
+  passport: boolean;
+  ip_address: boolean;
+  email: boolean;
+  account: boolean;
+  school: boolean;
+  workplace: boolean;
+  name: boolean;
+  address: boolean;
+  driverLicense: boolean;
+  postalCode: boolean;
+}
+
+// 비디오 분석 결과
+export interface VideoAnalysisResult {
+  success: boolean;
+  video_info: {
+    fps: number;
+    frame_count: number;
+    duration: number;
+    width: number;
+    height: number;
+  };
+  audio_transcription?: {
+    success: boolean;
+    text: string;
+    language: string;
+    segments: Array<{
+      start: number;
+      end: number;
+      text: string;
+    }>;
+  };
+  audio_text_analysis?: {
+    has_sensitive_content: boolean;
+    filtered_text: string;
+    detected_categories: string[];
+  };
+  frames: Array<{
+    frame_index: number;
+    timestamp: number;
+    ocr?: {
+      text: string;
+      char_count: number;
+    };
+    face?: {
+      count: number;
+      faces: Array<{
+        index: number;
+        box: { x: number; y: number; w: number; h: number };
+        score: number;
+      }>;
+    };
+    hand?: {
+      count: number;
+      fingers: Array<{
+        index: number;
+        pos: { x: number; y: number };
+      }>;
+    };
+    text_analysis?: {
+      has_sensitive_content: boolean;
+      filtered_text: string;
+      detected_categories: string[];
+    };
+  }>;
+  summary: {
+    total_frames_processed: number;
+    total_faces_detected: number;
+    total_fingers_detected: number;
+    total_ocr_text_length: number;
+    frames_with_sensitive_content: number;
+  };
+}
+
+

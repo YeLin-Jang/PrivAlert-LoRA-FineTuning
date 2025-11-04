@@ -15,8 +15,6 @@ flask-cors==4.0.0
 google-cloud-vision==3.4.5
 protobuf==4.25.3
 
-# 종교별 민감 단어 필터링을 위한 추가 의존성
-# (현재는 표준 라이브러리만 사용하므로 추가 의존성 없음)
 
 # 테스트를 위한 의존성
 pytest==8.0.0
@@ -31,3 +29,8 @@ peft==0.7.1
 
 # GPT API를 위한 의존성
 openai==2.0.1
+
+# 비디오 처리 및 음성 인식을 위한 의존성
+openai-whisper==20231117
+moviepy==1.0.3
+ffmpeg-python==0.2.0
