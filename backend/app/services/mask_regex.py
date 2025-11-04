@@ -31,9 +31,6 @@ class MaskRegexService:
                 # 주민등록번호 / 외국인 등록번호
                 ("RRN", re.compile(r"\d{6}-?\d{7}")),
             ],
-            "driver_license": [
-                ("DRIVER_LICENSE", re.compile(r"\d{2}-\d{2}-\d{6}-\d{2}")),
-            ],
             "passport": [
                 # 여권번호
                 ("PASSPORT1", re.compile(r"[A-Za-z]\d{3}[A-Za-z]\d{4}", re.IGNORECASE)),
@@ -75,7 +72,9 @@ class MaskRegexService:
                 ("ADDRESS_SUBWAY", re.compile(r"[가-힣]+(역)")),
             ],
             "driverLicense": [
-                # 운전면허번호: 12자리 숫자 (예: 123456-123456)
+                # 운전면허번호: 구 형식 (예: 12-34-567890-12)
+                ("DRIVER_LICENSE_OLD", re.compile(r"\d{2}-\d{2}-\d{6}-\d{2}")),
+                # 운전면허번호: 신 형식 (예: 123456-123456)
                 ("DRIVER_LICENSE", re.compile(r"\b\d{6}-\d{6}\b")),
                 # 운전면허번호: 12자리 연속 숫자
                 ("DRIVER_LICENSE_CONTINUOUS", re.compile(r"\b\d{12}\b")),
@@ -264,7 +263,6 @@ class MaskRegexService:
             category_labels = {
                 "phone": "전화번호",
                 "rrn": "주민등록번호", 
-                "driver_license": "운전면허번호",
                 "passport": "여권번호",
                 "ip_address": "IP주소",
                 "email": "이메일",
