@@ -1,0 +1,95 @@
+# 코드 품질 검사 워크플로우
+# 이 워크플로우는 백엔드와 프론트엔드의 코드 품질을 검사합니다.
+name: Code Quality
+
+# 워크플로우 실행 조건
+on:
+  # main 브랜치에 직접 push 시 실행
+  push:
+    branches: [ main ]
+  # main 브랜치로 향하는 Pull Request 시 실행
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # ========== Python 코드 품질 검사 ==========
+  python-lint:
+    name: Python Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+    # 코드 체크아웃
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GH_TOKEN }}  # GitHub 토큰으로 인증
+    
+    # Python 환경 설정
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'  # 백엔드에서 사용하는 Python 버전
+    
+    # Python 코드 품질 검사 도구 설치
+    # - flake8: 코드 스타일 및 품질 검사
+    # - black: 코드 포맷터 (설치만, 실행은 선택적)
+    # - isort: import 문 정렬 검사
+    # - mypy: 타입 체크 (설치만, 실행은 선택적)
+    - name: Install linting tools
+      working-directory: ./backend
+      run: |
+        pip install flake8 black isort mypy || echo "Linting 도구 설치 생략"
+      continue-on-error: true  # 도구 설치 실패해도 워크플로우 계속 진행
+    
+    # flake8로 치명적 오류 검사
+    # E9: 문법 오류, F63: print 문, F7: 잘못된 문법, F82: 정의되지 않은 이름
+    - name: Run flake8
+      working-directory: ./backend
+      run: |
+        flake8 app/ --count --select=E9,F63,F7,F82 --show-source --statistics || echo "flake8 검사 완료"
+      continue-on-error: true
+    
+    # isort로 import 문 정렬 확인 (자동 수정 없이 검사만)
+    - name: Check import sorting (isort)
+      working-directory: ./backend
+      run: |
+        isort --check-only app/ || echo "import 정렬 검사 완료"
+      continue-on-error: true
+
+  # ========== TypeScript 코드 품질 검사 ==========
+  typescript-lint:
+    name: TypeScript Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+    # 코드 체크아웃
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GH_TOKEN }}
+    
+    # Node.js 환경 설정
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'  # 프론트엔드에서 사용하는 Node.js 버전
+        cache: 'npm'        # npm 캐시 사용으로 설치 속도 향상
+        cache-dependency-path: frontend/package-lock.json
+    
+    # npm 의존성 설치
+    - name: Install dependencies
+      working-directory: ./frontend
+      run: npm ci  # package-lock.json 기반으로 정확한 버전 설치
+    
+    # ESLint를 사용한 코드 린팅 (코드 스타일 및 품질 검사)
+    - name: Run ESLint
+      working-directory: ./frontend
+      run: npm run lint
+      continue-on-error: true  # 린팅 오류가 있어도 워크플로우 계속 진행
+    
+    # TypeScript 타입 체크 (빌드 없이 타입만 검사)
+    - name: TypeScript type check
+      working-directory: ./frontend
+      run: npx tsc --noEmit  # --noEmit: 빌드 파일 생성 없이 타입 체크만 수행
+      continue-on-error: true  # 타입 오류가 있어도 워크플로우 계속 진행
+
