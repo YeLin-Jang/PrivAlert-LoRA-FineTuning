@@ -1,3 +1,6 @@
+/* Noto Sans KR 폰트 로드 - @import는 반드시 최상단에 위치해야 함 */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap');
+
 :root {
   font-family: 'Noto Sans KR', system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -66,6 +69,3 @@ a {
 a:hover {
   color: #666666;
 }
-
-/* Noto Sans KR 폰트 로드 */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap');

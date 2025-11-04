@@ -1,10 +1,12 @@
 import os
+import secrets
 import logging
 from flask import Flask, jsonify
 from flasgger import Swagger
 from dotenv import load_dotenv
 from flask_cors import CORS
 from app.utils.file_utils import ensure_dir
+from app.extensions import db, login_manager, migrate, limiter
 from config import BASE_DATA_DIR, BASE_DIR
 
 # 환경변수 로드
@@ -33,14 +35,47 @@ def create_app(config_name=None):
             raise ValueError("운영 환경에서는 FLASK_SECRET_KEY를 설정해야 합니다")
         secret_key = "dev-secret-key-change-in-production"
     
+    # DB 설정
+    database_url = os.getenv("DATABASE_URL", "sqlite:///privalert.db")
+    
     app.config.update({
         "SECRET_KEY": secret_key,
         "MAX_CONTENT_LENGTH": int(os.getenv("MAX_CONTENT_LENGTH", "10")) * 1024 * 1024,
-        "DEBUG": flask_env == "development"
+        "DEBUG": flask_env == "development",
+        # DB 설정
+        "SQLALCHEMY_DATABASE_URI": database_url,
+        "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+        # 세션/쿠키 강화 (시큐어코딩 가이드 준수)
+        "SESSION_COOKIE_HTTPONLY": True,  # JS 접근 차단
+        "SESSION_COOKIE_SECURE": flask_env == "production",  # HTTPS 전용 (프로덕션)
+        "SESSION_COOKIE_SAMESITE": "Lax",  # CSRF 추가 방어
+        "REMEMBER_COOKIE_HTTPONLY": True,
+        "REMEMBER_COOKIE_SECURE": flask_env == "production",
+        "REMEMBER_COOKIE_DURATION": 3600,  # 1시간 (최소 보존 시간 권장)
     })
     
     # 로깅 설정
     setup_logging(app)
+    
+    # 확장 초기화
+    db.init_app(app)
+    migrate.init_app(app, db)
+    limiter.init_app(app)
+    
+    # CSRF 보호 (API 기반이므로 선택적 적용)
+    # 웹 폼이 있는 경우에만 활성화
+    # csrf.init_app(app)
+    
+    # Flask-Login 설정
+    login_manager.init_app(app)
+    login_manager.login_view = "auth.login"
+    login_manager.session_protection = "strong"  # 세션 보호 강화
+    
+    @login_manager.user_loader
+    def load_user(user_id):
+        """사용자 로드 함수"""
+        from app.models import User
+        return User.query.get(int(user_id))
     
     # CORS 설정
     cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
@@ -152,6 +187,8 @@ def create_app(config_name=None):
     from app.routes.education_routes import education_bp
     from app.routes.workplace_detection_routes import workplace_bp
     from app.routes.name_detection_routes import name_detection_bp
+    from app.routes.auth_routes import auth_bp
+    from app.routes.admin_routes import admin_bp
     
     app.register_blueprint(face_bp, url_prefix="/api/v1/face")
     app.register_blueprint(hand_bp, url_prefix="/api/v1/hand")
@@ -161,7 +198,9 @@ def create_app(config_name=None):
     app.register_blueprint(integrated_analysis_bp, url_prefix="/api/v1")
     app.register_blueprint(education_bp, url_prefix="/api/v1/education")
     app.register_blueprint(workplace_bp, url_prefix="/api/v1/workplace")
-    app.register_blueprint(name_detection_bp, url_prefix="/api/v1/name")  
+    app.register_blueprint(name_detection_bp, url_prefix="/api/v1/name")
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(admin_bp)  
     
     # 헬스체크 엔드포인트
     @app.route("/health")
@@ -185,9 +224,22 @@ def create_app(config_name=None):
     def payload_too_large(error):
         return jsonify({"success": False, "error": "파일 크기가 너무 큽니다 (최대 10MB)", "code": 413}), 413
     
+    @app.errorhandler(403)
+    def forbidden(error):
+        return jsonify({"success": False, "error": "접근 권한이 없습니다", "code": 403}), 403
+    
     @app.errorhandler(500)
     def internal_server_error(error):
         app.logger.error(f"서버 오류: {error}")
         return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다", "code": 500}), 500
+    
+    # DB 테이블 생성 (개발 환경에서만)
+    if flask_env == "development":
+        with app.app_context():
+            try:
+                db.create_all()
+                app.logger.info("DB 테이블 생성 완료")
+            except Exception as e:
+                app.logger.warning(f"DB 테이블 생성 중 오류 (이미 생성되었을 수 있음): {e}")
     
     return app
