@@ -14,6 +14,24 @@ from config import BASE_DATA_DIR, BASE_DIR
 # 환경변수 로드
 load_dotenv()
 
+# 보안: 환경 변수 검증
+def validate_environment():
+    """환경 변수 검증"""
+    flask_env = os.getenv("FLASK_ENV", "development")
+    
+    if flask_env == "production":
+        required_vars = ["FLASK_SECRET_KEY"]
+        missing_vars = [var for var in required_vars if not os.getenv(var)]
+        if missing_vars:
+            raise ValueError(f"운영 환경에서 필수 환경 변수가 설정되지 않았습니다: {', '.join(missing_vars)}")
+    
+    # SECRET_KEY 검증
+    secret_key = os.getenv("FLASK_SECRET_KEY")
+    if flask_env == "production" and (not secret_key or secret_key == "dev-secret-key"):
+        raise ValueError("운영 환경에서는 강력한 FLASK_SECRET_KEY를 설정해야 합니다")
+    
+    return True
+
 def setup_logging(app):
     """로깅 설정"""
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -24,6 +42,9 @@ def setup_logging(app):
 
 def create_app(config_name=None):
     """Flask 애플리케이션 팩토리"""
+    # 환경 변수 검증
+    validate_environment()
+    
     static_folder_path = os.path.join(BASE_DIR, 'static')
     app = Flask(__name__, static_folder=static_folder_path, static_url_path='/static')
     
@@ -31,16 +52,21 @@ def create_app(config_name=None):
     flask_env = os.getenv("FLASK_ENV", "development")
     secret_key = os.getenv("FLASK_SECRET_KEY")
     
-    # 보안 검증
+    # 보안: SECRET_KEY 검증 및 설정
     if not secret_key or secret_key == "dev-secret-key":
         if flask_env == "production":
             raise ValueError("운영 환경에서는 FLASK_SECRET_KEY를 설정해야 합니다")
         secret_key = "dev-secret-key-change-in-production"
     
+    # 최소 32자 이상의 강력한 키 검증 (운영 환경)
+    if flask_env == "production" and len(secret_key) < 32:
+        raise ValueError("운영 환경에서는 최소 32자 이상의 강력한 SECRET_KEY를 사용해야 합니다")
+    
     app.config.update({
         "SECRET_KEY": secret_key,
         "MAX_CONTENT_LENGTH": int(os.getenv("MAX_CONTENT_LENGTH", "10")) * 1024 * 1024,
         "DEBUG": flask_env == "development",
+
         # 세션 보안 설정
         "SESSION_COOKIE_SECURE": flask_env == "production",  # HTTPS에서만 쿠키 전송
         "SESSION_COOKIE_HTTPONLY": True,  # JavaScript에서 쿠키 접근 방지
@@ -49,19 +75,25 @@ def create_app(config_name=None):
         "PREFERRED_URL_SCHEME": "https" if flask_env == "production" else "http",
         "TRAP_HTTP_EXCEPTIONS": True,  # HTTP 예외 처리
         "TRAP_BAD_REQUEST_ERRORS": True,  # 잘못된 요청 처리
+        
     })
     
     # 로깅 설정
     setup_logging(app)
     
-    # CORS 설정
+    # CORS 설정 (보안 강화)
     cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+    # 운영 환경에서는 명시적 origin만 허용
+    if flask_env == "production" and "*" in cors_origins:
+        raise ValueError("운영 환경에서는 와일드카드(*) CORS origin을 사용할 수 없습니다")
+    
     CORS(app, resources={
         r"/api/*": {
             "origins": cors_origins,
             "methods": ["GET", "POST", "PATCH", "DELETE", "PUT"],
             "allow_headers": ["Content-Type", "Authorization"],
-            "supports_credentials": True
+            "supports_credentials": flask_env == "development",  # 운영 환경에서는 False 권장
+            "max_age": 3600  # preflight 요청 캐싱
         },
         r"/data/*": {
             "origins": cors_origins,
@@ -71,7 +103,7 @@ def create_app(config_name=None):
         }
     })
     
-    # JWT 설정
+        # JWT 설정
     jwt_secret_key = os.getenv("JWT_SECRET_KEY", secret_key)
     app.config["JWT_SECRET_KEY"] = jwt_secret_key
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False  # 데코레이터에서 직접 설정
@@ -96,36 +128,30 @@ def create_app(config_name=None):
     @app.after_request
     def set_security_headers(response):
         """보안 헤더를 설정하고 버전 정보 유출을 방지합니다."""
-        # Server 헤더 제거 (버전 정보 유출 방지)
+        # Server 헤더 제거 후 브랜드명으로 교체
         response.headers.pop('Server', None)
+        response.headers['Server'] = 'PrivAlert'
         response.headers.pop('X-Powered-By', None)
         
         # MIME-sniffing 방지
         response.headers['X-Content-Type-Options'] = 'nosniff'
         
-        # 클릭재킹 방지 (X-Frame-Options)
+        # 클릭재킹 방지
         response.headers['X-Frame-Options'] = 'DENY'
         
-        # XSS 공격 방지 (레거시 브라우저 지원)
+        # XSS 방지
         response.headers['X-XSS-Protection'] = '1; mode=block'
         
-        # Referrer 정책 설정
+        # Referrer 정책
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
         
-        # 브라우저 기능 정책 설정
+        # 브라우저 기능 제한
         response.headers['Permissions-Policy'] = (
-            'geolocation=(), '
-            'microphone=(), '
-            'camera=(), '
-            'payment=(), '
-            'usb=(), '
-            'magnetometer=(), '
-            'gyroscope=(), '
-            'speaker=()'
+            'geolocation=(), microphone=(), camera=(), payment=(), usb=(), '
+            'magnetometer=(), gyroscope=(), speaker=()'
         )
         
-        # Content Security Policy (CSP) - 기본 설정
-        # API 서버이므로 스크립트 실행 최소화
+        # Content Security Policy
         csp = (
             "default-src 'self'; "
             "script-src 'self'; "
@@ -139,31 +165,38 @@ def create_app(config_name=None):
         )
         response.headers['Content-Security-Policy'] = csp
         
-        # 프로덕션 환경에서만 HSTS 설정 (HTTPS 사용 시)
-        flask_env = os.getenv("FLASK_ENV", "development")
+        # 프로덕션 환경에서만 HSTS 활성화
         if flask_env == "production":
             response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains; preload'
         
-        # Content-Type 헤더 적절히 설정
+        # Content-Type 설정 보정
         content_type = response.headers.get('Content-Type', '')
-        
         if not content_type:
-            # Content-Type이 없는 경우 기본값 설정
             response.headers['Content-Type'] = 'application/json; charset=utf-8'
-        else:
-            # Content-Type이 있지만 charset이 없는 경우 추가
-            if 'charset' not in content_type.lower():
-                # text/ 또는 application/json 타입에 charset 추가
-                if 'text/' in content_type or 'application/json' in content_type:
-                    response.headers['Content-Type'] = f'{content_type}; charset=utf-8'
+        elif 'charset' not in content_type.lower():
+            if 'text/' in content_type or 'application/json' in content_type:
+                response.headers['Content-Type'] = f'{content_type}; charset=utf-8'
         
         return response
     
     # data 디렉토리도 정적 파일로 서빙 (원본 파일용)
-    from flask import send_from_directory
+    # 보안: 경로 조작 방지
+    from flask import send_from_directory, abort
+    from app.utils.security_utils import validate_path
+    
     @app.route('/data/<path:filename>')
     def serve_data(filename):
-        return send_from_directory(BASE_DATA_DIR, filename)
+        """보안이 적용된 정적 파일 서빙"""
+        # 경로 조작 방지
+        is_valid, error = validate_path(BASE_DATA_DIR, filename)
+        if not is_valid:
+            app.logger.warning(f"경로 조작 시도 감지: {filename}")
+            abort(403)
+        
+        try:
+            return send_from_directory(BASE_DATA_DIR, filename)
+        except FileNotFoundError:
+            abort(404)
     
     # Swagger 설정
     port = os.getenv("PORT", "5000")
@@ -237,7 +270,8 @@ def create_app(config_name=None):
         os.path.join(BASE_DATA_DIR, "face"),
         os.path.join(BASE_DATA_DIR, "hand"),
         os.path.join(BASE_DATA_DIR, "ocr"),
-        os.path.join(BASE_DATA_DIR, "image"),  
+        os.path.join(BASE_DATA_DIR, "image"),
+        os.path.join(BASE_DATA_DIR, "video"),
     ]
     for d in required_dirs:
         ensure_dir(d)
@@ -274,6 +308,8 @@ def create_app(config_name=None):
     from app.routes.name_detection_routes import name_detection_bp
     from app.routes.admin_auth_routes import admin_auth_bp
     from app.routes.admin_routes import admin_bp
+    from app.routes.video_processing_routes import video_bp
+
     
     app.register_blueprint(integrated_filter_bp, url_prefix="/api/v1/filter")
     app.register_blueprint(integrated_analysis_bp, url_prefix="/api/v1")
@@ -282,6 +318,7 @@ def create_app(config_name=None):
     app.register_blueprint(name_detection_bp, url_prefix="/api/v1/name")
     app.register_blueprint(admin_auth_bp, url_prefix="/api/v1/admin/auth")
     app.register_blueprint(admin_bp, url_prefix="/api/v1/admin")  
+    app.register_blueprint(video_bp, url_prefix="/api/v1/video")  
     
     # 루트 경로
     @app.route("/")
@@ -333,11 +370,20 @@ def create_app(config_name=None):
     
     @app.errorhandler(413)
     def payload_too_large(error):
+        """페이로드 크기 초과 핸들러"""
         return jsonify({"success": False, "error": "파일 크기가 너무 큽니다 (최대 10MB)", "code": 413}), 413
     
     @app.errorhandler(500)
     def internal_server_error(error):
-        app.logger.error(f"서버 오류: {error}")
+        """서버 오류 핸들러 (보안: 상세 정보 노출 방지)"""
+        # 상세한 에러 정보는 로그에만 기록
+        app.logger.error(f"서버 오류: {error}", exc_info=True)
+        # 클라이언트에는 일반적인 메시지만 반환
         return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다", "code": 500}), 500
+    
+    @app.errorhandler(403)
+    def forbidden(error):
+        """접근 거부 핸들러"""
+        return jsonify({"success": False, "error": "접근이 거부되었습니다", "code": 403}), 403
     
     return app

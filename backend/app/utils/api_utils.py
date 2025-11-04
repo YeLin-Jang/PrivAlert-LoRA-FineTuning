@@ -50,7 +50,7 @@ class APIResponse:
         return APIResponse.error(error, code=500)
 
 
-def validate_text_input(data, field: str = "text", max_length: int = 10000) -> tuple:
+def validate_text_input(data, field: str = "text", max_length: int = 3000) -> tuple:
     """텍스트 입력 검증"""
     if not data:
         return False, APIResponse.error("요청 데이터가 없습니다")

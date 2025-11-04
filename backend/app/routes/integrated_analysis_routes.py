@@ -194,14 +194,33 @@ def analyze_content():
     image_files = request.files.getlist('image')
     text_input = request.form.get('text', '').strip()
     
+    # 보안: 파일 리스트 검증 (최대 5개)
+    from app.utils.security_utils import validate_file_list, validate_text_input, validate_image_file
+    
+    # 파일 개수 검증 (최대 5개)
+    # 빈 파일 제외하고 실제 파일 개수 확인
+    actual_files = [f for f in image_files if f and f.filename]
+    if len(actual_files) > 5:
+        return APIResponse.error("이미지/영상 파일은 최대 5개까지 업로드할 수 있습니다", code=400)
+    
+    valid_images = []
+    for f in actual_files:
+        is_valid, error_msg = validate_image_file(f)
+        if is_valid:
+            valid_images.append(f)
+        else:
+            logger.warning(f"파일 검증 실패: {f.filename}")
+            # 검증 실패한 파일은 건너뛰기
+    
     # 최소 하나의 입력이 필요
-    valid_images = [f for f in image_files if f and f.filename]
     if not valid_images and not text_input:
         return APIResponse.error("이미지 파일 또는 텍스트가 필요합니다", code=400)
     
-    # 텍스트 길이 검증
-    if text_input and len(text_input) > 10000:
-        return APIResponse.error("텍스트가 너무 깁니다 (최대 10,000자)", code=400)
+    # 보안: 텍스트 검증 (최대 3000자)
+    if text_input:
+        is_valid, error_msg = validate_text_input(text_input, max_length=3000)
+        if not is_valid:
+            return APIResponse.error(error_msg or "텍스트 입력 검증 실패", code=400)
     
     # 옵션 파라미터
     blur_fingers = request.form.get('blur_fingers', 'true').lower() in ['true', '1', 'yes']
@@ -497,5 +516,11 @@ def analyze_content():
                      results["summary"]["fingers_detected"] + 
                      (1 if results["summary"]["sensitive_text_found"] else 0))
     logger.info(f"통합 분석 완료: {total_detected}개 민감 정보 감지")
+    
+    # 보안: 원본 파일 데이터 메모리에서 정리
+    # 이미 처리된 파일들은 메모리에서 제거됨
+    # 참고: Flask의 FileStorage는 요청 완료 후 자동으로 정리되지만, 명시적으로 처리
+    import gc
+    gc.collect()  # 가비지 컬렉션 강제 실행
     
     return APIResponse.success({"data": results}, results["summary"]["message"])

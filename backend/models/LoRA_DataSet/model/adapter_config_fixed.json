@@ -1,0 +1,21 @@
+{
+  "base_model_name_or_path": "klue/bert-base",
+  "bias": "none",
+  "fan_in_fan_out": false,
+  "inference_mode": true,
+  "init_lora_weights": true,
+  "lora_alpha": 16,
+  "lora_bias": false,
+  "lora_dropout": 0.1,
+  "modules_to_save": [
+    "classifier",
+    "score"
+  ],
+  "peft_type": "LORA",
+  "r": 8,
+  "target_modules": [
+    "query",
+    "value"
+  ],
+  "task_type": "TOKEN_CLS"
+}
