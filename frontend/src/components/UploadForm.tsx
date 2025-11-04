@@ -1,11 +1,21 @@
-import React, { useState, useRef } from 'react';
-import { analyzeContent, suggestEducation } from '../api';
-import type { AnalysisResult, SanitizedItem } from '../types';
+import React, { useState, useRef, useEffect } from 'react';
+import { analyzeContent, analyzeVideo, suggestEducation } from '../services/api';
+import type { AnalysisResult, SanitizedItem, DetectionOptions } from '../types';
+import { validateTextLength, validateFileCount } from '../utils/validation';
+import { UPLOAD_LIMITS, ERROR_MESSAGES, API_CONFIG } from '../constants';
+import { DetectionOptionsPanel } from './DetectionOptionsPanel';
+import { FileUploader } from './FileUploader';
+import { 
+  secureFilesCleanup, 
+  secureTextCleanup, 
+  secureURLCleanup,
+  secureLog 
+} from '../utils/security';
 
 export default function UploadForm() {
   const [files, setFiles] = useState<File[]>([]);
   const [text, setText] = useState('');
-  const [blurFingers, setBlurFingers] = useState(true);
+  const [blurFingers, setBlurFingers] = useState(false);
   const [showFaces, setShowFaces] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -17,30 +27,54 @@ export default function UploadForm() {
   const [eduLoading, setEduLoading] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
 
-    // 민감 정보 탐지 옵션 (초기 상태: 모두 비활성화)
-  const [detectionOptions, setDetectionOptions] = useState({
-    face: false,          // 얼굴 (지원됨)
-    fingerprint: false,   // 지문/손가락 (지원됨)
-    // 정형 데이터 탐지 옵션들
-    phone: false,         // 전화번호 (지원됨)
-    rrn: false,           // 주민등록번호 (지원됨)
-    passport: false,      // 여권번호 (지원됨)
-    ip_address: false,    // IP주소 (지원됨)
-    email: false,         // 이메일 (지원됨)
-    account: false,       // 계좌번호 (지원됨)
-    school: false,        // 학교명 (지원됨)
-    // AI 기반 탐지 (지원됨)
-    workplace: false,     // 직장명 (AI 모델 지원)
-    // 비정형 데이터 (지원됨)
-    name: false,          // 이름
-    address: false,       // 주소 (지원됨)
-    driverLicense: false, // 운전면허번호 (지원됨)
-    postalCode: false     // 우편번호 (지원됨)
+  // 민감 정보 탐지 옵션 (초기 상태: 모두 비활성화)
+  const [detectionOptions, setDetectionOptions] = useState<DetectionOptions>({
+    face: false,
+    fingerprint: false,
+    phone: false,
+    rrn: false,
+    passport: false,
+    ip_address: false,
+    email: false,
+    account: false,
+    school: false,
+    workplace: false,
+    name: false,
+    address: false,
+    driverLicense: false,
+    postalCode: false,
   });
+
+  // 비디오 파일 상태
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  
+  // 보안: 컴포넌트 언마운트 시 민감 데이터 정리
+  useEffect(() => {
+    return () => {
+      // 컴포넌트 언마운트 시 모든 민감 데이터 정리
+      secureFilesCleanup([...files]);
+      if (videoFile) {
+        secureFilesCleanup([videoFile]);
+      }
+      // 결과 데이터도 정리
+      if (result) {
+        setResult(null);
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files);
+      
+      // 파일 개수 검증
+      const allFiles = [...files, ...newFiles];
+      const countCheck = validateFileCount(allFiles);
+      if (!countCheck.isValid) {
+        setError(countCheck.error || ERROR_MESSAGES.TOO_MANY_FILES);
+        return;
+      }
+      
       setFiles(prev => [...prev, ...newFiles]);
       
       // 선택된 파일들을 에디터에 표시
@@ -96,7 +130,7 @@ export default function UploadForm() {
     }
   };
 
-  const toggleDetectionOption = (option: keyof typeof detectionOptions) => {
+  const toggleDetectionOption = (option: keyof DetectionOptions) => {
     setDetectionOptions(prev => ({
       ...prev,
       [option]: !prev[option]
@@ -108,7 +142,7 @@ export default function UploadForm() {
     setDetectionOptions(prev => {
       const newOptions = { ...prev };
       Object.keys(newOptions).forEach(key => {
-        newOptions[key as keyof typeof newOptions] = true;
+        newOptions[key as keyof DetectionOptions] = true;
       });
       return newOptions;
     });
@@ -118,10 +152,50 @@ export default function UploadForm() {
     setDetectionOptions(prev => {
       const newOptions = { ...prev };
       Object.keys(newOptions).forEach(key => {
-        newOptions[key as keyof typeof newOptions] = false;
+        newOptions[key as keyof DetectionOptions] = false;
       });
       return newOptions;
     });
+  };
+
+  // 비디오 분석 핸들러
+  const handleVideoAnalyze = async () => {
+    if (!videoFile) {
+      setError('비디오 파일을 선택해주세요.');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const videoResult = await analyzeVideo(videoFile, true, true, 1.0);
+      // 비디오 분석 결과를 통합 분석 결과 형식으로 변환
+      const convertedResult: AnalysisResult = {
+        summary: {
+          faces_detected: videoResult.summary?.total_faces_detected || 0,
+          fingers_detected: videoResult.summary?.total_fingers_detected || 0,
+          sensitive_text_found: videoResult.summary?.frames_with_sensitive_content > 0 || false,
+          message: `비디오 분석 완료: ${videoResult.summary?.total_frames_processed || 0}개 프레임 처리`,
+        },
+      };
+      
+      // 비디오 분석 결과를 별도로 저장
+      (convertedResult as any).video_analysis = videoResult;
+      setResult(convertedResult);
+      setShowResultModal(true);
+      
+      // 보안: 분석 완료 후 원본 비디오 파일 메모리에서 정리
+      secureFilesCleanup([videoFile]);
+    } catch (err: any) {
+      secureLog('비디오 분석 오류:', err);
+      setError(err.message || ERROR_MESSAGES.SERVER_ERROR);
+      
+      // 오류 발생 시에도 민감 데이터 정리
+      secureFilesCleanup([videoFile]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
@@ -406,57 +480,45 @@ export default function UploadForm() {
     // 에디터에서 텍스트 추출
     const editorText = editorRef.current.innerText || '';
     
+    // 텍스트 길이 검증
+    const textCheck = validateTextLength(editorText);
+    if (!textCheck.isValid) {
+      setError(textCheck.error || ERROR_MESSAGES.TEXT_TOO_LONG);
+      return;
+    }
+    
     // 에디터에서 이미지 추출
     const editorImages = extractImagesFromEditor();
     
     // 모든 파일 합치기 (업로드된 파일 + 에디터의 이미지)
     const allFiles = [...files, ...editorImages];
 
+    // 파일 개수 검증
+    const countCheck = validateFileCount(allFiles);
+    if (!countCheck.isValid) {
+      setError(countCheck.error || ERROR_MESSAGES.TOO_MANY_FILES);
+      return;
+    }
+
     if (allFiles.length === 0 && !editorText.trim()) {
       setError('텍스트를 입력하거나 이미지를 붙여넣어주세요.');
       return;
     }
+    
+    // 최대 5개 제한
+    const limitedFiles = allFiles.slice(0, UPLOAD_LIMITS.MAX_FILES);
+    const limitedText = editorText.substring(0, UPLOAD_LIMITS.MAX_TEXT_LENGTH);
 
     setLoading(true);
     setError(null);
 
     try {
-      console.log('분석 시작:', { allFiles: allFiles.length, editorText: editorText.length, detectionOptions });
-      const analysisResult = await analyzeContent(allFiles, editorText, blurFingers, showFaces, detectionOptions);
-      console.log('분석 결과:', analysisResult);
+      secureLog('분석 시작:', { files: limitedFiles.length, text: limitedText.length });
+      const analysisResult = await analyzeContent(limitedFiles, limitedText, blurFingers, showFaces, detectionOptions as DetectionOptions);
       
-      // 얼굴 감지 결과 디버깅
-      if (analysisResult.face_detection) {
-        console.log('얼굴 감지 결과:', analysisResult.face_detection);
-        analysisResult.face_detection.images.forEach((img, index) => {
-          console.log(`얼굴 감지 이미지 ${index + 1}:`, {
-            filename: img.filename,
-            count: img.count,
-            result_image_url: img.result_image_url,
-            full_url: `http://localhost:5000${img.result_image_url}`
-          });
-        });
-      }
-      
-      // 손가락 감지 결과 디버깅
-      if (analysisResult.hand_detection) {
-        console.log('손가락 감지 결과:', analysisResult.hand_detection);
-        analysisResult.hand_detection.images.forEach((img, index) => {
-          console.log(`손가락 감지 이미지 ${index + 1}:`, {
-            filename: img.filename,
-            count: img.count,
-            result_image_url: img.result_image_url,
-            full_url: `http://localhost:5000${img.result_image_url}`
-          });
-        });
-      }
-      
-      // 처리 옵션 상태 디버깅
-      console.log('처리 옵션 상태:', {
-        showFaces,
-        blurFingers,
-        detectionOptions
-      });
+      // 보안: 분석 완료 후 원본 파일 메모리에서 정리
+      // 분석이 성공적으로 완료되었으므로 원본 파일은 더 이상 필요하지 않음
+      secureFilesCleanup([...limitedFiles]);
       
       setResult(analysisResult);
       setShowResultModal(true);
@@ -470,22 +532,34 @@ export default function UploadForm() {
         setRevisedSentence(edu?.revised_sentence || null);
         setShowEduPanel(true);
       } catch (e) {
-        console.warn('교육 제안 로딩 실패', e);
+        secureLog('교육 제안 로딩 실패', e);
       } finally {
         setEduLoading(false);
       }
-      console.log('모달 표시:', true);
     } catch (err) {
-      console.error('분석 오류:', err);
+      secureLog('분석 오류:', err);
       setError(err instanceof Error ? err.message : '분석 중 오류가 발생했습니다.');
+      
+      // 오류 발생 시에도 민감 데이터 정리
+      secureFilesCleanup([...limitedFiles]);
     } finally {
       setLoading(false);
     }
   };
 
   const handleReset = () => {
+    // 보안: 민감 데이터 명시적 정리
+    secureFilesCleanup([...files]);
+    if (videoFile) {
+      secureFilesCleanup([videoFile]);
+    }
+    
+    // 텍스트 데이터 정리
+    const cleanedText = secureTextCleanup(text);
+    
     setFiles([]);
-    setText('');
+    setText(cleanedText);
+    setVideoFile(null);
     setResult(null);
     setError(null);
     setShowResultModal(false);
@@ -493,8 +567,8 @@ export default function UploadForm() {
     setEduItems(null);
     setRevisedSentence(null);
     setEduLoading(false);
-    setBlurFingers(true);
-    setShowFaces(true);
+    setBlurFingers(false);
+    setShowFaces(false);
     
     // 탐지 옵션 초기화 (모두 비활성화)
     setDetectionOptions({
@@ -524,9 +598,32 @@ export default function UploadForm() {
   return (
     <div className="container">
       <header className="header">
-        <h1>PrivAlert</h1>
+        <h1>🔔 PrivAlert</h1>
         <p className="subtitle">개인정보 보호 분석 시스템</p>
       </header>
+      
+      {/* 비디오 업로드 섹션 */}
+      <section className="video-upload-section">
+        <h2>🎬 비디오 분석</h2>
+        <FileUploader
+          files={videoFile ? [videoFile] : []}
+          onFilesChange={(files) => setVideoFile(files[0] || null)}
+          accept="video/*"
+          multiple={false}
+          maxFiles={1}
+          isVideo={true}
+        />
+        {videoFile && (
+          <button
+            type="button"
+            onClick={handleVideoAnalyze}
+            disabled={loading}
+            className="analyze-button"
+          >
+            {loading ? '분석 중...' : '비디오 분석 시작'}
+          </button>
+        )}
+      </section>
 
       <main className="main-content">
         <div className="input-section">
@@ -597,182 +694,25 @@ export default function UploadForm() {
               <div className="editor-footer">
                 <div className="editor-stats">
                   <span className="text-counter">
-                    글자 수: {editorRef.current?.innerText?.length || 0}/10000
+                    글자 수: {editorRef.current?.innerText?.length || 0}/{UPLOAD_LIMITS.MAX_TEXT_LENGTH}
                   </span>
+                  {files.length > 0 && (
+                    <span className="file-counter">
+                      파일: {files.length}/{UPLOAD_LIMITS.MAX_FILES}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
           </div>
 
           <div className="input-group">
-            <label className="input-label">민감 정보 탐지 옵션</label>
-            <div className="option-controls">
-              <button
-                type="button"
-                onClick={selectAllOptions}
-                disabled={loading}
-                className="option-button select-all"
-              >
-                모두 체크
-              </button>
-              <button
-                type="button"
-                onClick={deselectAllOptions}
-                disabled={loading}
-                className="option-button deselect-all"
-              >
-                모두 해제
-              </button>
-            </div>
-            <div className="options-grid">
-              {/* 지원되는 기능들 */}
-              <label className="option-item">
-                <input
-                  type="checkbox"
-                  checked={detectionOptions.face}
-                  onChange={() => toggleDetectionOption('face')}
-                  disabled={loading}
-                  className="option-checkbox"
-                />
-                <span className="option-text">얼굴</span>
-              </label>
-              <label className="option-item">
-                <input
-                  type="checkbox"
-                  checked={detectionOptions.fingerprint}
-                  onChange={() => toggleDetectionOption('fingerprint')}
-                  disabled={loading}
-                  className="option-checkbox"
-                />
-                <span className="option-text">지문/손가락</span>
-              </label>
-              
-              {/* 정형 데이터 탐지 옵션들 (지원됨) */}
-              <label className="option-item">
-                <input
-                  type="checkbox"
-                  checked={detectionOptions.phone}
-                  onChange={() => toggleDetectionOption('phone')}
-                  disabled={loading}
-                  className="option-checkbox"
-                />
-                <span className="option-text">전화번호</span>
-              </label>
-              <label className="option-item">
-                <input
-                  type="checkbox"
-                  checked={detectionOptions.rrn}
-                  onChange={() => toggleDetectionOption('rrn')}
-                  disabled={loading}
-                  className="option-checkbox"
-                />
-                <span className="option-text">주민등록번호</span>
-              </label>
-              <label className="option-item">
-                <input
-                  type="checkbox"
-                  checked={detectionOptions.passport}
-                  onChange={() => toggleDetectionOption('passport')}
-                  disabled={loading}
-                  className="option-checkbox"
-                />
-                <span className="option-text">여권번호</span>
-              </label>
-              <label className="option-item">
-                <input
-                  type="checkbox"
-                  checked={detectionOptions.ip_address}
-                  onChange={() => toggleDetectionOption('ip_address')}
-                  disabled={loading}
-                  className="option-checkbox"
-                />
-                <span className="option-text">IP주소</span>
-              </label>
-              <label className="option-item">
-                <input
-                  type="checkbox"
-                  checked={detectionOptions.email}
-                  onChange={() => toggleDetectionOption('email')}
-                  disabled={loading}
-                  className="option-checkbox"
-                />
-                <span className="option-text">이메일</span>
-              </label>
-              <label className="option-item">
-                <input
-                  type="checkbox"
-                  checked={detectionOptions.account}
-                  onChange={() => toggleDetectionOption('account')}
-                  disabled={loading}
-                  className="option-checkbox"
-                />
-                <span className="option-text">계좌번호</span>
-              </label>
-              
-              {/* AI 기반 탐지 옵션들 (지원됨) */}
-              <label className="option-item">
-                <input
-                  type="checkbox"
-                  checked={detectionOptions.workplace}
-                  onChange={() => toggleDetectionOption('workplace')}
-                  disabled={loading}
-                  className="option-checkbox"
-                />
-                <span className="option-text">직장명</span>
-              </label>
-              
-              {/* 비정형 데이터 탐지 옵션들 (지원됨) */}
-              <label className="option-item">
-                <input
-                  type="checkbox"
-                  checked={detectionOptions.name}
-                  onChange={() => toggleDetectionOption('name')}
-                  disabled={loading}
-                  className="option-checkbox"
-                />
-                <span className="option-text">이름</span>
-              </label>
-              <label className="option-item">
-                <input
-                  type="checkbox"
-                  checked={detectionOptions.address}
-                  onChange={() => toggleDetectionOption('address')}
-                  disabled={loading}
-                  className="option-checkbox"
-                />
-                <span className="option-text">주소</span>
-              </label>
-              <label className="option-item">
-                <input
-                  type="checkbox"
-                  checked={detectionOptions.school}
-                  onChange={() => toggleDetectionOption('school')}
-                  disabled={loading}
-                  className="option-checkbox"
-                />
-                <span className="option-text">학교명</span>
-              </label>
-              <label className="option-item">
-                <input
-                  type="checkbox"
-                  checked={detectionOptions.driverLicense}
-                  onChange={() => toggleDetectionOption('driverLicense')}
-                  disabled={loading}
-                  className="option-checkbox"
-                />
-                <span className="option-text">운전면허번호</span>
-              </label>
-              <label className="option-item">
-                <input
-                  type="checkbox"
-                  checked={detectionOptions.postalCode}
-                  onChange={() => toggleDetectionOption('postalCode')}
-                  disabled={loading}
-                  className="option-checkbox"
-                />
-                <span className="option-text">우편번호</span>
-              </label>
-            </div>
+            <DetectionOptionsPanel
+              detectionOptions={detectionOptions}
+              onToggle={toggleDetectionOption}
+              onSelectAll={selectAllOptions}
+              onDeselectAll={deselectAllOptions}
+            />
             
             {/* 하위 옵션들 - 별도 섹션으로 분리 */}
             {(detectionOptions.face || detectionOptions.fingerprint) && (
@@ -812,8 +752,8 @@ export default function UploadForm() {
 
         <div className="action-section">
           <button 
-            onClick={handleAnalyze} 
-            disabled={loading || (files.length === 0 && !text.trim())}
+                  onClick={handleAnalyze} 
+            disabled={loading || (files.length === 0 && !text.trim() && !videoFile)}
             className="analyze-button"
           >
             {loading ? (
@@ -859,6 +799,73 @@ export default function UploadForm() {
             </div>
             
             <div className="modal-body">
+              {/* 비디오 분석 결과 */}
+              {(result as any).video_analysis && (
+                <div className="video-analysis-card">
+                  <h3>🎬 비디오 분석 결과</h3>
+                  <div className="video-info">
+                    <p><strong>비디오 정보:</strong></p>
+                    <ul>
+                      <li>해상도: {(result as any).video_analysis.video_info?.width} x {(result as any).video_analysis.video_info?.height}</li>
+                      <li>길이: {((result as any).video_analysis.video_info?.duration || 0).toFixed(1)}초</li>
+                      <li>FPS: {((result as any).video_analysis.video_info?.fps || 0).toFixed(1)}</li>
+                      <li>처리된 프레임: {(result as any).video_analysis.summary?.total_frames_processed || 0}개</li>
+                    </ul>
+                  </div>
+                  
+                  {(result as any).video_analysis.audio_transcription && (
+                    <div className="audio-transcription-section">
+                      <h4>🎤 음성 인식 결과</h4>
+                      <p className="transcription-text">
+                        {(result as any).video_analysis.audio_transcription.text}
+                      </p>
+                      {(result as any).video_analysis.audio_text_analysis?.has_sensitive_content && (
+                        <div className="sensitive-content-warning">
+                          ⚠️ 음성 인식 텍스트에서 민감 정보가 감지되었습니다
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  <div className="video-summary-stats">
+                    <div className="stat-item">
+                      <span className="stat-label">감지된 얼굴</span>
+                      <span className="stat-value">{(result as any).video_analysis.summary?.total_faces_detected || 0}개</span>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">감지된 손가락</span>
+                      <span className="stat-value">{(result as any).video_analysis.summary?.total_fingers_detected || 0}개</span>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">민감 정보 포함 프레임</span>
+                      <span className="stat-value">{(result as any).video_analysis.summary?.frames_with_sensitive_content || 0}개</span>
+                    </div>
+                  </div>
+                  
+                  {(result as any).video_analysis.frames && (result as any).video_analysis.frames.length > 0 && (
+                    <div className="frames-section">
+                      <h4>프레임별 분석 결과</h4>
+                      <div className="frames-list">
+                        {(result as any).video_analysis.frames.slice(0, 10).map((frame: any, idx: number) => (
+                          <div key={idx} className="frame-item">
+                            <p><strong>프레임 {frame.frame_index + 1}</strong> ({frame.timestamp.toFixed(1)}초)</p>
+                            {frame.ocr && (
+                              <p className="frame-ocr">OCR: {frame.ocr.text.substring(0, 50)}...</p>
+                            )}
+                            {frame.face && frame.face.count > 0 && (
+                              <p className="frame-face">👤 얼굴 {frame.face.count}개</p>
+                            )}
+                            {frame.hand && frame.hand.count > 0 && (
+                              <p className="frame-hand">👋 손가락 {frame.hand.count}개</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              
               <div className="result-summary">
                 <div className="summary-card">
                   <h3>📊 분석 요약</h3>
@@ -1010,30 +1017,51 @@ export default function UploadForm() {
                               className="download-button"
                               onClick={async () => {
                                 try {
-                                  const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:5000';
+                                  const API_BASE = API_CONFIG.BASE_URL;
+                                  // 보안: 안전한 URL 생성
                                   const resolvedPath = (() => {
                                     if (!it.sanitized_url && it.sanitized_filename) {
                                       return `/data/image/${it.sanitized_filename}`;
                                     }
                                     if (!it.sanitized_url) return '';
-                                    if (it.sanitized_url.startsWith('http')) return it.sanitized_url;
-                                    if (it.sanitized_url.startsWith('/')) return `${API_BASE}${it.sanitized_url}`;
+                                    if (it.sanitized_url.startsWith('http')) {
+                                      // 외부 URL 검증
+                                      try {
+                                        const url = new URL(it.sanitized_url);
+                                        if (!['http:', 'https:'].includes(url.protocol)) {
+                                          throw new Error('안전하지 않은 URL');
+                                        }
+                                        return it.sanitized_url;
+                                      } catch {
+                                        return '';
+                                      }
+                                    }
+                                    if (it.sanitized_url.startsWith('/')) {
+                                      return `${API_BASE}${it.sanitized_url}`;
+                                    }
                                     return `${API_BASE}/data/image/${it.sanitized_url}`;
                                   })();
                                   if (!resolvedPath) throw new Error('다운로드 경로가 없습니다');
+                                  
+                                  // 보안: URL 검증
                                   const url = resolvedPath;
+                                  if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('/')) {
+                                    throw new Error('안전하지 않은 URL');
+                                  }
                                   const res = await fetch(url);
                                   if (!res.ok) throw new Error('다운로드 실패');
                                   const blob = await res.blob();
                                   const a = document.createElement('a');
                                   const ext = (it.report?.target_format || 'jpeg').toString().toLowerCase();
                                   const name = (it.sanitized_filename || `sanitized_${idx}.${ext === 'jpeg' ? 'jpg' : ext}`);
-                                  a.href = URL.createObjectURL(blob);
+                                  const objectURL = URL.createObjectURL(blob);
+                                  a.href = objectURL;
                                   a.download = name;
                                   document.body.appendChild(a);
                                   a.click();
                                   a.remove();
-                                  URL.revokeObjectURL(a.href);
+                                  // 보안: URL 즉시 해제
+                                  secureURLCleanup(objectURL);
                                 } catch (e) {
                                   console.error(e);
                                   alert('다운로드 중 오류가 발생했습니다.');
@@ -1271,7 +1299,7 @@ export default function UploadForm() {
                           {img.result_image_url && (
                             <div className="result-image-container">
                               <img 
-                                src={`http://localhost:5000${img.result_image_url}`} 
+                                src={`${API_CONFIG.BASE_URL}${img.result_image_url}`} 
                                 alt={`얼굴 감지 결과 ${index + 1}`}
                                 className="result-image"
                                 onError={(e) => {
@@ -1301,7 +1329,7 @@ export default function UploadForm() {
                           {img.result_image_url && (
                             <div className="result-image-container">
                               <img 
-                                src={`http://localhost:5000${img.result_image_url}`} 
+                                src={`${API_CONFIG.BASE_URL}${img.result_image_url}`} 
                                 alt={`손가락 감지 결과 ${index + 1}`}
                                 className="result-image"
                                 onError={(e) => {

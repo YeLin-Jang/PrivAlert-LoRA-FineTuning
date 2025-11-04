@@ -1,10 +1,14 @@
 import os
+import logging
 from flask import Blueprint, request, jsonify, send_file
 from io import BytesIO
 import cv2
 from flasgger.utils import swag_from
 from app.services.hand_detection_service import HandDetectionService
+from app.utils.security_utils import validate_image_file, mask_sensitive_data_in_log
 from config import DOCS_DIR
+
+logger = logging.getLogger(__name__)
 
 hand_bp = Blueprint("hand", __name__)
 hand_service = HandDetectionService()
@@ -13,24 +17,36 @@ hand_service = HandDetectionService()
 @swag_from(os.path.join(DOCS_DIR, "hand.yml"))
 def detect_fingertips():
     """손가락 끝 검출 API"""
-    if "image" not in request.files:
-        return jsonify({"success": False, "error": "이미지 파일 필요"}), 400
+    try:
+        if "image" not in request.files:
+            return jsonify({"success": False, "error": "이미지 파일 필요"}), 400
 
-    image_file = request.files["image"]
-    return_image = request.form.get('return_image', 'false').lower() in ['true', '1', 'yes']
-    
-    if return_image:
-        result, preview_img = hand_service.detect_fingertips(image_file, save_preview=True, return_image=True)
-        if result.get("success"):
-            # 이미지를 PNG 형식으로 인코딩하여 반환
-            _, buffer = cv2.imencode('.png', preview_img)
-            bio = BytesIO(buffer)
-            bio.seek(0)
-            return send_file(bio, mimetype='image/png', as_attachment=True, download_name='hand_detection_result.png')
+        image_file = request.files["image"]
+        
+        # 보안: 파일 검증
+        is_valid, error_msg = validate_image_file(image_file)
+        if not is_valid:
+            logger.warning(f"파일 검증 실패: {mask_sensitive_data_in_log(error_msg or '')}")
+            return jsonify({"success": False, "error": error_msg}), 400
+        
+        return_image = request.form.get('return_image', 'false').lower() in ['true', '1', 'yes']
+        
+        if return_image:
+            result, preview_img = hand_service.detect_fingertips(image_file, save_preview=True, return_image=True)
+            if result.get("success"):
+                # 이미지를 PNG 형식으로 인코딩하여 반환
+                _, buffer = cv2.imencode('.png', preview_img)
+                bio = BytesIO(buffer)
+                bio.seek(0)
+                return send_file(bio, mimetype='image/png', as_attachment=True, download_name='hand_detection_result.png')
+            else:
+                return jsonify(result), 500
         else:
-            return jsonify(result), 500
-    else:
-        result = hand_service.detect_fingertips(image_file, save_preview=True)
-        if result.get("result_image_url"):
-            result["result_image_url"] = request.host_url.rstrip("/") + result["result_image_url"]
-        return jsonify(result), (200 if result.get("success") else 500)
+            result = hand_service.detect_fingertips(image_file, save_preview=True)
+            if result.get("result_image_url"):
+                result["result_image_url"] = request.host_url.rstrip("/") + result["result_image_url"]
+            return jsonify(result), (200 if result.get("success") else 500)
+    
+    except Exception as e:
+        logger.error(f"손가락 검출 중 오류: {e}", exc_info=True)
+        return jsonify({"success": False, "error": "서버 오류가 발생했습니다"}), 500
