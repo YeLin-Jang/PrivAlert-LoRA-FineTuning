@@ -72,7 +72,7 @@ class MaskRegexService:
                 ("ADDRESS_NUMBER", re.compile(r"\d{1,4}(-\d{1,4})?번지")),
                 ("ADDRESS_ROAD", re.compile(r"[가-힣]+(로|길)\s?\d{1,4}(-\d{1,4})?")),
                 ("ADDRESS_GIL", re.compile(r"\d+(?:-\d+)?길")),
-<<<<<<< HEAD
+                ("ADDRESS_SUBWAY", re.compile(r"[가-힣]+(역)")),
             ],
             "driverLicense": [
                 # 운전면허번호: 12자리 숫자 (예: 123456-123456)
@@ -87,9 +87,6 @@ class MaskRegexService:
                 ("POSTAL_CODE_HYPHEN", re.compile(r"\b\d{3}-\d{3}\b")),
             ],
             "workplace": None  # AI 모델 사용
-=======
-            ]
->>>>>>> 5a96419fbf92ee846c64772d4fcbdb7457210199
         }
     
     def detect_sensitive_data(self, text: str, detection_options: Dict[str, bool]) -> Dict:
@@ -175,7 +172,6 @@ class MaskRegexService:
                         })
                         category_count += 1
                         start_pos = pos + 1
-<<<<<<< HEAD
             elif category == "workplace":
                 # AI 모델을 사용한 직장명 탐지
                 try:
@@ -193,9 +189,6 @@ class MaskRegexService:
                             category_count += 1
                 except Exception as e:
                     logger.error(f"직장명 탐지 중 오류: {e}")
-=======
-
->>>>>>> 5a96419fbf92ee846c64772d4fcbdb7457210199
             else:
                 # 다른 카테고리는 기존 방식대로
                 for pattern_name, pattern in self.patterns[category]:
@@ -277,14 +270,10 @@ class MaskRegexService:
                 "email": "이메일",
                 "account": "계좌번호",
                 "school": "학교명",
-<<<<<<< HEAD
                 "address": "주소",
                 "driverLicense": "운전면허번호",
                 "postalCode": "우편번호",
                 "workplace": "직장명"
-=======
-                "address": "주소"
->>>>>>> 5a96419fbf92ee846c64772d4fcbdb7457210199
             }
             
             # 학교 마스킹의 경우 리스트도 함께 사용
@@ -299,10 +288,6 @@ class MaskRegexService:
                 for school in school_list:
                     if school in masked_text:
                         masked_text = masked_text.replace(school, f"[{category_labels.get(category, category.upper())}]")
-<<<<<<< HEAD
-=======
-                        
->>>>>>> 5a96419fbf92ee846c64772d4fcbdb7457210199
             elif category == "address":
                 # 1. 정규표현식으로 마스킹
                 for pattern_name, pattern in self.patterns[category]:
@@ -311,16 +296,12 @@ class MaskRegexService:
                 # 2. 사전 기반 마스킹
                 for addr in address_list:
                     masked_text = masked_text.replace(addr, "[주소]")
-<<<<<<< HEAD
             elif category == "workplace":
                 # AI 모델을 사용한 직장명 마스킹
                 try:
                     masked_text = workplace_detection_service.mask_workplaces(masked_text)
                 except Exception as e:
                     logger.error(f"직장명 마스킹 중 오류: {e}")
-=======
-
->>>>>>> 5a96419fbf92ee846c64772d4fcbdb7457210199
             else:
                 # 다른 카테고리는 기존 방식대로
                 for pattern_name, pattern in self.patterns[category]:
