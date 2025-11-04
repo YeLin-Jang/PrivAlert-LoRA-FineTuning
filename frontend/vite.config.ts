@@ -11,5 +11,6 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    strictPort: true, // 포트가 사용 중이면 에러 발생 (자동으로 다른 포트 사용 안 함)
   },
 });

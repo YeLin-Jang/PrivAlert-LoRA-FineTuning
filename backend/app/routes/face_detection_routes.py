@@ -1,7 +1,12 @@
 import os
 from flask import Blueprint, request, jsonify, send_file
 from io import BytesIO
-import cv2
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
+    print("Warning: OpenCV not available. Face detection will be limited.")
 from flasgger.utils import swag_from
 from app.services.face_detection_service import FaceDetectionService
 from config import DOCS_DIR
