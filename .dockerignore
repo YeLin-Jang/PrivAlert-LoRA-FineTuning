@@ -1,0 +1,102 @@
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*$py.class
+*.so
+.Python
+*.egg-info/
+**/*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Docker
+docker/
+docker-compose.yml
+.dockerignore
+
+# Runtime files (런타임에 생성되므로 제외)
+backend/static/results/
+backend/data/results/
+backend/static/temp/
+
+# 테스트 파일
+backend/test_*.py
+
+# 개발 환경 파일
+backend/environment.yml
+
+# 문서 파일
+*.md
+backend/docs/README.md
+backend/models/**/README.md
+
+# 모델 파일은 포함해야 함 (이름 탐지, 직장명 탐지에 필요)
+# backend/models/ 는 포함됨
+
+# 프론트엔드 빌드 파일
+frontend/node_modules/
+frontend/.cache/
+frontend/dist/
+frontend/build/
+frontend/tsconfig.app.tsbuildinfo
+frontend/.vite/
+
+# 프로젝트 루트 불필요 파일
+package-lock.json
+__pycache__/
+

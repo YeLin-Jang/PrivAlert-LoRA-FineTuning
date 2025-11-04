@@ -7,8 +7,21 @@ from flask_cors import CORS
 from app.utils.file_utils import ensure_dir
 from config import BASE_DATA_DIR, BASE_DIR
 
-# 환경변수 로드
-load_dotenv()
+# 프로젝트 루트 경로 찾기 (PrivAlert/)
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ENV_FILE = os.path.join(ROOT_DIR, '.env')
+
+# 환경변수 로드 (프로젝트 루트의 .env 파일 우선)
+if os.path.exists(ENV_FILE):
+    load_dotenv(ENV_FILE)
+else:
+    # Fallback: 현재 디렉토리의 .env 파일
+    load_dotenv()
+
+# 데이터베이스 및 인증 확장 임포트
+from app.extensions.database import Database
+from app.extensions.login_manager import init_login_manager
+from app.utils.csrf_protection import init_csrf
 
 def setup_logging(app):
     """로깅 설정"""
@@ -41,6 +54,15 @@ def create_app(config_name=None):
     
     # 로깅 설정
     setup_logging(app)
+    
+    # 데이터베이스 초기화
+    Database.init_app(app)
+    
+    # Flask-Login 초기화
+    init_login_manager(app)
+    
+    # CSRF 보호 초기화
+    init_csrf(app)
     
     # CORS 설정
     cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
@@ -152,7 +174,12 @@ def create_app(config_name=None):
     from app.routes.education_routes import education_bp
     from app.routes.workplace_detection_routes import workplace_bp
     from app.routes.name_detection_routes import name_detection_bp
+    from app.routes.auth_routes import auth_bp
     
+    # 인증 라우트 (우선 등록)
+    app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")
+    
+    # 기존 라우트
     app.register_blueprint(face_bp, url_prefix="/api/v1/face")
     app.register_blueprint(hand_bp, url_prefix="/api/v1/hand")
     app.register_blueprint(ocr_bp, url_prefix="/api/v1/ocr")

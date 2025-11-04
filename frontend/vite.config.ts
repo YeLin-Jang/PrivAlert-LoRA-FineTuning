@@ -10,6 +10,7 @@ export default defineConfig({
     },
   },
   server: {
+    host: '0.0.0.0',  // Docker 컨테이너에서 외부 접근 허용
     port: 3000,
   },
 });
