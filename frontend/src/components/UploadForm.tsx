@@ -13,6 +13,7 @@ export default function UploadForm() {
   const [showResultModal, setShowResultModal] = useState(false);
   const [showEduPanel, setShowEduPanel] = useState(false);
   const [eduItems, setEduItems] = useState<any[] | null>(null);
+  const [revisedSentence, setRevisedSentence] = useState<string | null>(null);
   const [eduLoading, setEduLoading] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
 
@@ -466,6 +467,7 @@ export default function UploadForm() {
         setEduLoading(true);
         const edu = await suggestEducation(masked, cats, 'ko', 'educational');
         setEduItems(edu?.items || []);
+        setRevisedSentence(edu?.revised_sentence || null);
         setShowEduPanel(true);
       } catch (e) {
         console.warn('교육 제안 로딩 실패', e);
@@ -489,6 +491,7 @@ export default function UploadForm() {
     setShowResultModal(false);
     setShowEduPanel(false);
     setEduItems(null);
+    setRevisedSentence(null);
     setEduLoading(false);
     setBlurFingers(true);
     setShowFaces(true);
@@ -1343,21 +1346,21 @@ export default function UploadForm() {
             {!eduLoading && (!eduItems || eduItems.length === 0) && <p>제안 항목이 없습니다.</p>}
             {!eduLoading && eduItems && eduItems.length > 0 && (
               <div className="edu-list">
+                {/* 수정 문장 - 맨 위에 한 번만 표시 */}
+                {revisedSentence && (
+                  <div className="edu-revised-section" style={{ marginBottom: '20px' }}>
+                    <div className="section-header">
+                      <span className="section-icon">✏️</span>
+                      <span className="section-title">수정 문장</span>
+                    </div>
+                    <div className="revised-sentence-box">
+                      {revisedSentence}
+                    </div>
+                  </div>
+                )}
+
                 {eduItems.map((it, idx) => (
                   <div key={idx} className="edu-card">
-                    {/* 수정 문장 - 맨 위에 강조 */}
-                    {it.revised_sentence && (
-                      <div className="edu-revised-section">
-                        <div className="section-header">
-                          <span className="section-icon">✏️</span>
-                          <span className="section-title">수정 문장</span>
-                        </div>
-                        <div className="revised-sentence-box">
-                          {it.revised_sentence}
-                        </div>
-                      </div>
-                    )}
-
                     {/* 카테고리 박스 */}
                     <div className="edu-section">
                       <div className="section-header">
