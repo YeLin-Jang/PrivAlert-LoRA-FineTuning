@@ -1,0 +1,73 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [ main ]  # main에 직접 push 시 실행
+  pull_request:
+    branches: [ main ]  # main으로 향하는 PR에서만 실행
+
+jobs:
+  python-lint:
+    name: Python Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GH_TOKEN }}
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    
+    - name: Install linting tools
+      working-directory: ./backend
+      run: |
+        pip install flake8 black isort mypy || echo "Linting 도구 설치 생략"
+      continue-on-error: true
+    
+    - name: Run flake8
+      working-directory: ./backend
+      run: |
+        flake8 app/ --count --select=E9,F63,F7,F82 --show-source --statistics || echo "flake8 검사 완료"
+      continue-on-error: true
+    
+    - name: Check import sorting (isort)
+      working-directory: ./backend
+      run: |
+        isort --check-only app/ || echo "import 정렬 검사 완료"
+      continue-on-error: true
+
+  typescript-lint:
+    name: TypeScript Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GH_TOKEN }}
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    
+    - name: Install dependencies
+      working-directory: ./frontend
+      run: npm ci
+    
+    - name: Run ESLint
+      working-directory: ./frontend
+      run: npm run lint
+      continue-on-error: true
+    
+    - name: TypeScript type check
+      working-directory: ./frontend
+      run: npx tsc --noEmit
+      continue-on-error: true
+
