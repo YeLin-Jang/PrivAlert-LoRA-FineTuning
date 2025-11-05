@@ -30,8 +30,6 @@ export const DETECTION_OPTIONS = {
   WORKPLACE: 'workplace',
   NAME: 'name',
   ADDRESS: 'address',
-  DRIVER_LICENSE: 'driverLicense',
-  POSTAL_CODE: 'postalCode',
 } as const;
 
 // 에러 메시지

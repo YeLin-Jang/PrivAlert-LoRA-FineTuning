@@ -72,10 +72,12 @@ def create_app(config_name=None):
         "MAX_CONTENT_LENGTH": int(os.getenv("MAX_CONTENT_LENGTH", "10")) * 1024 * 1024,
         "DEBUG": flask_env == "development",
 
-        # 세션 보안 설정
-        "SESSION_COOKIE_SECURE": flask_env == "production",  # HTTPS에서만 쿠키 전송
+        # 세션 보안 설정 (HTTP 전용 환경)
+        # 중요: HTTP 환경이므로 Secure 플래그는 False로 설정
+        # 보안: HttpOnly, SameSite=Strict로 최대한 보호
+        "SESSION_COOKIE_SECURE": False,  # HTTP 환경이므로 Secure 미설정
         "SESSION_COOKIE_HTTPONLY": True,  # JavaScript에서 쿠키 접근 방지
-        "SESSION_COOKIE_SAMESITE": "Lax",  # CSRF 공격 방지
+        "SESSION_COOKIE_SAMESITE": "Strict",  # CSRF 공격 방지 (HTTP 환경에서는 Strict 권장)
         # 기타 보안 설정
         "PREFERRED_URL_SCHEME": "https" if flask_env == "production" else "http",
         "TRAP_HTTP_EXCEPTIONS": True,  # HTTP 예외 처리
@@ -116,9 +118,9 @@ def create_app(config_name=None):
     app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies"]
     # CSRF 보호: 프로덕션에서는 활성화, 개발 환경에서는 선택적
     app.config["JWT_COOKIE_CSRF_PROTECT"] = flask_env == "production"
-    app.config["JWT_COOKIE_SECURE"] = flask_env == "production"
+    app.config["JWT_COOKIE_SECURE"] = False  # HTTP 환경이므로 Secure 미설정
     app.config["JWT_COOKIE_HTTPONLY"] = True
-    app.config["JWT_COOKIE_SAMESITE"] = "Lax"  # CSRF 공격 방지
+    app.config["JWT_COOKIE_SAMESITE"] = "Strict"  # CSRF 공격 방지 (HTTP 환경에서는 Strict 권장)
     
     jwt = JWTManager(app)
     
@@ -202,13 +204,13 @@ def create_app(config_name=None):
         # Content Security Policy
         # 관리자 페이지에 대해 더 엄격한 CSP 적용
         if is_admin_path:
-            # 관리자 페이지용 엄격한 CSP 정책
+            # 관리자 페이지용 엄격한 CSP 정책 (Google Fonts 허용)
             csp = (
                 "default-src 'self'; "
                 "script-src 'self'; "
-                "style-src 'self' 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                 "img-src 'self' data:; "
-                "font-src 'self' data:; "
+                "font-src 'self' data: https://fonts.gstatic.com; "
                 "connect-src 'self'; "
                 "frame-ancestors 'none'; "
                 "base-uri 'self'; "
@@ -236,9 +238,9 @@ def create_app(config_name=None):
         
         response.headers['Content-Security-Policy'] = csp
         
-        # 프로덕션 환경에서만 HSTS 활성화
-        if flask_env == "production":
-            response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains; preload'
+        # 중요: HTTP 전용 환경이므로 HSTS 미설정
+        # HSTS는 HTTPS 환경에서만 사용하며, HTTP 환경에서는 설정하지 않음
+        # 자세한 내용은 security.md 참조
         
         # Content-Type 설정 보정
         content_type = response.headers.get('Content-Type', '')
@@ -426,6 +428,7 @@ def create_app(config_name=None):
         app.logger.warning(f"NER routes not available (ImportError): {e}")
     except Exception as e:
         app.logger.warning(f"NER routes not available (Error): {e}")
+
     
     app.register_blueprint(integrated_filter_bp, url_prefix="/api/v1/filter")
     app.register_blueprint(integrated_analysis_bp, url_prefix="/api/v1")
@@ -506,6 +509,46 @@ def create_app(config_name=None):
             from app.tasks.cleanup_worker import start_cleanup_scheduler
             scheduler = start_cleanup_scheduler()
             app.logger.info("백그라운드 파일 정리 작업 초기화 완료")
+            
+            # 토큰 및 세션 정리 작업 추가
+            from apscheduler.triggers.interval import IntervalTrigger
+            from app.models.token import Token
+            from app.models.session import UserSession
+            
+            def cleanup_tokens():
+                """만료된 토큰 정리"""
+                try:
+                    deleted = Token.cleanup_expired_tokens()
+                    if deleted > 0:
+                        app.logger.info(f"만료된 토큰 {deleted}개 정리 완료")
+                except Exception as e:
+                    app.logger.error(f"토큰 정리 오류: {e}")
+            
+            def cleanup_sessions():
+                """만료된 세션 정리"""
+                try:
+                    deleted = UserSession.cleanup_expired_sessions()
+                    if deleted > 0:
+                        app.logger.info(f"만료된 세션 {deleted}개 정리 완료")
+                except Exception as e:
+                    app.logger.error(f"세션 정리 오류: {e}")
+            
+            # 1시간마다 토큰 정리
+            scheduler.add_job(
+                cleanup_tokens,
+                trigger=IntervalTrigger(hours=1),
+                id='cleanup_expired_tokens',
+                replace_existing=True
+            )
+            
+            # 1시간마다 세션 정리
+            scheduler.add_job(
+                cleanup_sessions,
+                trigger=IntervalTrigger(hours=1),
+                id='cleanup_expired_sessions',
+                replace_existing=True
+            )
+            
             # 앱 종료 시 스케줄러 종료
             import atexit
             atexit.register(lambda: scheduler.shutdown())

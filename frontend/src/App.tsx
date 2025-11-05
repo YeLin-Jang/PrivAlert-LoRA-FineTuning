@@ -3,6 +3,8 @@ import HomePage from './components/HomePage';
 import MyPage from './components/MyPage';
 import UploadForm from './components/UploadForm';
 import AdminRoutes from './routes/AdminRoutes';
+import AuthRoutes from './routes/AuthRoutes';
+import './App.css';
 
 function App() {
   return (
@@ -21,6 +23,7 @@ function App() {
           </div>
         } />
         <Route path="/admin/*" element={<AdminRoutes />} />
+        <Route path="/auth/*" element={<AuthRoutes />} />
       </Routes>
     </BrowserRouter>
   );
