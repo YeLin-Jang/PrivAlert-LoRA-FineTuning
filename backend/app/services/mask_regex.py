@@ -71,20 +71,6 @@ class MaskRegexService:
                 ("ADDRESS_GIL", re.compile(r"\d+(?:-\d+)?길")),
                 ("ADDRESS_SUBWAY", re.compile(r"[가-힣]+(역)")),
             ],
-            "driverLicense": [
-                # 운전면허번호: 구 형식 (예: 12-34-567890-12)
-                ("DRIVER_LICENSE_OLD", re.compile(r"\d{2}-\d{2}-\d{6}-\d{2}")),
-                # 운전면허번호: 신 형식 (예: 123456-123456)
-                ("DRIVER_LICENSE", re.compile(r"\b\d{6}-\d{6}\b")),
-                # 운전면허번호: 12자리 연속 숫자
-                ("DRIVER_LICENSE_CONTINUOUS", re.compile(r"\b\d{12}\b")),
-            ],
-            "postalCode": [
-                # 우편번호: 5자리 숫자 (예: 12345)
-                ("POSTAL_CODE", re.compile(r"\b\d{5}\b")),
-                # 우편번호: 6자리 숫자 (예: 123-456)
-                ("POSTAL_CODE_HYPHEN", re.compile(r"\b\d{3}-\d{3}\b")),
-            ],
             "workplace": None  # AI 모델 사용
         }
     
@@ -269,8 +255,6 @@ class MaskRegexService:
                 "account": "계좌번호",
                 "school": "학교명",
                 "address": "주소",
-                "driverLicense": "운전면허번호",
-                "postalCode": "우편번호",
                 "workplace": "직장명"
             }
             
