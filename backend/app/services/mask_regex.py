@@ -21,10 +21,10 @@ class MaskRegexService:
                 ("PHONE", re.compile(
                     r"(?<!\d)(?:"
                     r"\+82[-.\s]?\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}"   # +82 국가번호
-                    r"|010[-.\s]?\d{3,4}[-.\s]?\d{4}"                # 010 모바일
-                    r"|0\d{1,2}[-\).\s]?\d{3,4}[-.\s]?\d{4}"         # 지역번호 포함 일반 전화
-                    r"|\d{4}[-.\s]\d{4}"                               # 대표번호는 구분자 필수
-                    r")(?!\d)"  
+                    r"|010[-.\s]?\d{3,4}[-.\s]?\d{4}"                 # 010 휴대폰
+                    r"|02[-.\s]?\d{3,4}[-.\s]?\d{4}"                  # 02 지역번호
+                    r"|0[3-9]{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}"         # 기타 지역번호
+                    r")(?!\d)"
                 )),
             ],
             "rrn": [
@@ -56,7 +56,17 @@ class MaskRegexService:
             ],
             "account": [
                 # 계좌번호: 은행 포맷 (2~6자리)-(2~6자리)-(2~7자리), 구분자(하이픈/공백) 필수
-                ("ACCOUNT", re.compile(r"\b\d{2,6}[-\s]\d{2,6}[-\s]\d{2,7}\b")),
+                ("ACCOUNT", re.compile(
+                    r"(?<!\d)"
+                    # 전화번호 전체 패턴 제외 (한국 일반 전화 / 휴대폰 / 국제번호)
+                    r"(?!"
+                    r"(?:\+82[-.\s]?\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4})|"     # +82-10-XXXX-XXXX
+                    r"(?:0(?:10|11|16|17|18|19)[-.\s]?\d{3,4}[-.\s]?\d{4})|" # 010,011,016 등 휴대폰
+                    r"(?:0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4})"                # 02,031,053 등 지역번호
+                    r")"
+                    r"(?:\d{10,16}|\d{2,6}[-\s]?\d{2,6}[-\s]?\d{2,7})"
+                    r"(?!\d)"
+                )),
             ],
             "school": [
                 # 학교명 패턴 (정규표현식 기반)
@@ -70,20 +80,6 @@ class MaskRegexService:
                 ("ADDRESS_ROAD", re.compile(r"[가-힣]+(로|길)\s?\d{1,4}(-\d{1,4})?")),
                 ("ADDRESS_GIL", re.compile(r"\d+(?:-\d+)?길")),
                 ("ADDRESS_SUBWAY", re.compile(r"[가-힣]+(역)")),
-            ],
-            "driverLicense": [
-                # 운전면허번호: 구 형식 (예: 12-34-567890-12)
-                ("DRIVER_LICENSE_OLD", re.compile(r"\d{2}-\d{2}-\d{6}-\d{2}")),
-                # 운전면허번호: 신 형식 (예: 123456-123456)
-                ("DRIVER_LICENSE", re.compile(r"\b\d{6}-\d{6}\b")),
-                # 운전면허번호: 12자리 연속 숫자
-                ("DRIVER_LICENSE_CONTINUOUS", re.compile(r"\b\d{12}\b")),
-            ],
-            "postalCode": [
-                # 우편번호: 5자리 숫자 (예: 12345)
-                ("POSTAL_CODE", re.compile(r"\b\d{5}\b")),
-                # 우편번호: 6자리 숫자 (예: 123-456)
-                ("POSTAL_CODE_HYPHEN", re.compile(r"\b\d{3}-\d{3}\b")),
             ],
             "workplace": None  # AI 모델 사용
         }
@@ -203,13 +199,21 @@ class MaskRegexService:
 
             
             if category_results:
-                results["categories"][category] = {
-                    "count": category_count,
-                    "items": category_results
-                }
-                results["details"].extend(category_results)
-                results["total_count"] += category_count
-                results["detected"] = True
+                # 이미 탐지된 값 목록 (전화번호 등)
+                existing_values = {item["value"] for item in results["details"]}
+                unique_results = [
+                    item for item in category_results if item["value"] not in existing_values
+                ]
+
+                if unique_results:
+                    results["categories"][category] = {
+                        "count": len(unique_results),
+                        "items": unique_results
+                    }
+                    results["details"].extend(unique_results)
+                    results["total_count"] += len(unique_results)
+                    results["detected"] = True
+
         
         logger.info(f"정형 데이터 탐지 완료: 총 {results['total_count']}개 탐지")
         return results
@@ -269,8 +273,6 @@ class MaskRegexService:
                 "account": "계좌번호",
                 "school": "학교명",
                 "address": "주소",
-                "driverLicense": "운전면허번호",
-                "postalCode": "우편번호",
                 "workplace": "직장명"
             }
             

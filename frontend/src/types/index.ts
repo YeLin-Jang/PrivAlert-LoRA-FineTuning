@@ -179,8 +179,6 @@ export interface DetectionOptions extends Record<string, boolean> {
   workplace: boolean;
   name: boolean;
   address: boolean;
-  driverLicense: boolean;
-  postalCode: boolean;
 }
 
 // 비디오 분석 결과

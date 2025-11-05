@@ -172,7 +172,7 @@ export const filterStructuredData = async (
   const activeFilters = Object.entries(detectionOptions)
     .filter(([key, value]) => value && [
       'phone', 'rrn', 'passport', 'ip_address', 'email', 'account', 
-      'school', 'workplace', 'address', 'driverLicense', 'postalCode', 'name'
+      'school', 'workplace', 'address', 'name'
     ].includes(key))
     .map(([key]) => key);
   

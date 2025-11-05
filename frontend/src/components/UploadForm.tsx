@@ -41,8 +41,6 @@ export default function UploadForm() {
     workplace: false,
     name: false,
     address: false,
-    driverLicense: false,
-    postalCode: false,
   });
 
   // 비디오 파일 상태
@@ -583,9 +581,7 @@ export default function UploadForm() {
       school: false,
       name: false,
       address: false,
-      workplace: false,
-      driverLicense: false,
-      postalCode: false
+      workplace: false
     });
     
     // 에디터 초기화
@@ -962,22 +958,6 @@ export default function UploadForm() {
                       </span>
                     </div>
                     )}
-                    {detectionOptions.driverLicense && (
-                    <div className="stat-item">
-                      <span className="stat-label">운전면허번호</span>
-                      <span className={`stat-value ${(result.text_analysis?.structured_data?.categories?.driverLicense?.count || 0) > 0 ? 'detected' : 'safe'}`}>
-                        {result.text_analysis?.structured_data?.categories?.driverLicense?.count || 0}개
-                      </span>
-                    </div>
-                    )}
-                    {detectionOptions.postalCode && (
-                    <div className="stat-item">
-                      <span className="stat-label">우편번호</span>
-                      <span className={`stat-value ${(result.text_analysis?.structured_data?.categories?.postalCode?.count || 0) > 0 ? 'detected' : 'safe'}`}>
-                        {result.text_analysis?.structured_data?.categories?.postalCode?.count || 0}개
-                      </span>
-                    </div>
-                    )}
                   </div>
                 </div>
 
@@ -1246,32 +1226,6 @@ export default function UploadForm() {
                                 <h5 className="category-name">주소</h5>
                                 <div className="category-items">
                                   {result.text_analysis.structured_data.categories.address.items.map((item, index) => (
-                                    <div key={index} className="data-item">
-                                      <span className="data-type">[{item.type}]</span>
-                                      <span className="data-value">"{item.value}"</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            {detectionOptions.driverLicense && result.text_analysis.structured_data.categories.driverLicense && (
-                              <div className="category-item">
-                                <h5 className="category-name">운전면허번호</h5>
-                                <div className="category-items">
-                                  {result.text_analysis.structured_data.categories.driverLicense.items.map((item, index) => (
-                                    <div key={index} className="data-item">
-                                      <span className="data-type">[{item.type}]</span>
-                                      <span className="data-value">"{item.value}"</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            {detectionOptions.postalCode && result.text_analysis.structured_data.categories.postalCode && (
-                              <div className="category-item">
-                                <h5 className="category-name">우편번호</h5>
-                                <div className="category-items">
-                                  {result.text_analysis.structured_data.categories.postalCode.items.map((item, index) => (
                                     <div key={index} className="data-item">
                                       <span className="data-type">[{item.type}]</span>
                                       <span className="data-value">"{item.value}"</span>

@@ -179,8 +179,6 @@ class IntegratedFilterService:
             "account",       # 계좌번호
             "school",        # 학교명
             "address",       # 주소
-            "driverLicense", # 운전면허번호
-            "postalCode",    # 우편번호
             "workplace",     # 직장명 (AI 모델)
             "name"           # 이름 (AI 모델)
         ]
