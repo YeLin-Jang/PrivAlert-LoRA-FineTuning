@@ -28,7 +28,7 @@ tokenizers==0.15.0
 peft==0.7.1
 
 # Claude API dependencies (GPT 대신 Claude 사용)
-anthropic>=1.0.0
+anthropic>=0.72.0
 
 # Video processing and speech recognition dependencies
 openai-whisper==20231117
