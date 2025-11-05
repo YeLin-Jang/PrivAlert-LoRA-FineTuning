@@ -58,8 +58,69 @@ class IntegratedFilterService:
         
         logger.info(f"적용할 필터 목록: {filters}")
         
-        # 각 필터별로 처리
+        # 전화번호와 계좌번호가 함께 있는 경우 함께 처리
+        processed_filters = set()
+        
+        # 전화번호와 계좌번호를 함께 처리
+        if "phone" in filters and "account" in filters:
+            logger.info("전화번호와 계좌번호를 함께 처리합니다")
+            try:
+                detection_options = {"phone": True, "account": True}
+                detection_result = self.mask_service.detect_sensitive_data(text, detection_options)
+                masked_text = self.mask_service.mask_sensitive_data(text, detection_options)
+                
+                # 전화번호 결과
+                if "phone" in detection_result.get("categories", {}):
+                    phone_category = detection_result["categories"]["phone"]
+                    filter_results["phone"] = {
+                        "success": True,
+                        "detected_words": phone_category.get("items", []),
+                        "statistics": {
+                            "total_detected": phone_category.get("count", 0),
+                            "categories": {"phone": phone_category}
+                        },
+                        "filtered_text": masked_text
+                    }
+                    overall_statistics["total_detected"] += phone_category.get("count", 0)
+                
+                # 계좌번호 결과
+                if "account" in detection_result.get("categories", {}):
+                    account_category = detection_result["categories"]["account"]
+                    filter_results["account"] = {
+                        "success": True,
+                        "detected_words": account_category.get("items", []),
+                        "statistics": {
+                            "total_detected": account_category.get("count", 0),
+                            "categories": {"account": account_category}
+                        },
+                        "filtered_text": masked_text
+                    }
+                    overall_statistics["total_detected"] += account_category.get("count", 0)
+                
+                filtered_text = masked_text
+                processed_filters.add("phone")
+                processed_filters.add("account")
+            except Exception as e:
+                logger.error(f"전화번호/계좌번호 필터링 중 오류 발생: {e}")
+                filter_results["phone"] = {
+                    "success": False,
+                    "error": f"필터링 중 오류 발생: {e}",
+                    "detected_words": [],
+                    "statistics": {}
+                }
+                filter_results["account"] = {
+                    "success": False,
+                    "error": f"필터링 중 오류 발생: {e}",
+                    "detected_words": [],
+                    "statistics": {}
+                }
+                processed_filters.add("phone")
+                processed_filters.add("account")
+        
+        # 각 필터별로 처리 (이미 처리된 필터 제외)
         for filter_name in filters:
+            if filter_name in processed_filters:
+                continue
             logger.info(f"필터 처리 시작: {filter_name}")
             try:
                 # 이름 탐지 필터 처리
