@@ -27,8 +27,8 @@ transformers==4.35.2
 tokenizers==0.15.0
 peft==0.7.1
 
-# GPT API dependencies
-openai==2.0.1
+# Claude API dependencies (GPT 대신 Claude 사용)
+anthropic>=0.72.0
 
 # Video processing and speech recognition dependencies
 openai-whisper==20231117
