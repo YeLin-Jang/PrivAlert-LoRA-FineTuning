@@ -3,6 +3,9 @@ from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
 from app.utils.admin_decorators import admin_required, role_required
 from app.utils.logger import get_logger
+from app.models.user import User
+from app.extensions.database import db
+from sqlalchemy import or_, func
 
 logger = get_logger(__name__)
 
@@ -89,47 +92,63 @@ def get_users():
     try:
         page = int(request.args.get('page', 1))
         per_page = int(request.args.get('per_page', 10))
-        search = request.args.get('search', '').lower()
+        search = request.args.get('search', '').strip()
         role_filter = request.args.get('role')
         status_filter = request.args.get('is_active')
         
-        # 필터링
-        filtered_users = MOCK_USERS.copy()
+        # 기본 쿼리
+        query = User.query
         
+        # 검색 필터
         if search:
-            filtered_users = [
-                u for u in filtered_users
-                if search in u['username'].lower() or search in u.get('email', '').lower()
-            ]
+            search_pattern = f"%{search}%"
+            query = query.filter(
+                or_(
+                    User.email.ilike(search_pattern)
+                )
+            )
         
-        if role_filter:
-            filtered_users = [u for u in filtered_users if u['role'] == role_filter]
-        
+        # 상태 필터 (is_active)
         if status_filter is not None:
             is_active = status_filter.lower() == 'true'
-            filtered_users = [u for u in filtered_users if u['is_active'] == is_active]
+            query = query.filter(User.is_active == is_active)
+        
+        # 총 개수
+        total = query.count()
         
         # 페이지네이션
-        total = len(filtered_users)
-        start = (page - 1) * per_page
-        end = start + per_page
-        paginated_users = filtered_users[start:end]
+        offset = (page - 1) * per_page
+        users = query.order_by(User.created_at.desc()).offset(offset).limit(per_page).all()
+        
+        # 사용자 데이터 변환
+        paginated_users = []
+        for user in users:
+            user_dict = {
+                "id": user.id,
+                "email": user.email,
+                "role": "user",  # 일반 사용자는 role이 없으므로 기본값
+                "is_active": user.is_active if hasattr(user, 'is_active') else True,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
+                "last_login": user.last_login.isoformat() if hasattr(user, 'last_login') and user.last_login else None,
+                "email_verified": user.email_verified if hasattr(user, 'email_verified') else False,
+            }
+            paginated_users.append(user_dict)
         
         return jsonify({
             "success": True,
             "data": {
-                "users": paginated_users,
+                "data": paginated_users,  # 프론트엔드가 기대하는 형식: { data: [...], pagination: {...} }
                 "pagination": {
                     "page": page,
                     "per_page": per_page,
                     "total": total,
-                    "pages": (total + per_page - 1) // per_page
+                    "pages": (total + per_page - 1) // per_page if per_page > 0 else 0
                 }
             }
         }), 200
         
     except Exception as e:
-        logger.error(f"사용자 목록 조회 오류: {e}")
+        logger.error(f"사용자 목록 조회 오류: {e}", exc_info=True)
         return jsonify({
             "success": False,
             "error": "사용자 목록 조회 중 오류가 발생했습니다",
@@ -141,7 +160,7 @@ def get_users():
 def get_user(user_id):
     """사용자 상세 정보"""
     try:
-        user = next((u for u in MOCK_USERS if u['id'] == user_id), None)
+        user = User.query.get(user_id)
         if not user:
             return jsonify({
                 "success": False,
@@ -149,13 +168,23 @@ def get_user(user_id):
                 "code": 404
             }), 404
         
+        user_dict = {
+            "id": user.id,
+            "email": user.email,
+            "role": "user",
+            "is_active": user.is_active if hasattr(user, 'is_active') else True,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+            "last_login": user.last_login.isoformat() if hasattr(user, 'last_login') and user.last_login else None,
+            "email_verified": user.email_verified if hasattr(user, 'email_verified') else False,
+        }
+        
         return jsonify({
             "success": True,
-            "data": user
+            "data": user_dict
         }), 200
         
     except Exception as e:
-        logger.error(f"사용자 조회 오류: {e}")
+        logger.error(f"사용자 조회 오류: {e}", exc_info=True)
         return jsonify({
             "success": False,
             "error": "사용자 조회 중 오류가 발생했습니다",

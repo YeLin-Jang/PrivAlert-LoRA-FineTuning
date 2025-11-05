@@ -112,6 +112,60 @@ services:
           memory: 2G
           cpus: '1.0'
 
+  # ========== FastAPI Backend 서버 ==========
+  fastapi-backend:
+    build:
+      context: ./fastapi-backend
+      dockerfile: Dockerfile
+    image: ${DOCKER_USERNAME:-honghhj66}/privalert-fastapi:1.0
+    container_name: privalert-fastapi-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # 데이터베이스 연결 (Flask 백엔드와 같은 MySQL 사용)
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-privalert}
+      MYSQL_USER: ${MYSQL_USER:-privalert_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      
+      # CORS 설정
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      
+      # SMTP 설정
+      SMTP_SERVER: ${SMTP_SERVER:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_EMAIL: ${SMTP_EMAIL:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-${SMTP_EMAIL:-noreply@privalert.com}}
+      
+      # 보안 설정
+      SECRET_KEY: ${SECRET_KEY:-${FLASK_SECRET_KEY}}
+      DEBUG: ${DEBUG:-false}
+    ports:
+      - "${FASTAPI_PORT:-8000}:8000"
+    volumes:
+      # 코드 마운트 (개발 환경에서 핫 리로드)
+      - ./fastapi-backend:/app:ro
+    networks:
+      - privalert-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # 보안: 메모리 및 CPU 제한
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
   # ========== Frontend 서버 ==========
   frontend:
     build:
@@ -120,7 +174,8 @@ services:
       args:
         # 빌드 시 환경 변수
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:5000}
-    image: ${DOCKER_USERNAME:-honghhj66}/privalert:1.0
+        VITE_FASTAPI_BASE_URL: ${VITE_FASTAPI_BASE_URL:-http://localhost:8000}
+    image: ${DOCKER_USERNAME:-honghhj66}/privalert-frontend:1.0
     container_name: privalert-frontend
     restart: unless-stopped
     ports:
@@ -132,6 +187,7 @@ services:
       - privalert-network
     depends_on:
       - backend
+      - fastapi-backend
     # 보안: 메모리 및 CPU 제한
     deploy:
       resources:
