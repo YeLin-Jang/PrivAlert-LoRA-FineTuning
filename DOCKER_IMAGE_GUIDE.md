@@ -35,9 +35,9 @@ docker-compose build --no-cache
 # Docker Hub 사용자명으로 변경하세요
 export DOCKER_USERNAME=your-username
 
-# 이미지 태그 지정
-docker tag privalert-backend:latest ${DOCKER_USERNAME}/privalert-backend:latest
-docker tag privalert-frontend:latest ${DOCKER_USERNAME}/privalert-frontend:latest
+# 이미지 태그 지정 (docker-compose에서 빌드된 이미지 이름 사용)
+docker tag ${DOCKER_USERNAME}/privalert-backend:1.0 ${DOCKER_USERNAME}/privalert-backend:latest
+docker tag ${DOCKER_USERNAME}/privalert-frontend:1.0 ${DOCKER_USERNAME}/privalert-frontend:latest
 ```
 
 ### 4단계: Docker Hub에 푸시

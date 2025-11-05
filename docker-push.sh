@@ -20,6 +20,9 @@ if [ -z "$DOCKER_USERNAME" ]; then
     export DOCKER_USERNAME
 fi
 
+# 기본값 설정
+DOCKER_USERNAME=${DOCKER_USERNAME:-honghhj66}
+
 echo -e "${GREEN}Docker Hub 사용자명: ${DOCKER_USERNAME}${NC}"
 echo ""
 
@@ -34,14 +37,14 @@ docker-compose build --no-cache
 echo ""
 echo -e "${YELLOW}2. 이미지 태그 지정 중...${NC}"
 
-# 백엔드 이미지 태그
-docker tag privalert-backend:latest ${BACKEND_IMAGE} || {
+# 백엔드 이미지 태그 (docker-compose에서 빌드된 이미지 이름 사용)
+docker tag ${DOCKER_USERNAME}/privalert-backend:1.0 ${BACKEND_IMAGE} || {
     echo -e "${RED}백엔드 이미지를 찾을 수 없습니다. docker-compose build를 먼저 실행하세요.${NC}"
     exit 1
 }
 
-# 프론트엔드 이미지 태그
-docker tag privalert-frontend:latest ${FRONTEND_IMAGE} || {
+# 프론트엔드 이미지 태그 (docker-compose에서 빌드된 이미지 이름 사용)
+docker tag ${DOCKER_USERNAME}/privalert-frontend:1.0 ${FRONTEND_IMAGE} || {
     echo -e "${RED}프론트엔드 이미지를 찾을 수 없습니다. docker-compose build를 먼저 실행하세요.${NC}"
     exit 1
 }
