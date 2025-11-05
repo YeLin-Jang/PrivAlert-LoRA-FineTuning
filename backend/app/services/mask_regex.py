@@ -58,11 +58,11 @@ class MaskRegexService:
                 # 계좌번호: 은행 포맷 (2~6자리)-(2~6자리)-(2~7자리), 구분자(하이픈/공백) 필수
                 ("ACCOUNT", re.compile(
                     r"(?<!\d)"
-                    # 전화번호 전체 패턴 제외 (한국 일반 전화 / 휴대폰 / 국제번호)
                     r"(?!"
-                    r"(?:\+82[-.\s]?\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4})|"     # +82-10-XXXX-XXXX
-                    r"(?:0(?:10|11|16|17|18|19)[-.\s]?\d{3,4}[-.\s]?\d{4})|" # 010,011,016 등 휴대폰
-                    r"(?:0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4})"                # 02,031,053 등 지역번호
+                    r"(?:\+82[-.\s]?\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4})|"     # +82-... 전화
+                    r"(?:0(?:10|11|16|17|18|19)[-.\s]?\d{3,4}[-.\s]?\d{4})|" # 010~019 휴대폰
+                    r"(?:0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4})|"               # 02, 053 등 지역번호
+                    r"(?:1[5-9]\d{2}[-.\s]?\d{4})"                           # 1588-0000 같은 대표번호
                     r")"
                     r"(?:\d{10,16}|\d{2,6}[-\s]?\d{2,6}[-\s]?\d{2,7})"
                     r"(?!\d)"
@@ -189,6 +189,11 @@ class MaskRegexService:
                 for pattern_name, pattern in self.patterns[category]:
                     matches = pattern.findall(text)
                     if matches:
+                        # 계좌번호 탐지 시 전화번호로 이미 탐지된 값 제외
+                        if category == "account":
+                            phone_values = {item["value"] for item in results["details"] if item.get("category") == "phone"}
+                            matches = [m for m in matches if m not in phone_values]
+                        
                         for match in matches:
                             category_results.append({
                                 "type": pattern_name,
