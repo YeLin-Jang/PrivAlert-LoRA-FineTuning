@@ -34,9 +34,11 @@ backend/.idea/
 
 # 데이터/DB 
 backend/data/
-backend/static/temp/
 backend/*.sqlite
 backend/*.db
+
+# Flask static 빌드 결과물 (테스트 결과 이미지 등)
+backend/static/
 
 # 로그
 backend/logs/
@@ -65,6 +67,14 @@ Thumbs.db
 
 # ========== Docker ==========
 # (환경 변수는 루트 .env 사용)
+# Docker 이미지 파일 (export된 이미지)
+*.tar
+*.tar.gz
+*.docker
+# Docker 빌드 캐시
+.docker/
+# Docker 이미지 레이어 (로컬)
+docker-images/
 
 # ========== Python ==========
 __pycache__/
@@ -79,3 +89,14 @@ build/
 # ========== Node.js ==========
 package-lock.json
 yarn.lock
+
+# ========== 임시 파일 ==========
+backend/static/temp/
+*.swp
+*.swo
+*~
+
+# ========== 테스트 파일 ==========
+backend/tests/__pycache__/
+*.test.py
+*_test.py

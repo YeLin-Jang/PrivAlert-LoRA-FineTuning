@@ -30,6 +30,10 @@ from app.services.integrated_filter_service import IntegratedFilterService
 from app.services.mask_regex import mask_regex_service
 from app.utils.api_utils import APIResponse, handle_api_exception
 from app.utils.image_sanitize import sanitize_image
+from app.utils.file_cleanup import (
+    generate_session_id, register_file, cleanup_session_files,
+    cleanup_file, get_session_files
+)
 from config import BASE_DATA_DIR
 
 logger = logging.getLogger(__name__)
@@ -221,6 +225,11 @@ def analyze_content():
         if not is_valid:
             return APIResponse.error(error_msg or "텍스트 입력 검증 실패", code=400)
     
+    # 세션 ID 생성 또는 가져오기 (프론트엔드에서 전달 가능)
+    session_id = request.form.get('session_id') or request.headers.get('X-Session-ID')
+    if not session_id:
+        session_id = generate_session_id()
+    
     # 옵션 파라미터
     blur_fingers = request.form.get('blur_fingers', 'true').lower() in ['true', '1', 'yes']
     show_faces = request.form.get('show_faces', 'false').lower() in ['true', '1', 'yes']
@@ -289,6 +298,9 @@ def analyze_content():
                 with open(save_path, "wb") as f:
                     f.write(cleaned_bytes)
                 sanitized_url = f"/data/results/image/{new_name}"
+                
+                # 세션에 파일 등록 (자동 삭제를 위해)
+                register_file(session_id, save_path, BASE_DATA_DIR)
 
                 # 보안: 정제된 바이트도 메모리에서 정리 (파일 저장 후)
                 cleaned_bytes = None
@@ -362,12 +374,21 @@ def analyze_content():
                 
             if face_data.get("success"):
                 all_face_count += face_data["count"]
+                result_url = face_data.get("result_image_url")
+                # URL에서 실제 파일 경로 계산하여 세션에 등록
+                if result_url:
+                    # /data/results/face/... -> BASE_DATA_DIR/face/...
+                    rel_path = result_url.replace("/data/results/", "")
+                    file_path = os.path.join(BASE_DATA_DIR, rel_path)
+                    if os.path.exists(file_path):
+                        register_file(session_id, file_path, BASE_DATA_DIR)
+                
                 face_results.append({
                     "image_index": idx + 1,
                     "filename": image_file.filename,
                     "count": face_data["count"],
                     "faces": face_data["faces"] if show_faces else None,
-                    "result_image_url": face_data.get("result_image_url")
+                    "result_image_url": result_url
                 })
             
             # 손가락 검출 (항상 실행)
@@ -384,14 +405,23 @@ def analyze_content():
                 
             if hand_data.get("success"):
                 all_finger_count += hand_data["count"]
+                result_url = hand_data.get("result_image_url")
+                # URL에서 실제 파일 경로 계산하여 세션에 등록
+                if result_url:
+                    # /data/results/hand/... -> BASE_DATA_DIR/hand/...
+                    rel_path = result_url.replace("/data/results/", "")
+                    file_path = os.path.join(BASE_DATA_DIR, rel_path)
+                    if os.path.exists(file_path):
+                        register_file(session_id, file_path, BASE_DATA_DIR)
+                
                 hand_results.append({
                     "image_index": idx + 1,
                     "filename": image_file.filename,
                     "count": hand_data["count"],
                     "fingers": hand_data["fingers"] if blur_fingers else None,
-                    "result_image_url": hand_data.get("result_image_url")
+                    "result_image_url": result_url
                 })
-                logger.info(f"손가락 감지 성공: {hand_data['count']}개, 이미지 URL: {hand_data.get('result_image_url')}")
+                logger.info(f"손가락 감지 성공: {hand_data['count']}개, 이미지 URL: {result_url}")
             else:
                 logger.warning(f"손가락 감지 실패: {hand_data}")
             
@@ -531,7 +561,10 @@ def analyze_content():
     total_detected = (results["summary"]["faces_detected"] + 
                      results["summary"]["fingers_detected"] + 
                      (1 if results["summary"]["sensitive_text_found"] else 0))
-    logger.info(f"통합 분석 완료: {total_detected}개 민감 정보 감지")
+    logger.info(f"통합 분석 완료: {total_detected}개 민감 정보 감지, 세션 ID: {session_id}")
+    
+    # 응답에 session_id 포함 (프론트엔드에서 세션 종료 시 사용)
+    results["session_id"] = session_id
     
     # 보안: 원본 파일 데이터 메모리에서 정리
     # 이미 처리된 파일들은 메모리에서 제거됨
@@ -553,3 +586,68 @@ def analyze_content():
     gc.collect()  # 가비지 컬렉션 강제 실행
     
     return APIResponse.success({"data": results}, results["summary"]["message"])
+
+
+@integrated_analysis_bp.route('/cleanup', methods=['POST'])
+def cleanup_session():
+    """세션의 모든 파일 삭제"""
+    try:
+        session_id = request.json.get('session_id') or request.headers.get('X-Session-ID')
+        if not session_id:
+            return APIResponse.error("session_id가 필요합니다", code=400)
+        
+        deleted_count = cleanup_session_files(session_id, BASE_DATA_DIR)
+        return APIResponse.success(
+            {"deleted_count": deleted_count},
+            message=f"{deleted_count}개의 파일이 삭제되었습니다"
+        )
+    except Exception as e:
+        logger.error(f"세션 파일 정리 오류: {e}", exc_info=True)
+        return APIResponse.error("파일 정리 중 오류가 발생했습니다", code=500)
+
+
+@integrated_analysis_bp.route('/download/<path:filename>', methods=['GET'])
+def download_file(filename):
+    """파일 다운로드 후 삭제"""
+    from flask import send_from_directory, request
+    
+    try:
+        # 파일 경로 계산
+        rel_path = filename
+        file_path = os.path.join(BASE_DATA_DIR, rel_path)
+        
+        # 보안: 경로 검증
+        abs_path = os.path.abspath(file_path)
+        base_abs = os.path.abspath(BASE_DATA_DIR)
+        if not abs_path.startswith(base_abs):
+            logger.warning(f"경로 조작 시도: {filename}")
+            return APIResponse.error("잘못된 파일 경로입니다", code=403)
+        
+        if not os.path.exists(abs_path):
+            return APIResponse.error("파일을 찾을 수 없습니다", code=404)
+        
+        # 파일 다운로드
+        directory = os.path.dirname(abs_path)
+        file_name = os.path.basename(abs_path)
+        response = send_from_directory(directory, file_name, as_attachment=True)
+        
+        # 다운로드 후 파일 삭제 (백그라운드에서)
+        session_id = request.args.get('session_id') or request.headers.get('X-Session-ID')
+        if session_id:
+            # 다운로드 완료 후 삭제 (약간의 지연)
+            import threading
+            def delayed_delete():
+                import time
+                time.sleep(2)  # 다운로드 완료 대기
+                cleanup_file(abs_path, BASE_DATA_DIR)
+            
+            thread = threading.Thread(target=delayed_delete, daemon=True)
+            thread.start()
+        else:
+            # 세션 ID가 없으면 바로 삭제
+            cleanup_file(abs_path, BASE_DATA_DIR)
+        
+        return response
+    except Exception as e:
+        logger.error(f"파일 다운로드 오류: {e}", exc_info=True)
+        return APIResponse.error("파일 다운로드 중 오류가 발생했습니다", code=500)

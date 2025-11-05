@@ -47,3 +47,6 @@ SQLAlchemy==2.0.23
 PyMySQL==1.1.0
 cryptography==41.0.7
 
+# 백그라운드 작업 스케줄러
+APScheduler==3.10.4
+

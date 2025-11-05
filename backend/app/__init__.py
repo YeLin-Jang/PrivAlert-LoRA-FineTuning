@@ -114,10 +114,11 @@ def create_app(config_name=None):
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False  # 데코레이터에서 직접 설정
     app.config["JWT_REFRESH_TOKEN_EXPIRES"] = False  # 데코레이터에서 직접 설정
     app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies"]
-    app.config["JWT_COOKIE_CSRF_PROTECT"] = False  # 개발 환경에서는 비활성화 (프로덕션에서는 True)
+    # CSRF 보호: 프로덕션에서는 활성화, 개발 환경에서는 선택적
+    app.config["JWT_COOKIE_CSRF_PROTECT"] = flask_env == "production"
     app.config["JWT_COOKIE_SECURE"] = flask_env == "production"
     app.config["JWT_COOKIE_HTTPONLY"] = True
-    app.config["JWT_COOKIE_SAMESITE"] = "Lax"
+    app.config["JWT_COOKIE_SAMESITE"] = "Lax"  # CSRF 공격 방지
     
     jwt = JWTManager(app)
     
@@ -385,6 +386,7 @@ def create_app(config_name=None):
     from app.routes.name_detection_routes import name_detection_bp
     from app.routes.admin_auth_routes import admin_auth_bp
     from app.routes.admin_routes import admin_bp
+    from app.routes.secure_upload_routes import secure_upload_bp
     from app.routes.video_processing_routes import video_bp
 
     
@@ -394,7 +396,8 @@ def create_app(config_name=None):
     app.register_blueprint(workplace_bp, url_prefix="/api/v1/workplace")
     app.register_blueprint(name_detection_bp, url_prefix="/api/v1/name")
     app.register_blueprint(admin_auth_bp, url_prefix="/api/v1/admin/auth")
-    app.register_blueprint(admin_bp, url_prefix="/api/v1/admin")  
+    app.register_blueprint(admin_bp, url_prefix="/api/v1/admin")
+    app.register_blueprint(secure_upload_bp, url_prefix="/api/v1")  
     app.register_blueprint(video_bp, url_prefix="/api/v1/video")
     
     # 데이터베이스 초기화 (테이블 생성 및 기본 계정 생성)
@@ -404,7 +407,47 @@ def create_app(config_name=None):
             init_database()
         except Exception as e:
             app.logger.warning(f"데이터베이스 초기화 실패 (건너뜀): {e}")
-            # 개발 환경에서는 데이터베이스 없이도 실행 가능  
+            # 개발 환경에서는 데이터베이스 없이도 실행 가능
+        
+        # 파일 자동 정리 시스템 초기화
+        try:
+            from app.utils.file_cleanup import load_session_tracker, start_cleanup_thread
+            load_session_tracker(BASE_DATA_DIR)
+            start_cleanup_thread(BASE_DATA_DIR)
+            app.logger.info("파일 자동 정리 시스템 초기화 완료")
+        except Exception as e:
+            app.logger.warning(f"파일 자동 정리 시스템 초기화 실패: {e}")
+        
+        # CSRF 토큰 자동 정리 시스템 초기화
+        try:
+            import threading
+            import time
+            from app.utils.csrf_protection import cleanup_expired_tokens
+            
+            def csrf_cleanup_loop():
+                while True:
+                    try:
+                        time.sleep(3600)  # 1시간마다 정리
+                        cleanup_expired_tokens()
+                    except Exception as e:
+                        app.logger.error(f"CSRF 토큰 정리 오류: {e}")
+            
+            thread = threading.Thread(target=csrf_cleanup_loop, daemon=True)
+            thread.start()
+            app.logger.info("CSRF 토큰 자동 정리 시스템 초기화 완료")
+        except Exception as e:
+            app.logger.warning(f"CSRF 토큰 자동 정리 시스템 초기화 실패: {e}")
+        
+        # 백그라운드 파일 정리 작업 초기화
+        try:
+            from app.tasks.cleanup_worker import start_cleanup_scheduler
+            scheduler = start_cleanup_scheduler()
+            app.logger.info("백그라운드 파일 정리 작업 초기화 완료")
+            # 앱 종료 시 스케줄러 종료
+            import atexit
+            atexit.register(lambda: scheduler.shutdown())
+        except Exception as e:
+            app.logger.warning(f"백그라운드 파일 정리 작업 초기화 실패: {e}")  
     
     # 루트 경로
     @app.route("/")
