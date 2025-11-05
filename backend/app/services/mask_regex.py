@@ -4,8 +4,8 @@ import logging
 from typing import Dict, List
 
 from ..data.schools import school_list
-from ..data.addresses import address_list
 from .workplace_detection_service import workplace_detection_service
+from .address_detection_service import address_detection_service
 
 
 logger = logging.getLogger(__name__)
@@ -63,14 +63,7 @@ class MaskRegexService:
                 ("SCHOOL_FULL", re.compile(r"[가-힣]{2,}(?:초등학교|중학교|고등학교|대학교)")),
                 ("SCHOOL_SHORT", re.compile(r"[가-힣]{2,}(?:고교|대학|여대)")),
             ],
-            "address": [
-                # 주소
-                ("ADDRESS_AREA", re.compile(r"[가-힣]{2,}(특별시|광역시|특별자치도|특별자치시|읍)")),
-                ("ADDRESS_NUMBER", re.compile(r"\d{1,4}(-\d{1,4})?번지")),
-                ("ADDRESS_ROAD", re.compile(r"[가-힣]+(로|길)\s?\d{1,4}(-\d{1,4})?")),
-                ("ADDRESS_GIL", re.compile(r"\d+(?:-\d+)?길")),
-                ("ADDRESS_SUBWAY", re.compile(r"[가-힣]+(역)")),
-            ],
+            "address": None,  # Postcodify 서비스 사용
             "driverLicense": [
                 # 운전면허번호: 구 형식 (예: 12-34-567890-12)
                 ("DRIVER_LICENSE_OLD", re.compile(r"\d{2}-\d{2}-\d{6}-\d{2}")),
@@ -143,34 +136,13 @@ class MaskRegexService:
                 category_count += len(list_schools)
 
             elif category == "address":
-                # 1. 정규표현식으로 탐지
-                for pattern_name, pattern in self.patterns[category]:
-                    matches = pattern.findall(text)
-                    if matches:
-                        for match in matches:
-                            category_results.append({
-                                "type": pattern_name,
-                                "value": match,
-                                "category": category
-                            })
-                            category_count += 1
-
-                # 2. 사전 기반 탐지
-                for addr in address_list:
-                    start_pos = 0
-                    while True:
-                        pos = text.find(addr, start_pos)
-                        if pos == -1:
-                            break
-                        category_results.append({
-                            "type": "ADDRESS_LIST",
-                            "value": addr,
-                            "category": category,
-                            "start": pos,
-                            "end": pos + len(addr)
-                        })
-                        category_count += 1
-                        start_pos = pos + 1
+                # Postcodify 서비스를 사용한 주소 탐지
+                try:
+                    detected_addresses = address_detection_service.detect_addresses_in_text(text)
+                    category_results.extend(detected_addresses)
+                    category_count += len(detected_addresses)
+                except Exception as e:
+                    logger.error(f"주소 탐지 중 오류: {e}")
             elif category == "workplace":
                 # AI 모델을 사용한 직장명 탐지
                 try:
@@ -287,13 +259,11 @@ class MaskRegexService:
                     if school in masked_text:
                         masked_text = masked_text.replace(school, f"[{category_labels.get(category, category.upper())}]")
             elif category == "address":
-                # 1. 정규표현식으로 마스킹
-                for pattern_name, pattern in self.patterns[category]:
-                    masked_text = pattern.sub("[주소]", masked_text)
-
-                # 2. 사전 기반 마스킹
-                for addr in address_list:
-                    masked_text = masked_text.replace(addr, "[주소]")
+                # Postcodify 서비스를 사용한 주소 마스킹
+                try:
+                    masked_text = address_detection_service.mask_addresses(masked_text)
+                except Exception as e:
+                    logger.error(f"주소 마스킹 중 오류: {e}")
             elif category == "workplace":
                 # AI 모델을 사용한 직장명 마스킹
                 try:
