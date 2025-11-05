@@ -117,9 +117,7 @@ services:
     ports:
       - "${FRONTEND_PORT:-3000}:80"
     volumes:
-      # 프로덕션에서는 빌드된 파일만 사용 (개발 환경에서만 필요)
-      - ./frontend/dist:/usr/share/nginx/html:ro
-      # Nginx 보안 설정 파일 마운트
+      # Nginx 보안 설정 파일 마운트 (빌드된 파일은 이미지 안에 포함됨)
       - ./docker/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
       - privalert-network
