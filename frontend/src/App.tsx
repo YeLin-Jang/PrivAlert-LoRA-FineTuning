@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import UploadForm from './components/UploadForm';
 import AdminRoutes from './routes/AdminRoutes';
+import AuthRoutes from './routes/AuthRoutes';
 import './App.css';
 
 function App() {
@@ -13,6 +14,7 @@ function App() {
           </div>
         } />
         <Route path="/admin/*" element={<AdminRoutes />} />
+        <Route path="/auth/*" element={<AuthRoutes />} />
       </Routes>
     </BrowserRouter>
   );

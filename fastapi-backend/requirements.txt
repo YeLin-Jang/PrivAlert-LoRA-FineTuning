@@ -1,0 +1,30 @@
+# FastAPI 및 서버
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.6.1  # 사전 빌드된 wheel 사용
+pydantic-settings==2.1.0  # 사전 빌드된 wheel 사용
+
+# 데이터베이스
+sqlalchemy[asyncio]==2.0.35  # 호환성 개선 버전
+aiosqlite==0.20.0  # SQLite 비동기 드라이버 (옵션)
+aiomysql==0.2.0  # MySQL 비동기 드라이버 (Flask 백엔드와 같은 DB 사용)
+# PostgreSQL 사용 시: asyncpg==0.29.0
+
+# 비밀번호 해싱
+bcrypt==4.1.2
+
+# Redis (선택사항)
+redis[hiredis]==5.0.1
+
+# 환경 변수 관리
+python-dotenv==1.0.1
+
+# 이메일 전송
+# SMTP는 Python 표준 라이브러리 사용 (추가 패키지 불필요)
+
+# CORS
+python-multipart==0.0.6
+
+# 이메일 검증 (EmailStr 사용 시 필요)
+email-validator==2.1.0
+
