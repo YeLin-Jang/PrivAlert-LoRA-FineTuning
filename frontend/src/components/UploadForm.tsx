@@ -5,12 +5,14 @@ import { validateTextLength, validateFileCount } from '../utils/validation';
 import { UPLOAD_LIMITS, ERROR_MESSAGES, API_CONFIG } from '../constants';
 import { DetectionOptionsPanel } from './DetectionOptionsPanel';
 import { FileUploader } from './FileUploader';
+import CommonHeader from './CommonHeader';
 import { 
   secureFilesCleanup, 
   secureTextCleanup, 
   secureURLCleanup,
   secureLog 
 } from '../utils/security';
+import '../App.css';
 
 export default function UploadForm() {
   const [files, setFiles] = useState<File[]>([]);
@@ -597,10 +599,7 @@ export default function UploadForm() {
 
   return (
     <div className="container">
-      <header className="header">
-        <h1>🔔 PrivAlert</h1>
-        <p className="subtitle">개인정보 보호 분석 시스템</p>
-      </header>
+      <CommonHeader />
       
       {/* 비디오 업로드 섹션 */}
       <section className="video-upload-section">

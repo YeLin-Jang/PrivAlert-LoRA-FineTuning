@@ -123,14 +123,40 @@ def create_app(config_name=None):
     jwt = JWTManager(app)
     
     # 데이터베이스 초기화
+    # 보안: Docker 환경 감지 및 MySQL 호스트 설정
+    # Docker 컨테이너 내부에서는 'mysql' 호스트 사용 (Docker 네트워크)
+    # 로컬 실행 시에는 환경 변수에 따라 설정 (기본값: localhost)
+    is_docker_container = os.path.exists('/.dockerenv') or os.getenv('DOCKER_ENV') == 'true'
+    
+    if is_docker_container:
+        # Docker 컨테이너 내부: 'mysql' 호스트 사용 (보안: 내부 네트워크만)
+        if os.getenv('MYSQL_HOST') != 'mysql':
+            app.logger.warning(f"Docker 환경에서 MYSQL_HOST가 'mysql'이 아닙니다: {os.getenv('MYSQL_HOST')}")
+        app.logger.info("Docker 컨테이너 환경 감지: MySQL 호스트 'mysql' 사용 (내부 네트워크)")
+    else:
+        # 로컬 실행 환경: 'mysql' 호스트를 'localhost'로 자동 변경
+        mysql_host = os.getenv('MYSQL_HOST', 'localhost')
+        if mysql_host == 'mysql':
+            app.logger.warning(
+                "로컬 실행 환경에서 MYSQL_HOST='mysql'로 설정되어 있습니다. "
+                "자동으로 'localhost'로 변경합니다."
+            )
+            os.environ['MYSQL_HOST'] = 'localhost'
+            mysql_host = 'localhost'
+        app.logger.info(f"로컬 실행 환경: MySQL 호스트 '{mysql_host}' 사용")
+    
+    # 보안: 데이터베이스 연결 시도
     try:
         init_db(app)
         app.logger.info("데이터베이스 연결 성공")
     except Exception as e:
         app.logger.error(f"데이터베이스 연결 실패: {e}")
-        # 개발 환경에서는 데이터베이스 없이도 실행 가능
+        # 보안: 프로덕션 환경에서는 데이터베이스 연결 실패 시 중단
         if flask_env == "production":
             raise
+        else:
+            # 개발 환경에서는 경고만 출력하고 계속 진행 (더미 데이터 사용 가능)
+            app.logger.warning("개발 환경: 데이터베이스 연결 실패했지만 계속 진행합니다")
     
     # Rate Limiter 설정
     limiter = Limiter(
@@ -388,6 +414,8 @@ def create_app(config_name=None):
     from app.routes.admin_routes import admin_bp
     from app.routes.secure_upload_routes import secure_upload_bp
     from app.routes.video_processing_routes import video_bp
+    from app.routes.user_auth_routes import user_auth_bp
+    from app.routes.user_routes import user_bp
     
     # NER 라우트 등록 (선택적 - 모델이 없는 경우에도 앱이 실행되도록)
     try:
@@ -408,6 +436,32 @@ def create_app(config_name=None):
     app.register_blueprint(admin_bp, url_prefix="/api/v1/admin")
     app.register_blueprint(secure_upload_bp, url_prefix="/api/v1")  
     app.register_blueprint(video_bp, url_prefix="/api/v1/video")
+    app.register_blueprint(user_auth_bp, url_prefix="/api/v1/user/auth")
+    app.register_blueprint(user_bp, url_prefix="/api/v1/user")
+    # 더미 사용자 라우트 (인증 없이 접근 가능)
+    from app.routes.dummy_user_routes import dummy_user_bp
+    app.register_blueprint(dummy_user_bp, url_prefix="/api/v1")
+    
+    # 보안: 인증 관련 엔드포인트에 더 엄격한 Rate Limiting 적용 (라우트 등록 후)
+    try:
+        # 회원가입: 분당 5회 제한
+        limiter.limit("5 per minute")(user_auth_bp.view_functions['register'])
+        # 로그인: 분당 10회 제한 (브루트포스 공격 방지)
+        limiter.limit("10 per minute")(user_auth_bp.view_functions['login'])
+        app.logger.info("사용자 인증 Rate Limiter 적용 완료")
+    except (KeyError, AttributeError) as e:
+        # 라우트가 아직 등록되지 않은 경우 경고만 출력
+        app.logger.warning(f"Rate Limiter 적용 실패: {e}")
+    
+    # 보안: 비밀번호 확인 및 변경 엔드포인트에 Rate Limiting 적용
+    try:
+        # 비밀번호 확인: 분당 5회 제한 (브루트포스 공격 방지)
+        limiter.limit("5 per minute")(dummy_user_bp.view_functions['verify_demo_password'])
+        # 비밀번호 변경: 5분에 3회 제한 (브루트포스 공격 방지)
+        limiter.limit("3 per 5 minutes")(dummy_user_bp.view_functions['change_demo_password'])
+        app.logger.info("비밀번호 확인 및 변경 Rate Limiter 적용 완료")
+    except (KeyError, AttributeError) as e:
+        app.logger.warning(f"비밀번호 확인 및 변경 Rate Limiter 적용 실패: {e}")
     
     # 데이터베이스 초기화 (테이블 생성 및 기본 계정 생성)
     with app.app_context():

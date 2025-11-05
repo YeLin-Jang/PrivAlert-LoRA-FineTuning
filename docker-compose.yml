@@ -68,7 +68,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       
       # API 키 (보안: 환경 변수로 관리)
-      GOOGLE_CLOUD_CREDENTIALS_JSON: ${GOOGLE_CLOUD_CREDENTIALS_JSON}
+      # GOOGLE_CLOUD_CREDENTIALS_JSON은 더 이상 사용하지 않음 (EasyOCR 사용)
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       
       # JWT 설정

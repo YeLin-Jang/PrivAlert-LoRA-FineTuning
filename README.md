@@ -147,7 +147,7 @@ python wsgi.py
 
 **주의사항:**
 - `python-magic`가 Windows에서 동작하지 않을 경우 `python-magic-bin` 사용을 고려하세요.
-- 환경변수 설정이 필요합니다 (Google Cloud Vision API, OpenAI API 키 등)
+- 환경변수 설정이 필요합니다 (OpenAI API 키 등)
 
 ### 3. Frontend 설정 및 실행
 

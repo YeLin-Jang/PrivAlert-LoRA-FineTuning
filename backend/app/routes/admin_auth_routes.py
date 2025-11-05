@@ -326,7 +326,26 @@ def change_password():
         
         claims = get_jwt()
         username = claims.get('username')
-        user_id = int(get_jwt_identity())
+        
+        # 보안: user_id는 정수로 변환 (안전한 변환)
+        try:
+            user_id = int(get_jwt_identity())
+        except (ValueError, TypeError):
+            logger.warning(f"잘못된 user_id 형식: {get_jwt_identity()}")
+            return jsonify({
+                "success": False,
+                "error": "인증 정보가 올바르지 않습니다",
+                "code": 401
+            }), 401
+        
+        # 보안: user_id 범위 검증
+        if user_id <= 0:
+            logger.warning(f"잘못된 user_id 값: {user_id}")
+            return jsonify({
+                "success": False,
+                "error": "인증 정보가 올바르지 않습니다",
+                "code": 401
+            }), 401
         
         # 보안: 데이터베이스에서 사용자 조회
         user = AdminUser.query.get(user_id)

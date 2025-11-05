@@ -1,41 +1,35 @@
 import os
-import json
 import logging
+import tempfile
 from typing import Optional
-from google.cloud import vision
-from google.oauth2 import service_account
+import easyocr
 
 logger = logging.getLogger(__name__)
 
 class OCRService:
-    """Google Cloud Vision API를 사용한 OCR 서비스"""
+    """EasyOCR을 사용한 OCR 서비스"""
     
     def __init__(self):
-        self._client = None
-        self._credentials_loaded = False
+        self._reader = None
     
     @property
-    def client(self) -> vision.ImageAnnotatorClient:
-        """Vision API 클라이언트 (lazy loading)"""
-        if self._client is None:
-            self._client = self._create_client()
-        return self._client
+    def reader(self):
+        """EasyOCR 리더 (lazy loading)"""
+        if self._reader is None:
+            self._reader = self._create_reader()
+        return self._reader
     
-    def _create_client(self) -> vision.ImageAnnotatorClient:
-        """Vision API 클라이언트 생성"""
-        credentials_json = os.getenv('GOOGLE_CLOUD_CREDENTIALS_JSON')
-        
-        if not credentials_json:
-            raise ValueError("GOOGLE_CLOUD_CREDENTIALS_JSON 환경변수가 설정되지 않았습니다")
-        
+    def _create_reader(self):
+        """EasyOCR 리더 생성 (한국어, 영어 지원)"""
         try:
-            credentials_info = json.loads(credentials_json)
-            credentials = service_account.Credentials.from_service_account_info(credentials_info)
-            return vision.ImageAnnotatorClient(credentials=credentials)
-        except json.JSONDecodeError:
-            raise ValueError("GOOGLE_CLOUD_CREDENTIALS_JSON이 올바른 JSON 형식이 아닙니다")
+            # 한국어(ko)와 영어(en) 지원
+            # GPU 사용 가능 시 자동으로 GPU 사용, 없으면 CPU 사용
+            reader = easyocr.Reader(['ko', 'en'], gpu=False)
+            logger.info("EasyOCR 리더 초기화 완료")
+            return reader
         except Exception as e:
-            raise ValueError(f"Google Cloud 자격증명 설정 오류: {str(e)}")
+            logger.error(f"EasyOCR 초기화 오류: {str(e)}")
+            raise ValueError(f"EasyOCR 초기화 실패: {str(e)}")
     
     def detect_text(self, file_path: str) -> Optional[str]:
         """
@@ -49,34 +43,30 @@ class OCRService:
             
         Raises:
             FileNotFoundError: 파일이 존재하지 않는 경우
-            ValueError: 자격증명 오류
         """
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"파일을 찾을 수 없습니다: {file_path}")
         
         try:
-            with open(file_path, "rb") as f:
-                content = f.read()
+            # EasyOCR로 텍스트 추출
+            results = self.reader.readtext(file_path)
             
-            if not content:
-                logger.warning(f"빈 파일입니다: {file_path}")
-                return None
-            
-            image = vision.Image(content=content)
-            response = self.client.text_detection(image=image)
-            
-            # API 오류 확인
-            if response.error.message:
-                logger.error(f"Vision API 오류: {response.error.message}")
-                return None
-            
-            # 텍스트 추출
-            texts = response.text_annotations
-            if not texts:
+            if not results:
                 logger.info(f"텍스트가 감지되지 않음: {file_path}")
                 return None
             
-            extracted_text = texts[0].description.strip()
+            # 결과를 텍스트로 결합
+            # EasyOCR 결과 형식: [(bbox, text, confidence), ...]
+            extracted_lines = []
+            for (bbox, text, confidence) in results:
+                if text.strip():  # 빈 텍스트 제외
+                    extracted_lines.append(text.strip())
+            
+            if not extracted_lines:
+                logger.info(f"텍스트가 감지되지 않음: {file_path}")
+                return None
+            
+            extracted_text = '\n'.join(extracted_lines)
             logger.info(f"텍스트 추출 완료: {len(extracted_text)}자")
             
             return extracted_text if extracted_text else None
@@ -95,32 +85,27 @@ class OCRService:
         Returns:
             추출된 텍스트 또는 None (텍스트가 없는 경우)
         """
+        if not image_data:
+            logger.warning("빈 이미지 데이터입니다")
+            return None
+        
+        temp_file_path = None
         try:
-            if not image_data:
-                logger.warning("빈 이미지 데이터입니다")
-                return None
+            # 임시 파일로 저장
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
+                temp_file.write(image_data)
+                temp_file_path = temp_file.name
             
-            image = vision.Image(content=image_data)
-            response = self.client.text_detection(image=image)
-            
-            # API 오류 확인
-            if response.error.message:
-                logger.error(f"Vision API 오류: {response.error.message}")
-                return None
-            
-            # 텍스트 추출
-            texts = response.text_annotations
-            if not texts:
-                logger.info("텍스트가 감지되지 않았습니다")
-                return None
-            
-            # 첫 번째 텍스트 (전체 텍스트) 추출
-            extracted_text = texts[0].description.strip()
-            
-            logger.info(f"텍스트 추출 완료: {len(extracted_text)}자")
-            
-            return extracted_text if extracted_text else None
+            # 파일 경로를 사용하여 텍스트 추출
+            return self.detect_text(temp_file_path)
             
         except Exception as e:
             logger.error(f"OCR 처리 중 오류 발생: {str(e)}")
             raise
+        finally:
+            # 임시 파일 삭제
+            if temp_file_path and os.path.exists(temp_file_path):
+                try:
+                    os.remove(temp_file_path)
+                except Exception as e:
+                    logger.warning(f"임시 파일 삭제 실패: {e}")
