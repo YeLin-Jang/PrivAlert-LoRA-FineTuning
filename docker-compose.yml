@@ -1,7 +1,7 @@
 # Docker Compose 설정 파일
 # Backend, Frontend, MySQL을 포함한 완전한 개발 환경
 # 환경 변수는 프로젝트 루트의 .env 파일에서 자동 로드됩니다
-version: '3.8'
+# version 속성은 더 이상 사용되지 않습니다 (제거됨)
 
 services:
   # ========== MySQL 데이터베이스 ==========
@@ -48,8 +48,11 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: ${DOCKER_USERNAME:-honghhj66}/privalert:1.0
     container_name: privalert-backend
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       # Flask 설정
       FLASK_ENV: ${FLASK_ENV:-development}
@@ -76,6 +79,12 @@ services:
       
       # 파일 업로드 제한
       MAX_CONTENT_LENGTH: ${MAX_CONTENT_LENGTH:-100}
+      
+      # 기본 관리자 계정 설정 (보안: 비밀번호는 환경 변수에서 가져옴)
+      DEFAULT_ADMIN_USERNAME: ${DEFAULT_ADMIN_USERNAME:-admin}
+      DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD}
+      DEFAULT_SUPER_ADMIN_USERNAME: ${DEFAULT_SUPER_ADMIN_USERNAME:-super_admin}
+      DEFAULT_SUPER_ADMIN_PASSWORD: ${DEFAULT_SUPER_ADMIN_PASSWORD}
     ports:
       - "${BACKEND_PORT:-5000}:5000"
     volumes:
@@ -83,7 +92,6 @@ services:
       - ./backend:/app:ro
       # 데이터 영속성 (분석 결과 저장)
       - backend_data:/app/data
-      - backend_static:/app/static
       # AI 모델 (읽기 전용)
       - ./backend/models:/app/models:ro
     networks:
@@ -112,6 +120,7 @@ services:
       args:
         # 빌드 시 환경 변수
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:5000}
+    image: ${DOCKER_USERNAME:-honghhj66}/privalert:1.0
     container_name: privalert-frontend
     restart: unless-stopped
     ports:
@@ -148,7 +157,5 @@ volumes:
     driver: local
     # 보안: 볼륨 권한 설정 (선택사항)
   backend_data:
-    driver: local
-  backend_static:
     driver: local
 

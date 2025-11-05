@@ -79,11 +79,13 @@ class AdminUser(db.Model):
         return AdminUser.query.filter_by(username=username).first()
     
     @staticmethod
-    def create_default_admin(username: str = 'admin', password: str = 'admin123!', role: str = 'admin') -> 'AdminUser':
+    def create_default_admin(username: str = 'admin', password: str = None, role: str = 'admin') -> 'AdminUser':
         """
         기본 관리자 계정 생성 (초기화용)
-        보안: 프로덕션에서는 반드시 비밀번호 변경 필요
+        보안: 비밀번호는 환경 변수에서 가져와야 하며, 해시화되어 저장됨
         """
+        if not password:
+            raise ValueError("비밀번호는 필수입니다. 환경 변수에서 설정하세요.")
         admin = AdminUser(
             username=username,
             role=role,
