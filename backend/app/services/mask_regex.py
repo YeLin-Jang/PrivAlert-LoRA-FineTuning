@@ -30,9 +30,12 @@ class MaskRegexService:
                 ("RRN", re.compile(r"\d{6}-?\d{7}")),
             ],
             "passport": [
-                ("PASSPORT1", re.compile(r"[A-Za-z]\d{3}[A-Za-z]\d{4}", re.IGNORECASE)),
-                ("PASSPORT2", re.compile(r"[A-Za-z]\d{8}", re.IGNORECASE)),
-                ("PASSPORT3", re.compile(r"[A-Za-z]{2}\d{7}", re.IGNORECASE)),
+                ("PASSPORT", re.compile(
+                    r"(?:[A-Za-z]\d{3}[A-Za-z]\d{4}"
+                    r"|[A-Za-z]\d{8}"
+                    r"|[A-Za-z]{2}\d{7})",
+                    re.IGNORECASE
+                )),
             ],
             "ip_address": [
                 ("IPV4", re.compile(
@@ -53,15 +56,19 @@ class MaskRegexService:
                 ("ACCOUNT", re.compile(r"\b\d{2,6}[-\s]\d{2,6}[-\s]\d{2,7}\b")),
             ],
             "school": [
-                ("SCHOOL_FULL", re.compile(r"[가-힣]{2,}(?:초등학교|중학교|고등학교|대학교)")),
-                ("SCHOOL_SHORT", re.compile(r"[가-힣]{2,}(?:고교|대학|여대)")),
+                ("SCHOOL", re.compile(
+                    r"(?:[가-힣]{2,}(?:초등학교|중학교|고등학교|대학교)"
+                    r"|[가-힣]{2,}(?:고교|대학|여대))"
+                )),
             ],
             "address": [
-                ("ADDRESS_AREA", re.compile(r"[가-힣]{2,}(특별시|광역시|특별자치도|특별자치시|읍)")),
-                ("ADDRESS_NUMBER", re.compile(r"\d{1,4}(-\d{1,4})?번지")),
-                ("ADDRESS_ROAD", re.compile(r"[가-힣]+(로|길)\s?\d{1,4}(-\d{1,4})?")),
-                ("ADDRESS_GIL", re.compile(r"\d+(?:-\d+)?길")),
-                ("ADDRESS_SUBWAY", re.compile(r"[가-힣]+(역)")),
+                ("ADDRESS", re.compile(
+                    r"(?:[가-힣]{2,}(?:특별시|광역시|특별자치도|특별자치시|읍)"
+                    r"|\d{1,4}(?:-\d{1,4})?번지"
+                    r"|[가-힣]+(?:로|길)\s?\d{1,4}(?:-\d{1,4})?"
+                    r"|\d+(?:-\d+)?길"
+                    r"|[가-힣]+역)"
+                )),
             ],
             "workplace": None  # AI 모델 사용
         }
