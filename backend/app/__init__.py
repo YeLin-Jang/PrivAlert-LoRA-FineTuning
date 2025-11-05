@@ -388,7 +388,16 @@ def create_app(config_name=None):
     from app.routes.admin_routes import admin_bp
     from app.routes.secure_upload_routes import secure_upload_bp
     from app.routes.video_processing_routes import video_bp
-
+    
+    # NER 라우트 등록 (선택적 - 모델이 없는 경우에도 앱이 실행되도록)
+    try:
+        from app.routes.ner_routes import ner_bp
+        app.register_blueprint(ner_bp, url_prefix="/api/ner")
+        app.logger.info("NER routes registered successfully")
+    except ImportError as e:
+        app.logger.warning(f"NER routes not available (ImportError): {e}")
+    except Exception as e:
+        app.logger.warning(f"NER routes not available (Error): {e}")
     
     app.register_blueprint(integrated_filter_bp, url_prefix="/api/v1/filter")
     app.register_blueprint(integrated_analysis_bp, url_prefix="/api/v1")
