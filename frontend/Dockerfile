@@ -14,7 +14,9 @@ RUN npm ci --only=production=false
 COPY . .
 # 빌드 시 환경 변수 (docker-compose에서 전달)
 ARG VITE_API_BASE_URL=http://localhost:5000
+ARG VITE_FASTAPI_BASE_URL=http://localhost:8000
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_FASTAPI_BASE_URL=$VITE_FASTAPI_BASE_URL
 RUN npm run build
 
 # 프로덕션 단계

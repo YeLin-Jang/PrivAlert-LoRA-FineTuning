@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
-import { validateFile, validateFileCount, validateVideoFile } from '../utils/validation';
-import { formatFileSize } from '../utils/formatters';
-import { UPLOAD_LIMITS } from '../constants';
+import { validateFile, validateFileCount, validateVideoFile } from '../../utils/validation';
+import { formatFileSize } from '../../utils/formatters';
+import { UPLOAD_LIMITS } from '../../constants';
 
 interface FileUploaderProps {
   files: File[];

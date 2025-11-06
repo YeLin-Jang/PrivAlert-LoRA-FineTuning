@@ -8,6 +8,7 @@ const createApiInstance = (): AxiosInstance => {
   const instance = axios.create({
     baseURL: API_CONFIG.BASE_URL,
     timeout: API_CONFIG.TIMEOUT,
+    withCredentials: true, // 쿠키 전송을 위해 필요 (세션 인증)
     headers: {
       'Content-Type': 'application/json',
     },
@@ -59,6 +60,7 @@ const api = createApiInstance();
 const fileApi = axios.create({
   baseURL: API_CONFIG.BASE_URL,
   timeout: API_CONFIG.TIMEOUT * 2, // 파일 업로드는 더 긴 타임아웃
+  withCredentials: true, // 쿠키 전송을 위해 필요 (세션 인증)
   headers: {
     'Content-Type': 'multipart/form-data',
   },
@@ -172,7 +174,7 @@ export const filterStructuredData = async (
   const activeFilters = Object.entries(detectionOptions)
     .filter(([key, value]) => value && [
       'phone', 'rrn', 'passport', 'ip_address', 'email', 'account', 
-      'school', 'workplace', 'address', 'driverLicense', 'postalCode', 'name'
+      'school', 'workplace', 'address', 'name'
     ].includes(key))
     .map(([key]) => key);
   

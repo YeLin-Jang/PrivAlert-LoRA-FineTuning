@@ -1,6 +1,6 @@
 """
 CSRF 보호 유틸리티
-쿠키 탈취 공격 방지를 위한 CSRF 토큰 생성 및 검증
+CSRF 공격 방지: 쿠키 탈취 공격 방지를 위한 CSRF 토큰 생성 및 검증
 """
 import os
 import secrets

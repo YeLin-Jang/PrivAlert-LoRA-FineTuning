@@ -1,5 +1,5 @@
 import React from 'react';
-import type { DetectionOptions } from '../types';
+import type { DetectionOptions } from '../../types';
 
 interface DetectionOptionsPanelProps {
   detectionOptions: DetectionOptions;
@@ -21,8 +21,6 @@ const OPTION_LABELS: Record<keyof DetectionOptions, string> = {
   workplace: '직장명',
   name: '이름',
   address: '주소',
-  driverLicense: '운전면허번호',
-  postalCode: '우편번호',
 };
 
 export const DetectionOptionsPanel: React.FC<DetectionOptionsPanelProps> = ({

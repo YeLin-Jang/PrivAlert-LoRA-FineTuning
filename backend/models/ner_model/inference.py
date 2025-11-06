@@ -2,16 +2,32 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import json
 import pickle
 import argparse
-import torch
-import os
+try:
+    import torch  # pyright: ignore[reportMissingImports]  # noqa: F401
+except ImportError:
+    # PyTorch가 설치되지 않은 경우 - NER 모델 사용 시 필요
+    torch = None
 from pathlib import Path
-from kobert.pytorch_kobert import get_pytorch_kobert_model
-from kobert.utils import get_tokenizer
-from model.net import KobertSequenceFeatureExtractor, KobertCRF, KobertBiLSTMCRF, KobertBiGRUCRF
-from gluonnlp.data import SentencepieceTokenizer
-from data_utils.utils import Config
-from data_utils.vocab_tokenizer import Tokenizer
-from data_utils.pad_sequence import keras_pad_fn
+
+# 실제로 사용되는 import만 유지
+# 주석 처리된 코드에서 사용되는 import는 제거
+# 모듈 경로 문제는 런타임에 sys.path 조정으로 해결됨 (ner_service.py에서 처리)
+try:
+    # type: ignore - 런타임에 sys.path 조정으로 해결되므로 린터 경고 무시
+    from model.net import KobertCRF  # pyright: ignore[reportMissingImports]  # noqa: F401
+    from gluonnlp.data import SentencepieceTokenizer  # pyright: ignore[reportMissingImports]  # noqa: F401
+    from data_utils.utils import Config  # pyright: ignore[reportMissingImports]  # noqa: F401
+    from data_utils.vocab_tokenizer import Tokenizer  # pyright: ignore[reportMissingImports]  # noqa: F401
+    from data_utils.pad_sequence import keras_pad_fn  # pyright: ignore[reportMissingImports]  # noqa: F401
+except ImportError:
+    # 모듈을 찾을 수 없는 경우 - 런타임에 sys.path 조정으로 해결됨
+    # ner_service.py에서 backend 디렉토리를 sys.path에 추가하므로 실제 런타임에서는 정상 작동
+    # 린터 경고: 모듈을 찾을 수 없다는 경고는 무시해도 됨 (실제 런타임에서는 정상 작동)
+    KobertCRF = None
+    SentencepieceTokenizer = None
+    Config = None
+    Tokenizer = None
+    keras_pad_fn = None
 
 # 전역 모델 캐시
 _ner_model = None
@@ -42,6 +58,10 @@ def main(parser):
         ner_to_index = json.load(f)
         index_to_ner = {v: k for k, v in ner_to_index.items()}
 
+    # 모듈 임포트 확인
+    if KobertCRF is None:
+        raise ImportError("NER 모델 의존성이 설치되지 않았습니다.")
+    
     # Model
     # model = KobertSequenceFeatureExtractor(config=model_config, num_classes=len(ner_to_index))
     model = KobertCRF(config=model_config, num_classes=len(ner_to_index), vocab=vocab)
@@ -192,6 +212,11 @@ def load_ner_model(model_dir=None, checkpoint_path=None, tokenizer_path=None):
     
     if tokenizer_path is None:
         tokenizer_path = "./ptr_lm_model/tokenizer_78b3253a26.model"
+    
+    # 모듈 임포트 확인
+    if Config is None or SentencepieceTokenizer is None or Tokenizer is None or keras_pad_fn is None:
+        raise ImportError("NER 모델 의존성(kobert, gluonnlp, data_utils 등)이 설치되지 않았습니다. "
+                         "실제 런타임에서는 sys.path 조정으로 해결됩니다.")
     
     # 모델 설정 로드
     model_config = Config(json_path=model_dir / 'config.json')

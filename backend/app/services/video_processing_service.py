@@ -52,7 +52,7 @@ class VideoProcessingService:
         # Whisper 모델은 지연 로딩 (첫 사용 시 로드)
         self._whisper_model = None
         
-        logger.info("비디오 처리 서비스 초기화 완료")
+        # 초기화 완료 (로그 제거)
     
     def _validate_video_file(self, file: FileStorage) -> Tuple[bool, Optional[str]]:
         """
