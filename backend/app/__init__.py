@@ -1,6 +1,7 @@
 import os
 import logging
 import warnings
+from datetime import timedelta
 from flask import Flask, jsonify, request
 
 # TensorFlow/MediaPipe 경고 억제
@@ -86,6 +87,8 @@ def create_app(config_name=None):
         "SESSION_COOKIE_SECURE": False,  # HTTP 환경이므로 Secure 미설정
         "SESSION_COOKIE_HTTPONLY": True,  # JavaScript에서 쿠키 접근 방지
         "SESSION_COOKIE_SAMESITE": "Strict",  # CSRF 공격 방지 (HTTP 환경에서는 Strict 권장)
+        # 세션 만료 시간 설정 (보안: 최소화)
+        "PERMANENT_SESSION_LIFETIME": timedelta(hours=24),  # 24시간 (보안: 짧은 만료 시간)
         # 기타 보안 설정
         "PREFERRED_URL_SCHEME": "https" if flask_env == "production" else "http",
         "TRAP_HTTP_EXCEPTIONS": True,  # HTTP 예외 처리
@@ -183,16 +186,6 @@ def create_app(config_name=None):
         storage_uri="memory://"  # 개발 환경 (프로덕션에서는 Redis 사용 권장)
     )
     
-    # 관리자 경로 접근 보호 (일반 사용자 차단)
-    @app.before_request
-    def protect_admin_routes():
-        """관리자 경로 접근 보호 - 일반 사용자 차단"""
-        from app.utils.admin_route_protection import check_admin_route_access
-        
-        is_blocked, error_response, status_code = check_admin_route_access()
-        if is_blocked:
-            return error_response, status_code
-    
     # 보안 헤더 설정
     @app.after_request
     def set_security_headers(response):
@@ -222,45 +215,20 @@ def create_app(config_name=None):
             'magnetometer=(), gyroscope=(), speaker=()'
         )
         
-        # 요청 경로 확인
-        request_path = request.path if request else ''
-        is_admin_path = request_path.startswith('/admin') or request_path.startswith('/api/v1/admin')
-        
         # Content Security Policy
-        # 관리자 페이지에 대해 더 엄격한 CSP 적용
-        if is_admin_path:
-            # 관리자 페이지용 엄격한 CSP 정책 (Google Fonts 허용)
-            csp = (
-                "default-src 'self'; "
-                "script-src 'self'; "
-                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-                "img-src 'self' data: blob:; "
-                "font-src 'self' data: https://fonts.gstatic.com; "
-                "connect-src 'self'; "
-                "frame-ancestors 'none'; "
-                "base-uri 'self'; "
-                "form-action 'self'; "
-                "object-src 'none'; "
-                "media-src 'self' blob:; "
-                "worker-src 'none'; "
-                "manifest-src 'self'; "
-                "upgrade-insecure-requests"
-            )
-        else:
-            # 일반 페이지용 CSP 정책
-            # 보안: blob: URL 허용 (로컬 파일 미리보기용)
-            csp = (
-                "default-src 'self'; "
-                "script-src 'self'; "
-                "style-src 'self' 'unsafe-inline'; "
-                "img-src 'self' data: blob:; "
-                "font-src 'self' data:; "
-                "connect-src 'self'; "
-                "frame-ancestors 'none'; "
-                "base-uri 'self'; "
-                "form-action 'self'; "
-                "media-src 'self' blob:"
-            )
+        # 보안: blob: URL 허용 (로컬 파일 미리보기용)
+        csp = (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob:; "
+            "font-src 'self' data:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'; "
+            "media-src 'self' blob:"
+        )
         
         response.headers['Content-Security-Policy'] = csp
         
@@ -438,8 +406,6 @@ def create_app(config_name=None):
     from app.routes.education_routes import education_bp
     from app.routes.workplace_detection_routes import workplace_bp
     from app.routes.name_detection_routes import name_detection_bp
-    from app.routes.admin_auth_routes import admin_auth_bp
-    from app.routes.admin_routes import admin_bp
     from app.routes.secure_upload_routes import secure_upload_bp
     from app.routes.auth_routes import auth_bp
     from app.routes.user_routes import user_bp
@@ -470,8 +436,6 @@ def create_app(config_name=None):
     app.register_blueprint(education_bp, url_prefix="/api/v1/education")
     app.register_blueprint(workplace_bp, url_prefix="/api/v1/workplace")
     app.register_blueprint(name_detection_bp, url_prefix="/api/v1/name")
-    app.register_blueprint(admin_auth_bp, url_prefix="/api/v1/admin/auth")
-    app.register_blueprint(admin_bp, url_prefix="/api/v1/admin")
     app.register_blueprint(secure_upload_bp, url_prefix="/api/v1")  
     app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")
     app.register_blueprint(user_bp, url_prefix="/api/v1/user")
@@ -606,9 +570,7 @@ def create_app(config_name=None):
                 "integrated_filter": "/api/v1/filter",
                 "education": "/api/v1/education",
                 "workplace": "/api/v1/workplace",
-                "name_detection": "/api/v1/name",
-                "admin_auth": "/api/v1/admin/auth",
-                "admin": "/api/v1/admin"
+                "name_detection": "/api/v1/name"
             }
         })
     

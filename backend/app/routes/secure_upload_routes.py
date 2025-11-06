@@ -15,7 +15,8 @@ from app.utils.secure_storage import (
     ALLOWED_EXTENSIONS, MAX_FILE_SIZE
 )
 from app.utils.api_utils import APIResponse
-from app.utils.admin_decorators import admin_required
+# 관리자 기능 제거됨
+# from app.utils.admin_decorators import admin_required
 
 logger = get_logger(__name__)
 
@@ -252,7 +253,8 @@ def cleanup_session():
 
 @secure_upload_bp.route('/cleanup/all', methods=['POST'])
 @jwt_required()
-@admin_required
+# 관리자 기능 제거됨
+# @admin_required
 def cleanup_all_sessions():
     """
     모든 세션 정리 (관리자 전용)
