@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { analyzeContent, analyzeVideo, suggestEducation } from '../../services/api';
+import { analyzeContent, suggestEducation } from '../../services/api';
 import type { AnalysisResult, SanitizedItem, DetectionOptions } from '../../types';
 import { validateTextLength } from '../../utils/validation';
 import { UPLOAD_LIMITS, ERROR_MESSAGES, API_CONFIG } from '../../constants';
@@ -154,47 +154,6 @@ export default function UploadForm() {
       return newOptions;
     });
   };
-
-  // 비디오 분석 핸들러 (현재 미사용)
-  const _handleVideoAnalyze = async () => {
-    if (!videoFile) {
-      setError('비디오 파일을 선택해주세요.');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const videoResult = await analyzeVideo(videoFile, true, true, 1.0);
-      // 비디오 분석 결과를 통합 분석 결과 형식으로 변환
-      const convertedResult: AnalysisResult = {
-        summary: {
-          faces_detected: videoResult.summary?.total_faces_detected || 0,
-          fingers_detected: videoResult.summary?.total_fingers_detected || 0,
-          sensitive_text_found: videoResult.summary?.frames_with_sensitive_content > 0 || false,
-          message: `비디오 분석 완료: ${videoResult.summary?.total_frames_processed || 0}개 프레임 처리`,
-        },
-      };
-      
-      // 비디오 분석 결과를 별도로 저장
-      (convertedResult as any).video_analysis = videoResult;
-      setResult(convertedResult);
-      setShowResultModal(true);
-      
-      // 보안: 분석 완료 후 원본 비디오 파일 메모리에서 정리
-      secureFilesCleanup([videoFile]);
-    } catch (err: any) {
-      secureLog('비디오 분석 오류:', err);
-      setError(err.message || ERROR_MESSAGES.SERVER_ERROR);
-      
-      // 오류 발생 시에도 민감 데이터 정리
-      secureFilesCleanup([videoFile]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
 
   const handleAnalyze = async () => {
     // 텍스트 길이 검증
@@ -576,92 +535,92 @@ export default function UploadForm() {
                     {detectionOptions.face && (
                     <div className="stat-item">
                       <span className="stat-label">얼굴 감지</span>
-                      <span className="stat-value">{result.summary.faces_detected}개</span>
+                      <span className="stat-value">{result?.summary?.faces_detected || 0}개</span>
                     </div>
                     )}
                     {detectionOptions.fingerprint && (
                     <div className="stat-item">
                       <span className="stat-label">손가락 감지</span>
-                      <span className="stat-value">{result.summary.fingers_detected}개</span>
+                      <span className="stat-value">{result?.summary?.fingers_detected || 0}개</span>
                     </div>
                     )}
                     {detectionOptions.phone && (
                     <div className="stat-item">
                       <span className="stat-label">전화번호</span>
-                      <span className={`stat-value ${(result.text_analysis?.structured_data?.categories?.phone?.count || 0) > 0 ? 'detected' : 'safe'}`}>
-                        {result.text_analysis?.structured_data?.categories?.phone?.count || 0}개
+                      <span className={`stat-value ${(result?.text_analysis?.structured_data?.categories?.phone?.count || 0) > 0 ? 'detected' : 'safe'}`}>
+                        {result?.text_analysis?.structured_data?.categories?.phone?.count || 0}개
                       </span>
                     </div>
                     )}
                     {detectionOptions.rrn && (
                     <div className="stat-item">
                       <span className="stat-label">주민등록번호</span>
-                      <span className={`stat-value ${(result.text_analysis?.structured_data?.categories?.rrn?.count || 0) > 0 ? 'detected' : 'safe'}`}>
-                        {result.text_analysis?.structured_data?.categories?.rrn?.count || 0}개
+                      <span className={`stat-value ${(result?.text_analysis?.structured_data?.categories?.rrn?.count || 0) > 0 ? 'detected' : 'safe'}`}>
+                        {result?.text_analysis?.structured_data?.categories?.rrn?.count || 0}개
                       </span>
                     </div>
                     )}
                     {detectionOptions.passport && (
                     <div className="stat-item">
                       <span className="stat-label">여권번호</span>
-                      <span className={`stat-value ${(result.text_analysis?.structured_data?.categories?.passport?.count || 0) > 0 ? 'detected' : 'safe'}`}>
-                        {result.text_analysis?.structured_data?.categories?.passport?.count || 0}개
+                      <span className={`stat-value ${(result?.text_analysis?.structured_data?.categories?.passport?.count || 0) > 0 ? 'detected' : 'safe'}`}>
+                        {result?.text_analysis?.structured_data?.categories?.passport?.count || 0}개
                       </span>
                     </div>
                     )}
                     {detectionOptions.ip_address && (
                     <div className="stat-item">
                       <span className="stat-label">IP주소</span>
-                      <span className={`stat-value ${(result.text_analysis?.structured_data?.categories?.ip_address?.count || 0) > 0 ? 'detected' : 'safe'}`}>
-                        {result.text_analysis?.structured_data?.categories?.ip_address?.count || 0}개
+                      <span className={`stat-value ${(result?.text_analysis?.structured_data?.categories?.ip_address?.count || 0) > 0 ? 'detected' : 'safe'}`}>
+                        {result?.text_analysis?.structured_data?.categories?.ip_address?.count || 0}개
                       </span>
                     </div>
                     )}
                     {detectionOptions.email && (
                     <div className="stat-item">
                       <span className="stat-label">이메일</span>
-                      <span className={`stat-value ${(result.text_analysis?.structured_data?.categories?.email?.count || 0) > 0 ? 'detected' : 'safe'}`}>
-                        {result.text_analysis?.structured_data?.categories?.email?.count || 0}개
+                      <span className={`stat-value ${(result?.text_analysis?.structured_data?.categories?.email?.count || 0) > 0 ? 'detected' : 'safe'}`}>
+                        {result?.text_analysis?.structured_data?.categories?.email?.count || 0}개
                       </span>
                     </div>
                     )}
                     {detectionOptions.account && (
                     <div className="stat-item">
                       <span className="stat-label">계좌번호</span>
-                      <span className={`stat-value ${(result.text_analysis?.structured_data?.categories?.account?.count || 0) > 0 ? 'detected' : 'safe'}`}>
-                        {result.text_analysis?.structured_data?.categories?.account?.count || 0}개
+                      <span className={`stat-value ${(result?.text_analysis?.structured_data?.categories?.account?.count || 0) > 0 ? 'detected' : 'safe'}`}>
+                        {result?.text_analysis?.structured_data?.categories?.account?.count || 0}개
                       </span>
                     </div>
                     )}
                     {detectionOptions.school && (
                     <div className="stat-item">
                       <span className="stat-label">학교명</span>
-                      <span className={`stat-value ${(result.text_analysis?.structured_data?.categories?.school?.count || 0) > 0 ? 'detected' : 'safe'}`}>
-                        {result.text_analysis?.structured_data?.categories?.school?.count || 0}개
+                      <span className={`stat-value ${(result?.text_analysis?.structured_data?.categories?.school?.count || 0) > 0 ? 'detected' : 'safe'}`}>
+                        {result?.text_analysis?.structured_data?.categories?.school?.count || 0}개
                       </span>
                     </div>
                     )}
                     {detectionOptions.workplace && (
                     <div className="stat-item">
                       <span className="stat-label">직장명</span>
-                      <span className={`stat-value ${(result.text_analysis?.structured_data?.categories?.workplace?.count || 0) > 0 ? 'detected' : 'safe'}`}>
-                        {result.text_analysis?.structured_data?.categories?.workplace?.count || 0}개
+                      <span className={`stat-value ${(result?.text_analysis?.structured_data?.categories?.workplace?.count || 0) > 0 ? 'detected' : 'safe'}`}>
+                        {result?.text_analysis?.structured_data?.categories?.workplace?.count || 0}개
                       </span>
                     </div>
                     )}
                     {detectionOptions.name && (
                     <div className="stat-item">
                       <span className="stat-label">이름</span>
-                      <span className={`stat-value ${(result.text_analysis?.structured_data?.categories?.name?.count || 0) > 0 ? 'detected' : 'safe'}`}>
-                        {result.text_analysis?.structured_data?.categories?.name?.count || 0}개
+                      <span className={`stat-value ${(result?.text_analysis?.structured_data?.categories?.name?.count || 0) > 0 ? 'detected' : 'safe'}`}>
+                        {result?.text_analysis?.structured_data?.categories?.name?.count || 0}개
                       </span>
                     </div>
                     )}
                     {detectionOptions.address && (
                     <div className="stat-item">
                       <span className="stat-label">주소</span>
-                      <span className={`stat-value ${(result.text_analysis?.structured_data?.categories?.address?.count || 0) > 0 ? 'detected' : 'safe'}`}>
-                        {result.text_analysis?.structured_data?.categories?.address?.count || 0}개
+                      <span className={`stat-value ${(result?.text_analysis?.structured_data?.categories?.address?.count || 0) > 0 ? 'detected' : 'safe'}`}>
+                        {result?.text_analysis?.structured_data?.categories?.address?.count || 0}개
                       </span>
                     </div>
                     )}
@@ -672,11 +631,11 @@ export default function UploadForm() {
                 <div className="ocr-text-card">
                   <h3>🔍 추출된 텍스트 (OCR)</h3>
                   <div className="ocr-content">
-                    {result.ocr_text && result.ocr_text.texts && result.ocr_text.texts.length > 0 ? (
+                    {result?.ocr_text && result?.ocr_text?.texts && (result?.ocr_text?.texts?.length ?? 0) > 0 ? (
                       <>
-                        <p className="ocr-summary">{result.ocr_text.message}</p>
+                        <p className="ocr-summary">{result?.ocr_text?.message}</p>
                         <div className="ocr-texts">
-                          {result.ocr_text.texts.map((text, index) => (
+                          {result?.ocr_text?.texts.map((text, index) => (
                             <div key={index} className="ocr-text-item">
                               <h4>이미지 {index + 1}</h4>
                               <p className="ocr-text-content">{text}</p>
@@ -691,12 +650,12 @@ export default function UploadForm() {
                 </div>
 
                 {/* EXIF/메타데이터 제거 결과 - 항상 표시 (있을 때) */}
-                {result.image_sanitization && result.image_sanitization.items && result.image_sanitization.items.length > 0 && (
+                {result?.image_sanitization && result?.image_sanitization?.items && (result?.image_sanitization?.items?.length ?? 0) > 0 && (
                   <div className="image-results-card">
                     <h3>🧹 EXIF/메타데이터 제거 결과</h3>
-                    <p className="image-info">{result.image_sanitization.message}</p>
+                    <p className="image-info">{result?.image_sanitization?.message}</p>
                     <div className="image-results">
-                      {result.image_sanitization.items.map((it: SanitizedItem, idx: number) => (
+                      {result?.image_sanitization?.items.map((it: SanitizedItem, idx: number) => (
                         <div key={idx} className="image-result-item">
                           <p className="image-info">{it.summary_ko || `${it.filename} 처리 완료`}</p>
                           <div className="result-actions">
@@ -773,23 +732,23 @@ export default function UploadForm() {
                 )}
 
                 {/* 텍스트 분석 결과 - 항상 표시 */}
-                {result.text_analysis && (
+                {result?.text_analysis && (
                   <div className="text-analysis-card">
                     <h3>📝 텍스트 분석 (OCR + 입력 텍스트 전체)</h3>
                     <div className="text-content">
-                      {result.text_analysis.original_text ? (
+                      {result?.text_analysis?.original_text ? (
                         <>
                           <div className="text-section">
                             <h4>원본 텍스트</h4>
-                            <p className="text-preview">{result.text_analysis.original_text}</p>
+                            <p className="text-preview">{result?.text_analysis?.original_text}</p>
                           </div>
                           
                           
                           {/* 정형 데이터 마스킹 결과가 원본과 다를 때만 표시 */}
-                          {result.text_analysis.masked_text && result.text_analysis.masked_text !== result.text_analysis.original_text && (
+                          {result?.text_analysis?.masked_text && result?.text_analysis?.masked_text !== result?.text_analysis?.original_text && (
                           <div className="text-section">
                             <h4>정형 데이터 마스킹된 텍스트</h4>
-                            <p className="text-preview">{result.text_analysis.masked_text}</p>
+                            <p className="text-preview">{result?.text_analysis?.masked_text}</p>
                           </div>
                           )}
                         </>
@@ -801,15 +760,15 @@ export default function UploadForm() {
                       
                       
                       {/* 정형 데이터 탐지 결과 */}
-                      {result.text_analysis.structured_data && result.text_analysis.structured_data.detected && (
+                      {result?.text_analysis?.structured_data && result?.text_analysis?.structured_data?.detected && (
                         <div className="structured-data-section">
                           <h4>📋 감지된 정형 데이터</h4>
                           <div className="structured-data-list">
-                            {detectionOptions.phone && result.text_analysis.structured_data.categories.phone && (
+                            {detectionOptions.phone && result?.text_analysis?.structured_data?.categories?.phone && (
                               <div className="category-item">
                                 <h5 className="category-name">전화번호</h5>
                                 <div className="category-items">
-                                  {result.text_analysis.structured_data.categories.phone.items.map((item, index) => (
+                                  {result?.text_analysis?.structured_data?.categories?.phone?.items.map((item, index) => (
                                     <div key={index} className="data-item">
                                       <span className="data-type">[{item.type}]</span>
                                       <span className="data-value">"{item.value}"</span>
@@ -818,11 +777,11 @@ export default function UploadForm() {
                                 </div>
                               </div>
                             )}
-                            {detectionOptions.rrn && result.text_analysis.structured_data.categories.rrn && (
+                            {detectionOptions.rrn && result?.text_analysis?.structured_data?.categories?.rrn && (
                               <div className="category-item">
                                 <h5 className="category-name">주민등록번호</h5>
                                 <div className="category-items">
-                                  {result.text_analysis.structured_data.categories.rrn.items.map((item, index) => (
+                                  {result?.text_analysis?.structured_data?.categories?.rrn?.items.map((item, index) => (
                                     <div key={index} className="data-item">
                                       <span className="data-type">[{item.type}]</span>
                                       <span className="data-value">"{item.value}"</span>
@@ -831,11 +790,11 @@ export default function UploadForm() {
                                 </div>
                               </div>
                             )}
-                            {detectionOptions.passport && result.text_analysis.structured_data.categories.passport && (
+                            {detectionOptions.passport && result?.text_analysis?.structured_data?.categories?.passport && (
                               <div className="category-item">
                                 <h5 className="category-name">여권번호</h5>
                                 <div className="category-items">
-                                  {result.text_analysis.structured_data.categories.passport.items.map((item, index) => (
+                                  {result?.text_analysis?.structured_data?.categories?.passport?.items.map((item, index) => (
                                     <div key={index} className="data-item">
                                       <span className="data-type">[{item.type}]</span>
                                       <span className="data-value">"{item.value}"</span>
@@ -844,11 +803,11 @@ export default function UploadForm() {
                                 </div>
                               </div>
                             )}
-                            {detectionOptions.ip_address && result.text_analysis.structured_data.categories.ip_address && (
+                            {detectionOptions.ip_address && result?.text_analysis?.structured_data?.categories?.ip_address && (
                               <div className="category-item">
                                 <h5 className="category-name">IP주소</h5>
                                 <div className="category-items">
-                                  {result.text_analysis.structured_data.categories.ip_address.items.map((item, index) => (
+                                  {result?.text_analysis?.structured_data?.categories?.ip_address?.items.map((item, index) => (
                                     <div key={index} className="data-item">
                                       <span className="data-type">[{item.type}]</span>
                                       <span className="data-value">"{item.value}"</span>
@@ -857,11 +816,11 @@ export default function UploadForm() {
                                 </div>
                               </div>
                             )}
-                            {detectionOptions.email && result.text_analysis.structured_data.categories.email && (
+                            {detectionOptions.email && result?.text_analysis?.structured_data?.categories?.email && (
                               <div className="category-item">
                                 <h5 className="category-name">이메일</h5>
                                 <div className="category-items">
-                                  {result.text_analysis.structured_data.categories.email.items.map((item, index) => (
+                                  {result?.text_analysis?.structured_data?.categories?.email?.items.map((item, index) => (
                                     <div key={index} className="data-item">
                                       <span className="data-type">[{item.type}]</span>
                                       <span className="data-value">"{item.value}"</span>
@@ -870,11 +829,11 @@ export default function UploadForm() {
                                 </div>
                               </div>
                             )}
-                            {detectionOptions.account && result.text_analysis.structured_data.categories.account && (
+                            {detectionOptions.account && result?.text_analysis?.structured_data?.categories?.account && (
                               <div className="category-item">
                                 <h5 className="category-name">계좌번호</h5>
                                 <div className="category-items">
-                                  {result.text_analysis.structured_data.categories.account.items.map((item, index) => (
+                                  {result?.text_analysis?.structured_data?.categories?.account?.items.map((item, index) => (
                                     <div key={index} className="data-item">
                                       <span className="data-type">[{item.type}]</span>
                                       <span className="data-value">"{item.value}"</span>
@@ -883,11 +842,11 @@ export default function UploadForm() {
                                 </div>
                               </div>
                             )}
-                            {detectionOptions.school && result.text_analysis.structured_data.categories.school && (
+                            {detectionOptions.school && result?.text_analysis?.structured_data?.categories?.school && (
                               <div className="category-item">
                                 <h5 className="category-name">학교명</h5>
                                 <div className="category-items">
-                                  {result.text_analysis.structured_data.categories.school.items.map((item, index) => (
+                                  {result?.text_analysis?.structured_data?.categories?.school?.items.map((item, index) => (
                                     <div key={index} className="data-item">
                                       <span className="data-type">[{item.type}]</span>
                                       <span className="data-value">"{item.value}"</span>
@@ -896,11 +855,11 @@ export default function UploadForm() {
                                 </div>
                               </div>
                             )}
-                            {detectionOptions.workplace && result.text_analysis.structured_data.categories.workplace && (
+                            {detectionOptions.workplace && result?.text_analysis?.structured_data?.categories?.workplace && (
                               <div className="category-item">
                                 <h5 className="category-name">직장명</h5>
                                 <div className="category-items">
-                                  {result.text_analysis.structured_data.categories.workplace.items.map((item, index) => (
+                                  {result?.text_analysis?.structured_data?.categories?.workplace?.items.map((item, index) => (
                                     <div key={index} className="data-item">
                                       <span className="data-type">[{item.type}]</span>
                                       <span className="data-value">"{item.value}"</span>
@@ -912,11 +871,11 @@ export default function UploadForm() {
                                 </div>
                               </div>
                             )}
-                            {detectionOptions.name && result.text_analysis.structured_data.categories.name && (
+                            {detectionOptions.name && result?.text_analysis?.structured_data?.categories?.name && (
                               <div className="category-item">
                                 <h5 className="category-name">이름</h5>
                                 <div className="category-items">
-                                  {result.text_analysis.structured_data.categories.name.items.map((item, index) => (
+                                  {result?.text_analysis?.structured_data?.categories?.name?.items.map((item, index) => (
                                     <div key={index} className="data-item">
                                       <span className="data-type">[NAME]</span>
                                       <span className="data-value">"{(item as any).text}"</span>
@@ -928,11 +887,11 @@ export default function UploadForm() {
                                 </div>
                               </div>
                             )}
-                            {detectionOptions.address && result.text_analysis.structured_data.categories.address && (
+                            {detectionOptions.address && result?.text_analysis?.structured_data?.categories?.address && (
                               <div className="category-item">
                                 <h5 className="category-name">주소</h5>
                                 <div className="category-items">
-                                  {result.text_analysis.structured_data.categories.address.items.map((item, index) => (
+                                  {result?.text_analysis?.structured_data?.categories?.address?.items.map((item, index) => (
                                     <div key={index} className="data-item">
                                       <span className="data-type">[{item.type}]</span>
                                       <span className="data-value">"{item.value}"</span>
@@ -950,11 +909,11 @@ export default function UploadForm() {
 
 
                 {/* 얼굴 감지 결과 - 얼굴 감지 결과 표시 옵션이 체크되었을 때만 표시 */}
-                {showFaces && result.face_detection && result.face_detection.images.length > 0 && (
+                {showFaces && result?.face_detection && result?.face_detection?.images && (result?.face_detection?.images?.length ?? 0) > 0 && (
                   <div className="image-results-card">
                     <h3>👤 얼굴 감지 결과</h3>
                     <div className="image-results">
-                      {result.face_detection.images.map((img, index) => (
+                      {result?.face_detection?.images.map((img, index) => (
                         <div key={index} className="image-result-item">
                           <p className="image-info">{img.count}개 얼굴 감지</p>
                           {img.result_image_url && (
@@ -980,11 +939,11 @@ export default function UploadForm() {
                 )}
 
                 {/* 손가락 감지 결과 - 손가락 감지 결과 표시 옵션이 체크되었을 때만 표시 */}
-                {blurFingers && result.hand_detection && result.hand_detection.images.length > 0 && (
+                {blurFingers && result?.hand_detection && result?.hand_detection?.images && (result?.hand_detection?.images?.length ?? 0) > 0 && (
                   <div className="image-results-card">
                     <h3>👋 손가락 감지 결과</h3>
                     <div className="image-results">
-                      {result.hand_detection.images.map((img, index) => (
+                      {result?.hand_detection?.images.map((img, index) => (
                         <div key={index} className="image-result-item">
                           <p className="image-info">{img.count}개 손가락 감지</p>
                           {img.result_image_url && (

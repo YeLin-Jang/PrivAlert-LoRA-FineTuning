@@ -105,11 +105,11 @@ export const userApi = {
    * 회원가입
    */
   async register(
-    username: string,
+    _username: string,
     email: string,
     password: string,
     nickname?: string,
-    detectionOptions?: Record<string, boolean>
+    _detectionOptions?: Record<string, boolean>
   ): Promise<RegisterResponse> {
     try {
       // 백엔드 API는 /api/v1/auth/signup 사용 (API_CONFIG.BASE_URL 사용)
