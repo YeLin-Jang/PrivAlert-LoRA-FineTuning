@@ -1,0 +1,38 @@
+[tool.bandit]
+# Bandit 보안 취약점 스캔 설정
+
+# 스킵할 테스트 ID (낮은 위험도 또는 허용된 패턴)
+# B101: assert_used - 개발 환경에서 허용
+# B601: shell_injection_subprocess - subprocess 사용이 필요한 경우
+# B104: hardcoded_bind_all_interfaces - 개발 환경에서 0.0.0.0 사용 허용
+skips = B101, B601, B104
+
+# 테스트 레벨 (low, medium, high)
+level = 1
+
+# 신뢰도 레벨 (low, medium, high)
+confidence = 1
+
+# 제외할 디렉토리/파일
+exclude_dirs = [
+    "venv",
+    ".venv",
+    "__pycache__",
+    ".pytest_cache"
+]
+
+# 제외할 파일 패턴
+exclude = [
+    "*/test_*.py",
+    "*/tests/*.py"
+]
+
+# 보고서 형식 (json, txt, csv, screen)
+format = "json"
+
+# 재귀적으로 검사
+recursive = true
+
+# 파일 경로 표시
+show_skipped = true
+

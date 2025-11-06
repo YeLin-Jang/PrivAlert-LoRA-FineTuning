@@ -1,0 +1,15 @@
+fastapi==0.121.0
+uvicorn==0.27.0
+pydantic==2.6.1
+pydantic-settings==2.1.0
+sqlalchemy==2.0.35
+aiosqlite==0.20.0
+aiomysql==0.3.2
+bcrypt==4.1.2
+redis==5.0.1
+python-dotenv==1.0.1
+python-multipart==0.0.20
+email-validator==2.1.0
+bandit==1.7.8
+safety>=2.3.5
+flake8==7.0.0

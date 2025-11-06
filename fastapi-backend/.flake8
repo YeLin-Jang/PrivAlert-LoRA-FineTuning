@@ -1,0 +1,30 @@
+[flake8]
+# Flake8 코드 품질 검사 설정
+
+# 최대 줄 길이
+max-line-length = 120
+
+# 무시할 오류 코드
+# E501: 줄 길이 초과 (max-line-length로 제어)
+# W503: 줄바꿈 전 이항 연산자 (PEP 8 권장사항과 충돌)
+# E203: 화이트스페이스 (black과 충돌)
+ignore = E501, W503, E203
+
+# 제외할 디렉토리/파일
+exclude =
+    .git,
+    __pycache__,
+    venv,
+    .venv,
+    .pytest_cache,
+    .mypy_cache,
+    dist,
+    build,
+    *.egg-info
+
+# 복잡도 제한
+max-complexity = 15
+
+# 통계 출력
+statistics = True
+

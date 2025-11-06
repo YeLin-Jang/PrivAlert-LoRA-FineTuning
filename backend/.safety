@@ -1,0 +1,22 @@
+# Safety 설정 파일
+# Python 의존성 취약점 스캔 도구 설정
+
+# Safety는 기본적으로 requirements.txt 파일을 스캔합니다.
+# 추가 설정이 필요한 경우 환경 변수로 제어할 수 있습니다.
+
+# Safety API 키 (선택사항, 무료 버전 사용 시 불필요)
+# SAFETY_API_KEY = your_api_key_here
+
+# 무시할 취약점 ID (CVE 번호)
+# ignore = CVE-2023-12345
+
+# 보고서 형식 (json, screen, bare)
+# output = screen
+
+# 최소 심각도 (low, medium, high, critical)
+# min-severity = medium
+
+# 실패 시 종료 코드 (기본값: 1)
+# exit-code = 1
+
+
