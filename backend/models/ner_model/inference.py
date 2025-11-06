@@ -48,8 +48,12 @@ def main(parser):
     ptr_tokenizer = SentencepieceTokenizer(tok_path)
 
     # load vocab & tokenizer
-    with open(model_dir / "vocab.pkl", 'rb') as f:
-        vocab = pickle.load(f)
+    # 보안: 신뢰할 수 있는 로컬 모델 파일에서만 로드 (사용자 입력 없음)
+    vocab_file = model_dir / "vocab.pkl"
+    if not vocab_file.exists():
+        raise FileNotFoundError(f"Vocab 파일을 찾을 수 없습니다: {vocab_file}")
+    with open(vocab_file, 'rb') as f:
+        vocab = pickle.load(f)  # nosec B301 - 신뢰할 수 있는 로컬 모델 파일
 
     tokenizer = Tokenizer(vocab=vocab, split_fn=ptr_tokenizer, pad_fn=keras_pad_fn, maxlen=model_config.maxlen)
 
@@ -225,8 +229,12 @@ def load_ner_model(model_dir=None, checkpoint_path=None, tokenizer_path=None):
     ptr_tokenizer = SentencepieceTokenizer(tokenizer_path)
     
     # Vocab 로드
-    with open(model_dir / "vocab.pkl", 'rb') as f:
-        vocab = pickle.load(f)
+    # 보안: 신뢰할 수 있는 로컬 모델 파일에서만 로드 (사용자 입력 없음)
+    vocab_file = model_dir / "vocab.pkl"
+    if not vocab_file.exists():
+        raise FileNotFoundError(f"Vocab 파일을 찾을 수 없습니다: {vocab_file}")
+    with open(vocab_file, 'rb') as f:
+        vocab = pickle.load(f)  # nosec B301 - 신뢰할 수 있는 로컬 모델 파일
     
     tokenizer = Tokenizer(vocab=vocab, split_fn=ptr_tokenizer, pad_fn=keras_pad_fn, maxlen=model_config.maxlen)
     

@@ -12,6 +12,7 @@ interface UserAuthContextType {
 
 const UserAuthContext = createContext<UserAuthContextType | undefined>(undefined);
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useUserAuth = () => {
   const context = useContext(UserAuthContext);
   if (!context) {
@@ -86,7 +87,7 @@ export const UserAuthProvider: React.FC<UserAuthProviderProps> = ({ children }) 
         // 기타 오류 (500 등)는 네트워크 문제로 간주
         // 기존 인증 정보는 유지 (일시적인 서버 문제일 수 있음)
         setLoading(false);
-      } catch (error) {
+      } catch {
         // 네트워크 오류 등 - 기존 인증 정보는 유지 (일시적인 네트워크 문제일 수 있음)
         // fetch 자체가 실패한 경우만 catch됨
         setLoading(false);
@@ -133,7 +134,10 @@ export const UserAuthProvider: React.FC<UserAuthProviderProps> = ({ children }) 
           }
         }
         
-        const error = new Error(errorMessage) as any;
+        interface ErrorWithVerification extends Error {
+          requiresVerification?: boolean;
+        }
+        const error = new Error(errorMessage) as ErrorWithVerification;
         error.requiresVerification = requiresVerification;
         throw error;
       }
@@ -190,9 +194,10 @@ export const UserAuthProvider: React.FC<UserAuthProviderProps> = ({ children }) 
         .finally(() => {
           setLoading(false); // 최신화 완료 후 로딩 종료
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
       setLoading(false); // 에러 발생 시에도 로딩 종료
-      throw new Error(error.message || '로그인에 실패했습니다');
+      const errorMessage = error instanceof Error ? error.message : '로그인에 실패했습니다';
+      throw new Error(errorMessage);
     }
   };
 
@@ -200,7 +205,7 @@ export const UserAuthProvider: React.FC<UserAuthProviderProps> = ({ children }) 
     setLoading(true); // 로그아웃 시작 시 로딩 상태 활성화
     try {
       await userApi.logout();
-    } catch (error) {
+    } catch {
       // 보안: 콘솔 로그 제거
     } finally {
       localStorage.removeItem('user_email');

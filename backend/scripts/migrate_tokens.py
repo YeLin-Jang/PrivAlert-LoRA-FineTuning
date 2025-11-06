@@ -229,7 +229,9 @@ if __name__ == '__main__':
         try:
             sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
             sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
-        except:
+        except (AttributeError, OSError) as e:
+            # Windows에서 버퍼가 없는 경우 무시 (정상적인 상황)
+            # 로깅은 하지 않음 (시작 시점이므로)
             pass
     
     print("=" * 60)

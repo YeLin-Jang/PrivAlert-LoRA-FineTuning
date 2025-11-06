@@ -1,5 +1,5 @@
 // 백엔드 API 응답 타입
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   message: string;
   data?: T;
@@ -76,6 +76,8 @@ export interface AnalysisResult {
             type: string;
             value: string;
             category: string;
+            score?: number;
+            text?: string;
           }>;
         };
       };
@@ -207,6 +209,18 @@ export interface VideoAnalysisResult {
       end: number;
       text: string;
     }>;
+    analysis?: {
+      detected: boolean;
+      total_count: number;
+      categories: Record<string, {
+        items?: Array<{
+          type: string;
+          value: string;
+          category: string;
+        }>;
+        count?: number;
+      }>;
+    };
   };
   audio_text_analysis?: {
     has_sensitive_content: boolean;

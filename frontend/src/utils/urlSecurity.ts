@@ -30,7 +30,7 @@ export const removeSensitiveParams = (url: string): string => {
     });
 
     return urlObj.pathname + urlObj.search;
-  } catch (error) {
+  } catch {
     // URL 파싱 실패 시 원본 반환
     return url;
   }
@@ -82,7 +82,7 @@ export const hasSensitiveParams = (url: string): boolean => {
     ];
 
     return sensitiveParams.some(param => urlObj.searchParams.has(param));
-  } catch (error) {
+  } catch {
     return false;
   }
 };

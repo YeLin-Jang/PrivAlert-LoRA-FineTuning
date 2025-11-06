@@ -30,10 +30,15 @@ const Login: React.FC = () => {
       // 로그인 성공 후 리다이렉트 처리
       const redirectTo = location.state?.redirectTo || '/';
       navigate(redirectTo);
-    } catch (err: any) {
-      setError(err.message || '로그인에 실패했습니다');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : '로그인에 실패했습니다';
+      setError(errorMessage);
       // 이메일 인증이 필요한 경우 이메일 인증 페이지로 안내
-      if (err.requiresVerification) {
+      interface ErrorWithVerification extends Error {
+        requiresVerification?: boolean;
+      }
+      const errorWithVerification = err as ErrorWithVerification;
+      if (errorWithVerification.requiresVerification) {
         // 에러 메시지에 이미 안내가 포함되어 있으므로 추가 처리 불필요
       }
     } finally {

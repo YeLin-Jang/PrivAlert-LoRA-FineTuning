@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Bandit Low 이슈만 추출하는 스크립트"""
 import json
-import subprocess
+import subprocess  # nosec B404 - 정적 분석 도구 자체이므로 subprocess 사용 필요
 import sys
 from collections import defaultdict
 
 # Bandit JSON 리포트 생성
-result = subprocess.run(
+# 보안: 신뢰할 수 있는 시스템 명령어만 실행 (사용자 입력 없음)
+result = subprocess.run(  # nosec B603 - 신뢰할 수 있는 시스템 명령어만 실행
     [
         sys.executable, '-m', 'bandit',
         '-r', 'app',

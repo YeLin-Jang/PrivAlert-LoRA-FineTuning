@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { analyzeContent, suggestEducation } from '../../services/api';
-import type { AnalysisResult, SanitizedItem, DetectionOptions } from '../../types';
+import type { AnalysisResult, SanitizedItem, DetectionOptions, VideoAnalysisResult } from '../../types';
 import { validateTextLength } from '../../utils/validation';
 import { UPLOAD_LIMITS, ERROR_MESSAGES, API_CONFIG } from '../../constants';
 import { DetectionOptionsPanel } from './DetectionOptionsPanel';
@@ -26,11 +26,22 @@ export default function UploadForm() {
   const [blurFingers, setBlurFingers] = useState(false);
   const [showFaces, setShowFaces] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [result, setResult] = useState<(AnalysisResult & { video_analysis?: VideoAnalysisResult }) | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showResultModal, setShowResultModal] = useState(false);
   const [showEduPanel, setShowEduPanel] = useState(false);
-  const [eduItems, setEduItems] = useState<any[] | null>(null);
+  interface EducationItem {
+    category?: string;
+    revised_sentence_rationale?: string;
+    law_summary?: string;
+    law_summary_rationale?: string;
+    risk_scenarios?: string[];
+    risk_scenarios_rationale?: string;
+    tips?: string[];
+    tips_rationale?: string;
+    [key: string]: unknown;
+  }
+  const [eduItems, setEduItems] = useState<EducationItem[] | null>(null);
   const [revisedSentence, setRevisedSentence] = useState<string | null>(null);
   const [revisedSentenceRationale, setRevisedSentenceRationale] = useState<string | null>(null);
   const [eduLoading, setEduLoading] = useState(false);
@@ -103,7 +114,7 @@ export default function UploadForm() {
               setBlurFingers(true);
             }
           }
-        } catch (err) {
+        } catch {
           // 설정 로드 실패 시 기본값 유지
           // 보안: 콘솔 로그 제거
         }
@@ -263,12 +274,16 @@ export default function UploadForm() {
                 await userApi.getCurrentUser();
                 // CSRF 토큰 갱신 후 저장
                 await userApi.createRevisionHistory(revisedText, categoryKeys);
-              } catch (error: any) {
+              } catch (error: unknown) {
                 // 저장 실패는 조용히 처리 (사용자에게 알리지 않음)
                 // 보안: 콘솔 로그 제거
                 
                 // 403 에러인 경우 한 번 더 CSRF 토큰 갱신 후 재시도
-                if (error?.response?.status === 403) {
+                interface ErrorWithResponse {
+                  response?: { status?: number };
+                }
+                const axiosError = error as ErrorWithResponse;
+                if (axiosError?.response?.status === 403) {
                   try {
                     // CSRF 토큰 갱신
                     await userApi.getCurrentUser();
@@ -284,7 +299,7 @@ export default function UploadForm() {
             // 백그라운드에서 실행 (await 하지 않음)
             saveRevisionHistory();
           }
-        } catch (saveError) {
+        } catch {
           // 저장 중 오류는 조용히 처리
           // 보안: 콘솔 로그 제거
         }
@@ -295,7 +310,8 @@ export default function UploadForm() {
       try {
         // text_analysis는 이제 직접 입력 텍스트와 OCR 결과가 통합되어 있음
         const masked = analysisResult?.text_analysis?.masked_text || '';
-        const cats = (analysisResult as any)?.text_analysis?.structured_data?.categories || {};
+        const structuredData = analysisResult?.text_analysis?.structured_data;
+        const cats = structuredData?.categories || {};
         
         // 텍스트나 검출된 카테고리가 있을 때만 교육 제안 요청
         const hasContent = masked.trim().length > 0 || Object.keys(cats).length > 0;
@@ -319,12 +335,17 @@ export default function UploadForm() {
               setRevisedSentence(null);
               setRevisedSentenceRationale(null);
             }
-          } catch (eduError: any) {
+          } catch (eduError: unknown) {
             // 에러 상세 정보 로깅
+            interface ErrorWithResponse {
+              message?: string;
+              response?: { data?: unknown; status?: number };
+            }
+            const axiosError = eduError as ErrorWithResponse;
             secureLog('교육 제안 로딩 실패', {
-              message: eduError?.message,
-              response: eduError?.response?.data,
-              status: eduError?.response?.status,
+              message: axiosError?.message,
+              response: axiosError?.response?.data,
+              status: axiosError?.response?.status,
             });
             setShowEduPanel(false);
             setEduItems([]);
@@ -608,7 +629,12 @@ export default function UploadForm() {
           onClose={() => setShowResultModal(false)}
           detectionOptions={detectionOptions}
           blurFingers={blurFingers}
-          onShowEducation={(_maskedText, _categories) => {
+          onShowEducation={(
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            _maskedText,
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            _categories
+          ) => {
             // 교육 패널 표시 로직 (사용자가 직접 버튼을 클릭할 때만 열림)
             setShowEduPanel(true);
           }}
@@ -618,6 +644,7 @@ export default function UploadForm() {
       )}
       
       {/* 기존 결과 모달 (임시로 유지 - 나중에 제거) */}
+      {/* eslint-disable-next-line no-constant-binary-expression */}
       {false && showResultModal && result && (
         <div className="modal-overlay" onClick={() => setShowResultModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -633,26 +660,28 @@ export default function UploadForm() {
             
             <div className="modal-body">
               {/* 비디오 분석 결과 */}
-              {(result as any).video_analysis && (
+              {result?.video_analysis && (() => {
+                const videoAnalysis = result!.video_analysis!;
+                return (
                 <div className="video-analysis-card">
                   <h3>🎬 비디오 분석 결과</h3>
                   <div className="video-info">
                     <p><strong>비디오 정보:</strong></p>
                     <ul>
-                      <li>해상도: {(result as any).video_analysis.video_info?.width} x {(result as any).video_analysis.video_info?.height}</li>
-                      <li>길이: {((result as any).video_analysis.video_info?.duration || 0).toFixed(1)}초</li>
-                      <li>FPS: {((result as any).video_analysis.video_info?.fps || 0).toFixed(1)}</li>
-                      <li>처리된 프레임: {(result as any).video_analysis.summary?.total_frames_processed || 0}개</li>
+                      <li>해상도: {videoAnalysis.video_info?.width} x {videoAnalysis.video_info?.height}</li>
+                      <li>길이: {(videoAnalysis.video_info?.duration || 0).toFixed(1)}초</li>
+                      <li>FPS: {(videoAnalysis.video_info?.fps || 0).toFixed(1)}</li>
+                      <li>처리된 프레임: {videoAnalysis.summary?.total_frames_processed || 0}개</li>
                     </ul>
                   </div>
                   
-                  {(result as any).video_analysis.audio_transcription && (
+                  {videoAnalysis.audio_transcription && (
                     <div className="audio-transcription-section">
                       <h4>🎤 음성 인식 결과</h4>
                       <p className="transcription-text">
-                        {(result as any).video_analysis.audio_transcription.text}
+                        {videoAnalysis.audio_transcription?.text}
                       </p>
-                      {(result as any).video_analysis.audio_text_analysis?.has_sensitive_content && (
+                      {videoAnalysis.audio_text_analysis?.has_sensitive_content && (
                         <div className="sensitive-content-warning">
                           ⚠️ 음성 인식 텍스트에서 민감 정보가 감지되었습니다
                         </div>
@@ -663,23 +692,23 @@ export default function UploadForm() {
                   <div className="video-summary-stats">
                     <div className="stat-item">
                       <span className="stat-label">감지된 얼굴</span>
-                      <span className="stat-value">{(result as any).video_analysis.summary?.total_faces_detected || 0}개</span>
+                      <span className="stat-value">{videoAnalysis.summary?.total_faces_detected || 0}개</span>
                     </div>
                     <div className="stat-item">
                       <span className="stat-label">감지된 손가락</span>
-                      <span className="stat-value">{(result as any).video_analysis.summary?.total_fingers_detected || 0}개</span>
+                      <span className="stat-value">{videoAnalysis.summary?.total_fingers_detected || 0}개</span>
                     </div>
                     <div className="stat-item">
                       <span className="stat-label">민감 정보 포함 프레임</span>
-                      <span className="stat-value">{(result as any).video_analysis.summary?.frames_with_sensitive_content || 0}개</span>
+                      <span className="stat-value">{videoAnalysis.summary?.frames_with_sensitive_content || 0}개</span>
                     </div>
                   </div>
                   
-                  {(result as any).video_analysis.frames && (result as any).video_analysis.frames.length > 0 && (
+                  {videoAnalysis.frames && videoAnalysis.frames.length > 0 && (
                     <div className="frames-section">
                       <h4>프레임별 분석 결과</h4>
                       <div className="frames-list">
-                        {(result as any).video_analysis.frames.slice(0, 10).map((frame: any, idx: number) => (
+                        {videoAnalysis.frames.slice(0, 10).map((frame: VideoAnalysisResult['frames'][number], idx: number) => (
                           <div key={idx} className="frame-item">
                             <p><strong>프레임 {frame.frame_index + 1}</strong> ({frame.timestamp.toFixed(1)}초)</p>
                             {frame.ocr && (
@@ -697,7 +726,8 @@ export default function UploadForm() {
                     </div>
                   )}
                 </div>
-              )}
+                );
+              })()}
               
               <div className="result-summary">
                 <div className="summary-card">
@@ -879,7 +909,7 @@ export default function UploadForm() {
                                   a.remove();
                                   // 보안: URL 즉시 해제
                                   secureURLCleanup(objectURL);
-                                } catch (e) {
+                                } catch {
                                   // 보안: 콘솔 로그 제거
                                   alert('다운로드 중 오류가 발생했습니다.');
                                 }
@@ -1034,8 +1064,8 @@ export default function UploadForm() {
                                     <div key={index} className="data-item">
                                       <span className="data-type">[{item.type}]</span>
                                       <span className="data-value">"{item.value}"</span>
-                                      {(item as any).score && (
-                                        <span className="data-score">(신뢰도: {((item as any).score * 100).toFixed(1)}%)</span>
+                                      {(item.score !== undefined) && (
+                                        <span className="data-score">(신뢰도: {(item.score * 100).toFixed(1)}%)</span>
                                       )}
                                     </div>
                                   ))}
@@ -1049,9 +1079,9 @@ export default function UploadForm() {
                                   {result?.text_analysis?.structured_data?.categories?.name?.items.map((item, index) => (
                                     <div key={index} className="data-item">
                                       <span className="data-type">[NAME]</span>
-                                      <span className="data-value">"{(item as any).text}"</span>
-                                      {(item as any).score && (
-                                        <span className="data-score">(신뢰도: {((item as any).score * 100).toFixed(1)}%)</span>
+                                      <span className="data-value">"{item.text || item.value || ''}"</span>
+                                      {(item.score !== undefined) && (
+                                        <span className="data-score">(신뢰도: {(item.score * 100).toFixed(1)}%)</span>
                                       )}
                                     </div>
                                   ))}
@@ -1198,7 +1228,7 @@ export default function UploadForm() {
                         <span className="section-title">법령 요약</span>
                       </div>
                       <div className="section-content">
-                        {it.law_summary}
+                        {it.law_summary || ''}
                       </div>
                     </div>
 

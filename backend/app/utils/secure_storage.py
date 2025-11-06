@@ -239,8 +239,8 @@ def delete_file_atomic(file_path: str) -> bool:
             # 임시 파일 복구 시도
             try:
                 os.rename(temp_path, file_path)
-            except:
-                pass
+            except OSError as restore_error:
+                logger.warning(f"임시 파일 복구 실패: {restore_error}")
             return False
             
     except Exception as e:

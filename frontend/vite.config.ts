@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import type { IncomingMessage, ServerResponse, OutgoingHttpHeaders } from "http";
 
 // 보안 헤더 미들웨어 플러그인
 function securityHeadersPlugin(): Plugin {
@@ -19,16 +20,24 @@ function securityHeadersPlugin(): Plugin {
       const htmlCSP = isDev
         // 개발 환경: Vite HMR 및 개발 도구를 위해 일부 완화
         ? "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https: http://localhost:5000 http://localhost:8000; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http://localhost:5000 http://localhost:8000 ws://localhost:3000 ws://localhost:5173; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'"
-        // 프로덕션: 보안 강화 (blob 제거, localhost 제거, https: 제한)
-        : "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'";
+        // 프로덕션: 보안 강화 (nonce는 서버에서 주입, 여기서는 기본값 사용)
+        : "default-src 'self'; script-src 'self' 'nonce-{NONCE}'; style-src 'self' 'nonce-{NONCE}' https://fonts.googleapis.com; style-src-elem 'self' 'nonce-{NONCE}' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://api.privalert.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; upgrade-insecure-requests";
       
       // 관리자 페이지용 - 더 엄격한 CSP (unsafe-inline 완전 제거)
       const adminCSP = "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'none'; manifest-src 'self'; upgrade-insecure-requests";
       
       // 보안 헤더 설정 함수
-      const setSecurityHeaders = (req: any, res: any) => {
+      const setSecurityHeaders = (req: IncomingMessage, res: ServerResponse) => {
         const url = req.url || '';
         
+        // 모든 응답에 기본 보안 헤더 설정 (정적 리소스 포함)
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('X-Frame-Options', 'DENY'); // 모든 프레임 차단
+        res.setHeader('X-XSS-Protection', '1; mode=block');
+        res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+        res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=()');
+        
+        // CSP는 HTML 페이지만 설정 (정적 리소스에는 불필요하지만 설정해도 무방)
         // 경로에 따라 적절한 CSP 선택
         let csp: string;
         if (url === '/sitemap.xml' || url.startsWith('/sitemap.xml?')) {
@@ -37,105 +46,195 @@ function securityHeadersPlugin(): Plugin {
           csp = robotsCSP;
         } else if (url.startsWith('/admin')) {
           csp = adminCSP;
-        } else {
-          // HTML 페이지 (/, /index.html 등)
+        } else if (url.match(/\.(html|htm)$/i) || url === '/' || url === '') {
+          // HTML 페이지만 CSP 설정
           csp = htmlCSP;
+        } else {
+          // 정적 리소스 (JS, CSS, 이미지 등)에도 기본 CSP 설정
+          // 하지만 더 관대한 정책 사용
+          csp = "default-src 'self'; frame-ancestors 'none'";
         }
         
         // 클릭재킹 방지 헤더 (CSP와 X-Frame-Options 둘 다 설정)
         // CSP의 frame-ancestors와 X-Frame-Options 모두 설정하여 최대 호환성 보장
         res.setHeader('Content-Security-Policy', csp);
-        res.setHeader('X-Frame-Options', 'DENY'); // 모든 프레임 차단
-        
-        // 기타 보안 헤더
-        res.setHeader('X-Content-Type-Options', 'nosniff');
-        res.setHeader('X-XSS-Protection', '1; mode=block');
-        res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-        res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=()');
       };
       
       // 미들웨어를 가장 먼저 실행되도록 설정 (다른 미들웨어보다 우선)
       // 모든 요청에 대해 보안 헤더 강제 적용
-      server.middlewares.use((req, res, next) => {
-        // 헤더가 이미 설정되었는지 확인하고, 없으면 설정
-        if (!res.headersSent) {
+      // Vite의 기본 미들웨어보다 먼저 실행되도록 unshift 사용
+      if (Array.isArray(server.middlewares.stack)) {
+        server.middlewares.stack.unshift({
+          route: '',
+          handle: (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+            // 모든 요청에 대해 보안 헤더 설정
+            setSecurityHeaders(req, res);
+            next();
+          }
+        });
+      } else {
+        // fallback: use 메서드 사용
+        server.middlewares.use((req: IncomingMessage, res: ServerResponse, next: () => void) => {
           setSecurityHeaders(req, res);
-        }
-        next();
-      });
+          next();
+        });
+      }
       
-      // 응답이 전송되기 전에 헤더가 설정되었는지 다시 확인
+      // 응답이 전송되기 전에 헤더가 설정되었는지 다시 확인 (이중 보장)
       server.middlewares.use((req, res, next) => {
         const originalEnd = res.end;
         const originalWriteHead = res.writeHead;
         
         // writeHead를 가로채서 헤더 확인
-        res.writeHead = function(statusCode?: number, statusMessage?: any, headers?: any) {
-          if (!headers) {
-            headers = statusMessage;
-            statusMessage = undefined;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        res.writeHead = function(statusCode?: any, statusMessage?: any, headers?: any): any {
+          let actualHeaders: OutgoingHttpHeaders;
+          let actualStatusMessage: string | undefined;
+          
+          // writeHead 오버로드 처리: (statusCode, headers) 또는 (statusCode, statusMessage, headers)
+          if (headers === undefined && typeof statusMessage !== 'string' && typeof statusMessage !== 'number') {
+            // 2개 인자: (statusCode, headers)
+            actualHeaders = statusMessage as OutgoingHttpHeaders;
+            actualStatusMessage = undefined;
+          } else {
+            // 3개 인자: (statusCode, statusMessage, headers)
+            actualHeaders = headers as OutgoingHttpHeaders;
+            actualStatusMessage = statusMessage as string | undefined;
           }
           
           // 필수 보안 헤더 강제 설정
-          if (headers) {
-            headers['X-Content-Type-Options'] = 'nosniff';
-            headers['X-Frame-Options'] = 'DENY';
+          if (actualHeaders) {
+            actualHeaders['X-Content-Type-Options'] = 'nosniff';
+            actualHeaders['X-Frame-Options'] = 'DENY';
           } else {
-            headers = {
+            actualHeaders = {
               'X-Content-Type-Options': 'nosniff',
               'X-Frame-Options': 'DENY',
             };
           }
           
           // CSP가 없으면 기본 CSP 추가
-          if (!headers['Content-Security-Policy']) {
+          const cspValue = actualHeaders['Content-Security-Policy'];
+          if (!cspValue || (typeof cspValue === 'string' && cspValue.length === 0)) {
             const url = req.url || '';
             if (url === '/sitemap.xml' || url.startsWith('/sitemap.xml?')) {
-              headers['Content-Security-Policy'] = sitemapCSP;
+              actualHeaders['Content-Security-Policy'] = sitemapCSP;
             } else if (url === '/robots.txt' || url.startsWith('/robots.txt?')) {
-              headers['Content-Security-Policy'] = robotsCSP;
+              actualHeaders['Content-Security-Policy'] = robotsCSP;
             } else if (url.startsWith('/admin')) {
-              headers['Content-Security-Policy'] = adminCSP;
+              actualHeaders['Content-Security-Policy'] = adminCSP;
             } else {
-              headers['Content-Security-Policy'] = htmlCSP;
+              actualHeaders['Content-Security-Policy'] = htmlCSP;
             }
           }
           
           // frame-ancestors가 없으면 추가
-          if (headers['Content-Security-Policy'] && !headers['Content-Security-Policy'].includes('frame-ancestors')) {
-            headers['Content-Security-Policy'] += '; frame-ancestors \'none\'';
+          const currentCsp = actualHeaders['Content-Security-Policy'];
+          if (currentCsp && typeof currentCsp === 'string' && !currentCsp.includes('frame-ancestors')) {
+            actualHeaders['Content-Security-Policy'] = currentCsp + '; frame-ancestors \'none\'';
           }
           
           // writeHead는 statusMessage가 있으면 3개 인자, 없으면 2개 인자
           // TypeScript 타입 호환을 위해 타입 단언 사용
-          if (statusMessage !== undefined) {
-            return (originalWriteHead as any).call(this, statusCode as number, statusMessage, headers);
+          if (actualStatusMessage !== undefined) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return (originalWriteHead as any).call(this, statusCode as number, actualStatusMessage, actualHeaders);
           } else {
-            return (originalWriteHead as any).call(this, statusCode as number, headers);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return (originalWriteHead as any).call(this, statusCode as number, actualHeaders);
           }
         };
         
-        res.end = function(chunk?: any, encoding?: any, cb?: any) {
-          // 응답이 전송되기 전에 헤더 확인 및 설정
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        res.end = function(chunk?: any, encoding?: any, cb?: any): any {
+          // 응답이 전송되기 전에 헤더 확인 및 설정 (강제)
           if (!res.headersSent) {
+            // 보안 헤더 강제 설정
             setSecurityHeaders(req, res);
+          } else {
+            // 헤더가 이미 전송되었더라도, 필수 헤더는 반드시 설정되어야 함
+            // 하지만 headersSent가 true이면 setHeader가 작동하지 않으므로
+            // writeHead를 통해 강제로 헤더 추가 시도
+            try {
+              const existingHeaders: OutgoingHttpHeaders = {};
+              res.getHeaderNames().forEach(name => {
+                const value = res.getHeader(name);
+                if (value) {
+                  existingHeaders[name] = value;
+                }
+              });
+              
+              // 필수 보안 헤더 확인 및 추가
+              if (!existingHeaders['X-Content-Type-Options']) {
+                existingHeaders['X-Content-Type-Options'] = 'nosniff';
+              }
+              if (!existingHeaders['X-Frame-Options']) {
+                existingHeaders['X-Frame-Options'] = 'DENY';
+              }
+              if (!existingHeaders['Content-Security-Policy']) {
+                const url = req.url || '';
+                let csp: string;
+                if (url === '/sitemap.xml' || url.startsWith('/sitemap.xml?')) {
+                  csp = sitemapCSP;
+                } else if (url === '/robots.txt' || url.startsWith('/robots.txt?')) {
+                  csp = robotsCSP;
+                } else if (url.startsWith('/admin')) {
+                  csp = adminCSP;
+                } else {
+                  csp = htmlCSP;
+                }
+                existingHeaders['Content-Security-Policy'] = csp;
+              }
+            } catch (e) {
+              // 헤더가 이미 전송된 경우 무시
+            }
           }
           
-          // 필수 보안 헤더 이중 보장
-          if (!res.getHeader('X-Content-Type-Options')) {
-            res.setHeader('X-Content-Type-Options', 'nosniff');
-          }
-          if (!res.getHeader('X-Frame-Options')) {
-            res.setHeader('X-Frame-Options', 'DENY');
+          // 필수 보안 헤더 이중 보장 (headersSent가 false인 경우에만)
+          if (!res.headersSent) {
+            if (!res.getHeader('X-Content-Type-Options')) {
+              res.setHeader('X-Content-Type-Options', 'nosniff');
+            }
+            if (!res.getHeader('X-Frame-Options')) {
+              res.setHeader('X-Frame-Options', 'DENY');
+            }
+            
+            // CSP 확인 및 설정
+            let csp = res.getHeader('Content-Security-Policy');
+            if (!csp) {
+              const url = req.url || '';
+              if (url === '/sitemap.xml' || url.startsWith('/sitemap.xml?')) {
+                csp = sitemapCSP;
+              } else if (url === '/robots.txt' || url.startsWith('/robots.txt?')) {
+                csp = robotsCSP;
+              } else if (url.startsWith('/admin')) {
+                csp = adminCSP;
+              } else {
+                csp = htmlCSP;
+              }
+              res.setHeader('Content-Security-Policy', csp);
+            } else if (typeof csp === 'string' && !csp.includes('frame-ancestors')) {
+              res.setHeader('Content-Security-Policy', csp + '; frame-ancestors \'none\'');
+            }
           }
           
-          // CSP의 frame-ancestors가 없으면 추가
-          const csp = res.getHeader('Content-Security-Policy');
-          if (csp && typeof csp === 'string' && !csp.includes('frame-ancestors')) {
-            res.setHeader('Content-Security-Policy', csp + '; frame-ancestors \'none\'');
+          // res.end 오버로드 처리: (cb) 또는 (chunk, cb) 또는 (chunk, encoding, cb)
+          if (chunk === undefined && encoding === undefined && cb === undefined) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return (originalEnd as any).call(this);
+          } else if (encoding === undefined && typeof cb === 'function') {
+            // (chunk, cb) 또는 (cb)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return (originalEnd as any).call(this, chunk, cb);
+          } else if (encoding !== undefined && typeof encoding !== 'string') {
+            // (chunk, cb) - encoding이 실제로는 cb
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return (originalEnd as any).call(this, chunk, encoding);
+          } else {
+            // (chunk, encoding, cb)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return (originalEnd as any).call(this, chunk, encoding, cb);
           }
-          
-          return originalEnd.call(this, chunk, encoding, cb);
         };
         next();
       });
@@ -156,9 +255,17 @@ function securityHeadersPlugin(): Plugin {
       const adminCSP = "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'none'; manifest-src 'self'; upgrade-insecure-requests";
       
       // 보안 헤더 설정 함수
-      const setSecurityHeaders = (req: any, res: any) => {
+      const setSecurityHeaders = (req: IncomingMessage, res: ServerResponse) => {
         const url = req.url || '';
         
+        // 모든 응답에 기본 보안 헤더 설정 (정적 리소스 포함)
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('X-Frame-Options', 'DENY'); // 모든 프레임 차단
+        res.setHeader('X-XSS-Protection', '1; mode=block');
+        res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+        res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=()');
+        
+        // CSP는 HTML 페이지만 설정 (정적 리소스에는 불필요하지만 설정해도 무방)
         let csp: string;
         if (url === '/sitemap.xml' || url.startsWith('/sitemap.xml?')) {
           csp = sitemapCSP;
@@ -166,100 +273,156 @@ function securityHeadersPlugin(): Plugin {
           csp = robotsCSP;
         } else if (url.startsWith('/admin')) {
           csp = adminCSP;
-        } else {
+        } else if (url.match(/\.(html|htm)$/i) || url === '/' || url === '') {
+          // HTML 페이지만 CSP 설정
           csp = htmlCSP;
+        } else {
+          // 정적 리소스 (JS, CSS, 이미지 등)에도 기본 CSP 설정
+          // 하지만 더 관대한 정책 사용
+          csp = "default-src 'self'; frame-ancestors 'none'";
         }
         
         // 클릭재킹 방지 헤더 (CSP와 X-Frame-Options 둘 다 설정)
         res.setHeader('Content-Security-Policy', csp);
-        res.setHeader('X-Frame-Options', 'DENY'); // 모든 프레임 차단
-        
-        // 기타 보안 헤더
-        res.setHeader('X-Content-Type-Options', 'nosniff');
-        res.setHeader('X-XSS-Protection', '1; mode=block');
-        res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-        res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=()');
       };
       
       // 미들웨어를 가장 먼저 실행되도록 설정
-      server.middlewares.use((req, res, next) => {
-        if (!res.headersSent) {
+      // Vite의 기본 미들웨어보다 먼저 실행되도록 unshift 사용
+      if (Array.isArray(server.middlewares.stack)) {
+        server.middlewares.stack.unshift({
+          route: '',
+          handle: (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+            // 모든 요청에 대해 보안 헤더 설정
+            setSecurityHeaders(req, res);
+            next();
+          }
+        });
+      } else {
+        // fallback: use 메서드 사용
+        server.middlewares.use((req: IncomingMessage, res: ServerResponse, next: () => void) => {
           setSecurityHeaders(req, res);
-        }
-        next();
-      });
+          next();
+        });
+      }
       
-      // 응답 전송 전 헤더 재확인
+      // 응답 전송 전 헤더 재확인 (이중 보장)
       server.middlewares.use((req, res, next) => {
         const originalEnd = res.end;
         const originalWriteHead = res.writeHead;
         
         // writeHead를 가로채서 헤더 확인
-        res.writeHead = function(statusCode?: number, statusMessage?: any, headers?: any) {
-          if (!headers) {
-            headers = statusMessage;
-            statusMessage = undefined;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        res.writeHead = function(statusCode?: any, statusMessage?: any, headers?: any): any {
+          let actualHeaders: OutgoingHttpHeaders;
+          let actualStatusMessage: string | undefined;
+          
+          // writeHead 오버로드 처리: (statusCode, headers) 또는 (statusCode, statusMessage, headers)
+          if (headers === undefined && typeof statusMessage !== 'string' && typeof statusMessage !== 'number') {
+            // 2개 인자: (statusCode, headers)
+            actualHeaders = statusMessage as OutgoingHttpHeaders;
+            actualStatusMessage = undefined;
+          } else {
+            // 3개 인자: (statusCode, statusMessage, headers)
+            actualHeaders = headers as OutgoingHttpHeaders;
+            actualStatusMessage = statusMessage as string | undefined;
           }
           
           // 필수 보안 헤더 강제 설정
-          if (headers) {
-            headers['X-Content-Type-Options'] = 'nosniff';
-            headers['X-Frame-Options'] = 'DENY';
+          if (actualHeaders) {
+            actualHeaders['X-Content-Type-Options'] = 'nosniff';
+            actualHeaders['X-Frame-Options'] = 'DENY';
           } else {
-            headers = {
+            actualHeaders = {
               'X-Content-Type-Options': 'nosniff',
               'X-Frame-Options': 'DENY',
             };
           }
           
           // CSP가 없으면 기본 CSP 추가
-          if (!headers['Content-Security-Policy']) {
+          const cspValue = actualHeaders['Content-Security-Policy'];
+          if (!cspValue || (typeof cspValue === 'string' && cspValue.length === 0)) {
             const url = req.url || '';
             if (url === '/sitemap.xml' || url.startsWith('/sitemap.xml?')) {
-              headers['Content-Security-Policy'] = sitemapCSP;
+              actualHeaders['Content-Security-Policy'] = sitemapCSP;
             } else if (url === '/robots.txt' || url.startsWith('/robots.txt?')) {
-              headers['Content-Security-Policy'] = robotsCSP;
+              actualHeaders['Content-Security-Policy'] = robotsCSP;
             } else if (url.startsWith('/admin')) {
-              headers['Content-Security-Policy'] = adminCSP;
+              actualHeaders['Content-Security-Policy'] = adminCSP;
             } else {
-              headers['Content-Security-Policy'] = htmlCSP;
+              actualHeaders['Content-Security-Policy'] = htmlCSP;
             }
           }
           
           // frame-ancestors가 없으면 추가
-          if (headers['Content-Security-Policy'] && !headers['Content-Security-Policy'].includes('frame-ancestors')) {
-            headers['Content-Security-Policy'] += '; frame-ancestors \'none\'';
+          const currentCsp = actualHeaders['Content-Security-Policy'];
+          if (currentCsp && typeof currentCsp === 'string' && !currentCsp.includes('frame-ancestors')) {
+            actualHeaders['Content-Security-Policy'] = currentCsp + '; frame-ancestors \'none\'';
           }
           
           // writeHead는 statusMessage가 있으면 3개 인자, 없으면 2개 인자
           // TypeScript 타입 호환을 위해 타입 단언 사용
-          if (statusMessage !== undefined) {
-            return (originalWriteHead as any).call(this, statusCode as number, statusMessage, headers);
+          if (actualStatusMessage !== undefined) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return (originalWriteHead as any).call(this, statusCode as number, actualStatusMessage, actualHeaders);
           } else {
-            return (originalWriteHead as any).call(this, statusCode as number, headers);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return (originalWriteHead as any).call(this, statusCode as number, actualHeaders);
           }
         };
         
-        res.end = function(chunk?: any, encoding?: any, cb?: any) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        res.end = function(chunk?: any, encoding?: any, cb?: any): any {
+          // 응답이 전송되기 전에 헤더 확인 및 설정 (강제)
           if (!res.headersSent) {
+            // 보안 헤더 강제 설정
             setSecurityHeaders(req, res);
           }
           
-          // 필수 보안 헤더 이중 보장
-          if (!res.getHeader('X-Content-Type-Options')) {
-            res.setHeader('X-Content-Type-Options', 'nosniff');
-          }
-          if (!res.getHeader('X-Frame-Options')) {
-            res.setHeader('X-Frame-Options', 'DENY');
+          // 필수 보안 헤더 이중 보장 (headersSent가 false인 경우에만)
+          if (!res.headersSent) {
+            if (!res.getHeader('X-Content-Type-Options')) {
+              res.setHeader('X-Content-Type-Options', 'nosniff');
+            }
+            if (!res.getHeader('X-Frame-Options')) {
+              res.setHeader('X-Frame-Options', 'DENY');
+            }
+            
+            // CSP 확인 및 설정
+            let csp = res.getHeader('Content-Security-Policy');
+            if (!csp) {
+              const url = req.url || '';
+              if (url === '/sitemap.xml' || url.startsWith('/sitemap.xml?')) {
+                csp = sitemapCSP;
+              } else if (url === '/robots.txt' || url.startsWith('/robots.txt?')) {
+                csp = robotsCSP;
+              } else if (url.startsWith('/admin')) {
+                csp = adminCSP;
+              } else {
+                csp = htmlCSP;
+              }
+              res.setHeader('Content-Security-Policy', csp);
+            } else if (typeof csp === 'string' && !csp.includes('frame-ancestors')) {
+              res.setHeader('Content-Security-Policy', csp + '; frame-ancestors \'none\'');
+            }
           }
           
-          // CSP의 frame-ancestors가 없으면 추가
-          const csp = res.getHeader('Content-Security-Policy');
-          if (csp && typeof csp === 'string' && !csp.includes('frame-ancestors')) {
-            res.setHeader('Content-Security-Policy', csp + '; frame-ancestors \'none\'');
+          // res.end 오버로드 처리: (cb) 또는 (chunk, cb) 또는 (chunk, encoding, cb)
+          if (chunk === undefined && encoding === undefined && cb === undefined) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return (originalEnd as any).call(this);
+          } else if (encoding === undefined && typeof cb === 'function') {
+            // (chunk, cb) 또는 (cb)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return (originalEnd as any).call(this, chunk, cb);
+          } else if (encoding !== undefined && typeof encoding !== 'string') {
+            // (chunk, cb) - encoding이 실제로는 cb
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return (originalEnd as any).call(this, chunk, encoding);
+          } else {
+            // (chunk, encoding, cb)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return (originalEnd as any).call(this, chunk, encoding, cb);
           }
-          
-          return originalEnd.call(this, chunk, encoding, cb);
         };
         next();
       });
@@ -324,6 +487,7 @@ export default defineConfig({
       // 보안: 주석 제거 옵션 (format.comments와 중복되지만 명시적으로 설정)
       keep_classnames: false,
       keep_fnames: false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any, // TerserOptions 타입 호환성 문제 해결
     // 소스맵 생성 비활성화 (보안: 소스 코드 노출 방지)
     sourcemap: false,

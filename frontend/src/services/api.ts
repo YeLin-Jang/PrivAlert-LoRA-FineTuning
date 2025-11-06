@@ -1,5 +1,5 @@
 import axios, { type AxiosInstance, type AxiosError } from 'axios';
-import type { ApiResponse, AnalysisResult, DetectionOptions } from '../types';
+import type { ApiResponse, AnalysisResult, DetectionOptions, VideoAnalysisResult } from '../types';
 import { API_CONFIG } from '../constants';
 import { secureFormDataCleanup } from '../utils/security';
 
@@ -178,7 +178,7 @@ export const analyzeVideo = async (
   extractAudio: boolean = true,
   processFrames: boolean = true,
   frameInterval: number = 1.0
-): Promise<any> => {
+): Promise<VideoAnalysisResult> => {
   const formData = new FormData();
   formData.append('video', videoFile);
   formData.append('extract_audio', extractAudio.toString());
@@ -202,7 +202,7 @@ export const analyzeVideo = async (
  */
 export const suggestEducation = async (
   maskedText: string,
-  categories: Record<string, any>,
+  categories: Record<string, unknown>,
   language: string = 'ko',
   tone: string = 'educational'
 ) => {
@@ -232,15 +232,20 @@ export const suggestEducation = async (
     }
     
     return response.data.data;
-  } catch (error: any) {
+  } catch (error: unknown) {
     // 보안: 콘솔 로그 제거
     
     // 네트워크 오류인 경우 더 명확한 메시지
-    if (!error.response && error.request) {
+    interface ErrorWithResponse {
+      response?: unknown;
+      request?: unknown;
+    }
+    const axiosError = error as ErrorWithResponse;
+    if (!axiosError.response && axiosError.request) {
       throw new Error('네트워크 오류가 발생했습니다. 서버 연결을 확인해주세요.');
     }
     
-    throw error;
+    throw error instanceof Error ? error : new Error('교육 제안 생성 중 오류가 발생했습니다');
   }
 };
 
@@ -250,7 +255,7 @@ export const suggestEducation = async (
 export const filterStructuredData = async (
   text: string,
   detectionOptions: Record<string, boolean> = {}
-): Promise<any> => {
+): Promise<AnalysisResult> => {
   // 활성화된 필터들만 추출
   const activeFilters = Object.entries(detectionOptions)
     .filter(([key, value]) => value && [

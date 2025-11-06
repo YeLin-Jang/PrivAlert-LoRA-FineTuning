@@ -7,6 +7,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # 의존성 파일 복사 및 설치
+# 레이어 캐싱 최적화: package.json만 먼저 복사하여 의존성 변경 시에만 재빌드
 COPY package*.json ./
 RUN npm ci --only=production=false
 

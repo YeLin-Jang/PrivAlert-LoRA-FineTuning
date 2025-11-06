@@ -116,8 +116,9 @@ const EmailVerification: React.FC = () => {
       } else {
         throw new Error(data.error || '이메일 인증에 실패했습니다');
       }
-    } catch (err: any) {
-      setError(err.message || '인증에 실패했습니다');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : '이메일 인증에 실패했습니다';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

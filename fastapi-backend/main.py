@@ -11,12 +11,14 @@ from contextlib import asynccontextmanager
 from app.routes import auth_routes
 from app.database import init_db, close_db
 from app.services.verification_service import init_redis, close_redis
+from app.core.config import settings
 import logging
 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+
 
 # 애플리케이션 라이프사이클 관리
 @asynccontextmanager
@@ -39,8 +41,6 @@ app = FastAPI(
 )
 
 # CORS 설정 (보안: 허용된 오리진만)
-from app.core.config import settings
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -49,8 +49,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # 라우터 등록
 app.include_router(auth_routes.router, prefix="/api/v1", tags=["인증"])
+
 
 # 헬스 체크 엔드포인트
 @app.get("/health")
@@ -60,6 +62,7 @@ async def health_check():
         content={"status": "healthy", "service": "PrivAlert FastAPI Backend"},
         status_code=200
     )
+
 
 # 루트 엔드포인트
 @app.get("/")
@@ -81,4 +84,3 @@ if __name__ == "__main__":
         port=8000,
         reload=True
     )
-

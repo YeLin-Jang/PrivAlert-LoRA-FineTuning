@@ -2,7 +2,7 @@
  * 정규표현식 테스트 페이지
  * 각 민감정보 탐지 패턴을 테스트할 수 있는 페이지
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import CommonHeader from '../common/CommonHeader';
 import './RegexTestPage.css';
 
@@ -17,11 +17,11 @@ export default function RegexTestPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('phone');
   const [results, setResults] = useState<Record<string, TestResult>>({});
 
-  // 정규표현식 패턴 정의
-  const patterns: Record<string, { name: string; regex: RegExp; description: string }> = {
+  // 정규표현식 패턴 정의 (useMemo로 메모이제이션)
+  const patterns: Record<string, { name: string; regex: RegExp; description: string }> = useMemo(() => ({
     phone: {
       name: '전화번호',
-      regex: /(?<![0-9])(?:\+82[-.\s]?\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}|01[0-9][-.\s]?\d{3,4}[-.\s]?\d{4}|0[2-9]\d?[-\).\s]?\d{3,4}[-.\s]?\d{4}|070[-.\s]?\d{3,4}[-.\s]?\d{4}|080[-.\s]?\d{3,4}[-.\s]?\d{4}|050[-.\s]?\d{3,4}[-.\s]?\d{4}|1588[-.\s]?\d{4}|1544[-.\s]?\d{4}|1566[-.\s]?\d{4}|1577[-.\s]?\d{4}|1599[-.\s]?\d{4}|1600[-.\s]?\d{4})(?![0-9])/g,
+      regex: /(?<![0-9])(?:\+82[-.\s]?\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}|01[0-9][-.\s]?\d{3,4}[-.\s]?\d{4}|0[2-9]\d?[-().\s]?\d{3,4}[-.\s]?\d{4}|070[-.\s]?\d{3,4}[-.\s]?\d{4}|080[-.\s]?\d{3,4}[-.\s]?\d{4}|050[-.\s]?\d{3,4}[-.\s]?\d{4}|1588[-.\s]?\d{4}|1544[-.\s]?\d{4}|1566[-.\s]?\d{4}|1577[-.\s]?\d{4}|1599[-.\s]?\d{4}|1600[-.\s]?\d{4})(?![0-9])/g,
       description: '모바일/지역번호/단축번호 +82 포함 (앞뒤 숫자 제외)'
     },
     rrn: {
@@ -59,7 +59,7 @@ export default function RegexTestPage() {
       regex: /(?:[가-힣]{2,}(?:특별시|광역시|특별자치도|특별자치시|시|군|구|읍|면|동|리)|\d{1,4}(?:-\d{1,4})?번지|[가-힣]+(?:로|길|대로)\s?\d{1,4}(?:-\d{1,4})?|\d+(?:-\d+)?길|[가-힣]+역|서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/g,
       description: '시/군/구/읍/면/동/리, 번지, 로/길, 주요 도시명'
     }
-  };
+  }), []);
 
   // 테스트 실행
   const runTest = useCallback(() => {
@@ -95,7 +95,7 @@ export default function RegexTestPage() {
     }
 
     setResults(newResults);
-  }, [testText, selectedCategory]);
+  }, [testText, selectedCategory, patterns]);
 
   // 텍스트 변경 시 자동 테스트
   useEffect(() => {

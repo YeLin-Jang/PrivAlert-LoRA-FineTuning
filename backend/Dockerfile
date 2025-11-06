@@ -18,9 +18,14 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean
 
 # Python 의존성 복사 및 설치
+# 레이어 캐싱 최적화: requirements.txt만 먼저 복사하여 의존성 변경 시에만 재빌드
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
+# openai-whisper는 triton 의존성 충돌로 인해 별도 설치
+# torch 2.8.0은 triton 3.4.0을 요구하지만, openai-whisper 20231117은 triton<3을 요구
+# 해결: openai-whisper를 --no-deps로 설치 (triton은 torch에서 이미 설치됨)
+RUN pip install --no-cache-dir --no-deps openai-whisper>=20231117
 
 # 애플리케이션 코드 복사
 COPY . .

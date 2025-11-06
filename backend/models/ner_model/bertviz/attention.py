@@ -47,8 +47,9 @@ def get_attention(model, model_type, tokenizer, sentence_a, sentence_b=None, inc
     tokens_a = None
     tokens_b = None
     token_type_ids = None
-    tokenizer.cls_token = '[CLS]'
-    tokenizer.sep_token = '[SEP]'
+    # 보안: BERT 토큰 라벨 (실제 비밀번호 아님) - nosec B105
+    tokenizer.cls_token = '[CLS]'  # nosec B105 - BERT 토큰 라벨, 비밀번호 아님
+    tokenizer.sep_token = '[SEP]'  # nosec B105 - BERT 토큰 라벨, 비밀번호 아님
     
     if not is_sentence_pair: # Single sentence
         if model_type in ('bert', 'roberta'):            

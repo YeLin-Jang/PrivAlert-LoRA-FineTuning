@@ -22,7 +22,9 @@ def login_required(f):
             session_id = request.cookies.get('session_id')
             session_token = request.cookies.get('session_token')
             
+            # 디버깅: 쿠키 확인
             if not session_id:
+                logger.warning(f"인증 실패: session_id 쿠키가 없습니다. 요청 URL: {request.path}, 쿠키: {list(request.cookies.keys())}")
                 return jsonify({
                     "success": False,
                     "error": "인증이 필요합니다",
@@ -33,6 +35,7 @@ def login_required(f):
             session = UserSession.find_by_session_id(session_id)
             
             if not session:
+                logger.warning(f"인증 실패: 세션을 찾을 수 없습니다. session_id: {session_id[:8]}..., 요청 URL: {request.path}")
                 return jsonify({
                     "success": False,
                     "error": "유효하지 않은 세션입니다",
@@ -40,8 +43,16 @@ def login_required(f):
                 }), 401
             
             # Double Submit Cookie 검증
+            if not session_token:
+                logger.warning(f"인증 실패: session_token 쿠키가 없습니다. session_id: {session_id[:8]}..., 요청 URL: {request.path}")
+                return jsonify({
+                    "success": False,
+                    "error": "세션 토큰이 필요합니다",
+                    "code": 401
+                }), 401
+            
             if session.session_token != session_token:
-                logger.warning(f"세션 토큰 불일치: {session_id[:8]}...")
+                logger.warning(f"세션 토큰 불일치: session_id={session_id[:8]}..., 요청 URL: {request.path}, DB 토큰: {session.session_token[:8] if session.session_token else None}..., 쿠키 토큰: {session_token[:8] if session_token else None}...")
                 return jsonify({
                     "success": False,
                     "error": "세션 토큰이 유효하지 않습니다",

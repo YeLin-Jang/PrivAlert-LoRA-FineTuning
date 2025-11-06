@@ -3,7 +3,7 @@
  * 필터링 설정 및 수정 기록 표시
  * 보안: 로그인 필수
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUserAuth } from '../../contexts/UserAuthContext';
 import { userApi, type FilteringSettings, type RevisionHistory } from '../../services/userApi';
@@ -52,20 +52,7 @@ export default function MyPage() {
     }
   }, [isAuthenticated, authLoading, navigate]);
 
-  // 초기 로드 (로그인 상태일 때만)
-  useEffect(() => {
-    // localStorage에 user_email이 있으면 로그인 상태로 간주
-    const storedEmail = localStorage.getItem('user_email');
-    const isLoggedIn = isAuthenticated || !!storedEmail;
-    
-    if (isLoggedIn) {
-      loadData();
-    } else {
-      setLoading(false);
-    }
-  }, [currentPage, isAuthenticated]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     // localStorage에 user_email이 있으면 로그인 상태로 간주
     const storedEmail = localStorage.getItem('user_email');
     const isLoggedIn = isAuthenticated || !!storedEmail;
@@ -80,7 +67,7 @@ export default function MyPage() {
       try {
         await userApi.getCurrentUser();
         // 사용자 정보가 있으면 인증 상태 유지
-      } catch (userErr) {
+      } catch {
         // 사용자 정보 조회 실패 시에도 계속 진행 (필터링 설정은 별도로 조회)
         // 보안: 콘솔 로그 제거
       }
@@ -99,7 +86,20 @@ export default function MyPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAuthenticated, currentPage]);
+
+  // 초기 로드 (로그인 상태일 때만)
+  useEffect(() => {
+    // localStorage에 user_email이 있으면 로그인 상태로 간주
+    const storedEmail = localStorage.getItem('user_email');
+    const isLoggedIn = isAuthenticated || !!storedEmail;
+    
+    if (isLoggedIn) {
+      loadData();
+    } else {
+      setLoading(false);
+    }
+  }, [currentPage, isAuthenticated, loadData]);
 
   const handleSaveSettings = async () => {
     if (!isAuthenticated || !filteringSettings) {
@@ -115,7 +115,7 @@ export default function MyPage() {
       // CSRF 토큰 항상 갱신 (세션 ID 기반 토큰으로 업데이트)
       try {
         await userApi.getCurrentUser();
-      } catch (tokenErr) {
+      } catch {
         setError('인증 토큰이 만료되었습니다. 페이지를 새로고침하거나 다시 로그인해주세요.');
         setSaving(false);
         return;
@@ -131,9 +131,10 @@ export default function MyPage() {
       
       // 3초 후 성공 메시지 제거
       setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       // 403 에러인 경우 CSRF 토큰 갱신 후 재시도
-      if (err?.response?.status === 403) {
+      const axiosError = err as { response?: { status?: number } };
+      if (axiosError?.response?.status === 403) {
         try {
           // CSRF 토큰 갱신 시도
           await userApi.getCurrentUser();
@@ -144,7 +145,7 @@ export default function MyPage() {
           setEditingSettings(false);
           setSuccessMessage('필터링 설정이 성공적으로 저장되었습니다');
           setTimeout(() => setSuccessMessage(null), 3000);
-        } catch (retryErr) {
+        } catch {
           setError('인증 토큰이 만료되었거나 유효하지 않습니다. 페이지를 새로고침하거나 다시 로그인해주세요.');
         }
       } else {

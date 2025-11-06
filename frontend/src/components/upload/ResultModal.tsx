@@ -1,23 +1,37 @@
 import React, { useState } from 'react';
-import type { AnalysisResult } from '../../types';
+import type { AnalysisResult, VideoAnalysisResult, FaceImage, HandImage, SanitizedItem } from '../../types';
 import './ResultModal.css';
 import { EducationDetailModal } from './EducationDetailModal';
 import { API_CONFIG } from '../../constants';
 
+interface EducationItem {
+  category?: string;
+  revised_sentence_rationale?: string;
+  law_summary?: string;
+  law_summary_rationale?: string;
+  risk_scenarios?: string[];
+  risk_scenarios_rationale?: string;
+  tips?: string[];
+  tips_rationale?: string;
+  [key: string]: unknown;
+}
+
 interface ResultModalProps {
-  result: AnalysisResult & { video_analysis?: any };
+  result: AnalysisResult & { video_analysis?: VideoAnalysisResult };
   onClose: () => void;
   detectionOptions?: Record<string, boolean>;
   blurFingers?: boolean;
-  onShowEducation?: (maskedText: string, categories: Record<string, any>) => void; // 전체 수정하기에서 사용하지 않음 (현재는 직접 수정 적용)
-  eduItems?: any[] | null;
+  onShowEducation?: (maskedText: string, categories: Record<string, unknown>) => void; // 전체 수정하기에서 사용하지 않음 (현재는 직접 수정 적용)
+  eduItems?: EducationItem[] | null;
   revisedSentenceRationale?: string | null;
 }
 
 export const ResultModal: React.FC<ResultModalProps> = ({
   result,
   onClose,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   detectionOptions: _detectionOptions,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onShowEducation: _onShowEducation,
   eduItems = null,
   revisedSentenceRationale = null,
@@ -30,10 +44,22 @@ export const ResultModal: React.FC<ResultModalProps> = ({
   const [ignoredParts, setIgnoredParts] = useState<Set<number>>(new Set()); // 무시된 부분 (형광펜 제거)
   const [educationModalOpen, setEducationModalOpen] = useState(false);
   const [educationModalCategory, setEducationModalCategory] = useState<'rationale' | 'law' | 'risk' | 'tips' | 'all'>('rationale');
-  const [educationModalData, setEducationModalData] = useState<any>(null);
+  const [educationModalData, setEducationModalData] = useState<EducationItem | null>(null);
+
+  // 구조화된 데이터 항목 타입
+  interface StructuredDataItem {
+    type: string;
+    value: string;
+    category: string;
+  }
+
+  interface CategoryData {
+    items?: StructuredDataItem[];
+    count?: number;
+  }
 
   // 음성 인식 텍스트 하이라이트 함수
-  const highlightAudioText = (text: string, audioCategories: Record<string, any>) => {
+  const highlightAudioText = (text: string, audioCategories: Record<string, CategoryData>) => {
     if (!text || !audioCategories) return text;
 
     const parts: Array<{
@@ -53,8 +79,9 @@ export const ResultModal: React.FC<ResultModalProps> = ({
     }> = [];
 
     Object.entries(audioCategories).forEach(([catKey, catData]) => {
-      const items = (catData as any)?.items || [];
-      items.forEach((item: any) => {
+      const categoryData = catData as CategoryData;
+      const items = categoryData?.items || [];
+      items.forEach((item: StructuredDataItem) => {
         const value = item.value || '';
         if (value) {
           const index = text.indexOf(value);
@@ -191,8 +218,9 @@ export const ResultModal: React.FC<ResultModalProps> = ({
   const detectedCounts: Record<string, number> = {};
   let totalDetected = 0;
   
-  Object.entries(categories).forEach(([key, value]: [string, any]) => {
-    const count = value?.count || 0;
+  Object.entries(categories).forEach(([key, value]) => {
+    const categoryData = value as CategoryData;
+    const count = categoryData?.count || 0;
     detectedCounts[key] = count;
     totalDetected += count;
   });
@@ -239,8 +267,9 @@ export const ResultModal: React.FC<ResultModalProps> = ({
     }> = [];
 
     Object.entries(categories).forEach(([catKey, catData]) => {
-      const items = (catData as any)?.items || [];
-      items.forEach((item: any) => {
+      const categoryData = catData as CategoryData;
+      const items = categoryData?.items || [];
+      items.forEach((item: StructuredDataItem) => {
         const value = item.value || '';
         if (value) {
           const index = text.indexOf(value);
@@ -435,10 +464,18 @@ export const ResultModal: React.FC<ResultModalProps> = ({
   
   // 표시용 이미지: 얼굴/손가락 탐지 결과 이미지만 (탐지 후 표시된 이미지)
   // 다운로드용: EXIF 제거 이미지 (별도로 관리)
-  const displayImages: any[] = [];
+  interface DisplayImage {
+    image_index: number;
+    filename: string;
+    display_url: string;
+    detection_type: 'face' | 'hand';
+    [key: string]: unknown;
+  }
+  
+  const displayImages: DisplayImage[] = [];
   
   // 얼굴 탐지 결과 이미지 추가 (표시용)
-  faceImages.forEach((img: any) => {
+  faceImages.forEach((img: FaceImage) => {
     if (img.result_image_url && displayImages.length < 3) {
       displayImages.push({
         ...img,
@@ -449,9 +486,9 @@ export const ResultModal: React.FC<ResultModalProps> = ({
   });
   
   // 손가락 탐지 결과 이미지 추가 (표시용, 같은 image_index가 없을 때만)
-  handImages.forEach((img: any) => {
+  handImages.forEach((img: HandImage) => {
     if (img.result_image_url && displayImages.length < 3) {
-      if (!displayImages.find((existing: any) => existing.image_index === img.image_index)) {
+      if (!displayImages.find((existing: DisplayImage) => existing.image_index === img.image_index)) {
         displayImages.push({
           ...img,
           display_url: img.result_image_url, // 표시용 URL
@@ -572,8 +609,9 @@ export const ResultModal: React.FC<ResultModalProps> = ({
                         }> = [];
 
                         Object.entries(categories).forEach(([catKey, catData]) => {
-                          const items = (catData as any)?.items || [];
-                          items.forEach((item: any) => {
+                          const categoryData = catData as CategoryData;
+                          const items = categoryData?.items || [];
+                          items.forEach((item: StructuredDataItem) => {
                             const value = item.value || '';
                             if (value) {
                               const index = originalText.indexOf(value);
@@ -677,7 +715,7 @@ export const ResultModal: React.FC<ResultModalProps> = ({
 
               <div className="photo-grid">
                 {displayImages.length > 0 ? (
-                  displayImages.map((img: any, idx: number) => {
+                  displayImages.map((img: DisplayImage, idx: number) => {
                     // 이미지의 image_index를 기준으로 탐지 정보 찾기
                     const imageIndex = img.image_index || (idx + 1);
                     const faceImg = faceImages.find(f => f.image_index === imageIndex);
@@ -700,7 +738,7 @@ export const ResultModal: React.FC<ResultModalProps> = ({
 
                     // 같은 image_index의 EXIF 제거 이미지 찾기 (다운로드용)
                     const sanitizedImg = Array.isArray(sanitizedImages) 
-                      ? sanitizedImages.find((s: any) => s.image_index === imageIndex)
+                      ? sanitizedImages.find((s: SanitizedItem) => s.image_index === imageIndex)
                       : null;
 
                     return (
@@ -797,14 +835,15 @@ export const ResultModal: React.FC<ResultModalProps> = ({
                                 // 정리
                                 document.body.removeChild(link);
                                 window.URL.revokeObjectURL(url);
-                              } catch (error: any) {
+                              } catch (error: unknown) {
                                 // 보안: 일반화된 사용자 친화적 메시지만 표시
                                 let message = '다운로드 중 오류가 발생했습니다.';
-                                if (error?.message === 'FILE_NOT_FOUND') {
+                                const errorMessage = error instanceof Error ? error.message : '';
+                                if (errorMessage === 'FILE_NOT_FOUND') {
                                   message = '파일을 찾을 수 없습니다. 이미 삭제되었을 수 있습니다.';
-                                } else if (error?.message === 'ACCESS_DENIED') {
+                                } else if (errorMessage === 'ACCESS_DENIED') {
                                   message = '파일 다운로드 권한이 없습니다.';
-                                } else if (error?.message === 'DOWNLOAD_FAILED') {
+                                } else if (errorMessage === 'DOWNLOAD_FAILED') {
                                   message = '파일 다운로드에 실패했습니다. 잠시 후 다시 시도해주세요.';
                                 }
                                 alert(message);
@@ -833,7 +872,7 @@ export const ResultModal: React.FC<ResultModalProps> = ({
               <div className="section-header">
                 <h2>영상 분석 결과</h2>
                 <span className="detection-count">
-                  {result.video_analysis.faces_detected + result.video_analysis.fingers_detected}개 검출
+                  {result.video_analysis.summary.total_faces_detected + result.video_analysis.summary.total_fingers_detected}개 검출
                 </span>
               </div>
 
@@ -841,29 +880,29 @@ export const ResultModal: React.FC<ResultModalProps> = ({
                 <div className="video-stats">
                   <div className="stat-item">
                     <span className="stat-label">총 프레임 분석</span>
-                    <span className="stat-value">{result.video_analysis.total_frames_processed}개</span>
+                    <span className="stat-value">{result.video_analysis.summary.total_frames_processed}개</span>
                   </div>
                   <div className="stat-item">
                     <span className="stat-label">얼굴 탐지</span>
-                    <span className="stat-value">{result.video_analysis.faces_detected}개</span>
+                    <span className="stat-value">{result.video_analysis.summary.total_faces_detected}개</span>
                   </div>
                   <div className="stat-item">
                     <span className="stat-label">손가락 탐지</span>
-                    <span className="stat-value">{result.video_analysis.fingers_detected}개</span>
+                    <span className="stat-value">{result.video_analysis.summary.total_fingers_detected}개</span>
                   </div>
                 </div>
 
                 {/* 얼굴/손가락 탐지 시간 표시 */}
                 {result.video_analysis.frames && result.video_analysis.frames.length > 0 && (
                   <div className="video-detection-times">
-                    {result.video_analysis.faces_detected > 0 && (
+                    {result.video_analysis.summary.total_faces_detected > 0 && (
                       <div className="detection-time-section">
                         <h4>얼굴 탐지 시간</h4>
                         <div className="time-list">
                           {result.video_analysis.frames
-                            .filter((frame: any) => frame.face && frame.face.count > 0)
+                            .filter((frame) => frame.face && frame.face.count > 0)
                             .slice(0, 10)
-                            .map((frame: any, idx: number) => (
+                            .map((frame, idx: number) => (
                               <span key={idx} className="time-tag">
                                 {frame.timestamp?.toFixed(1) || frame.frame_index || idx}초
                               </span>
@@ -871,14 +910,14 @@ export const ResultModal: React.FC<ResultModalProps> = ({
                         </div>
                       </div>
                     )}
-                    {result.video_analysis.fingers_detected > 0 && (
+                    {result.video_analysis.summary.total_fingers_detected > 0 && (
                       <div className="detection-time-section">
                         <h4>손가락 탐지 시간</h4>
                         <div className="time-list">
                           {result.video_analysis.frames
-                            .filter((frame: any) => frame.hand && frame.hand.count > 0)
+                            .filter((frame) => frame.hand && frame.hand.count > 0)
                             .slice(0, 10)
-                            .map((frame: any, idx: number) => (
+                            .map((frame, idx: number) => (
                               <span key={idx} className="time-tag">
                                 {frame.timestamp?.toFixed(1) || frame.frame_index || idx}초
                               </span>
@@ -928,6 +967,7 @@ export const ResultModal: React.FC<ResultModalProps> = ({
               </div>
               <div className="education-category-boxes">
                 {/* 탐지된 각 카테고리별로 카드 생성 */}
+                {/* eslint-disable-next-line @typescript-eslint/no-unused-vars */}
                 {Object.entries(categories).map(([catKey, _catData]) => {
                   const catName = categoryNames[catKey] || catKey;
                   // 해당 카테고리의 교육 데이터 찾기
@@ -954,7 +994,7 @@ export const ResultModal: React.FC<ResultModalProps> = ({
                         // 보안: 콘솔 로그 제거
                         
                         // 카드 클릭 시 모든 정보를 포함한 모달 열기
-                        const modalData: any = {
+                        const modalData: EducationItem = {
                           category: catName,
                         };
                         

@@ -35,7 +35,7 @@ export default function CommonHeader() {
     try {
       await logout();
       navigate('/');
-    } catch (error) {
+    } catch {
       // 보안: 콘솔 로그 제거
     }
   };

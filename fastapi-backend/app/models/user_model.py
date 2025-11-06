@@ -6,11 +6,12 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from datetime import datetime
 from typing import Optional
 
+
 class UserRegisterRequest(BaseModel):
     """회원가입 요청 스키마"""
     email: EmailStr = Field(..., description="이메일 주소")
     password: str = Field(..., min_length=12, description="비밀번호 (최소 12자)")
-    
+
     @field_validator('password')
     @classmethod
     def validate_password(cls, v: str) -> str:
@@ -27,10 +28,12 @@ class UserRegisterRequest(BaseModel):
             raise ValueError("비밀번호는 최소 1개의 특수문자를 포함해야 합니다")
         return v
 
+
 class UserVerifyRequest(BaseModel):
     """이메일 인증 요청 스키마"""
     email: EmailStr = Field(..., description="이메일 주소")
     verification_code: str = Field(..., min_length=6, max_length=6, description="6자리 인증번호")
+
 
 class UserResponse(BaseModel):
     """사용자 응답 스키마 (비밀번호 제외)"""
@@ -39,9 +42,10 @@ class UserResponse(BaseModel):
     is_active: bool
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    
+
     class Config:
         from_attributes = True
+
 
 class MessageResponse(BaseModel):
     """일반 메시지 응답 스키마"""
@@ -49,4 +53,3 @@ class MessageResponse(BaseModel):
     success: bool = True
     verification_code: str | None = None  # 개발 모드에서만 포함
     debug_message: str | None = None  # 개발 모드에서만 포함
-

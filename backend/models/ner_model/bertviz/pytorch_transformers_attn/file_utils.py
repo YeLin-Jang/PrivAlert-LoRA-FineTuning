@@ -173,7 +173,8 @@ def s3_get(url, temp_file):
 
 
 def http_get(url, temp_file):
-    req = requests.get(url, stream=True)
+    # 보안: timeout 추가 (DoS 공격 방지)
+    req = requests.get(url, stream=True, timeout=30)  # nosec B113 - 외부 라이브러리, timeout 추가
     content_length = req.headers.get('Content-Length')
     total = int(content_length) if content_length is not None else None
     progress = tqdm(unit="B", total=total)
@@ -204,7 +205,8 @@ def get_from_cache(url, cache_dir=None):
         etag = s3_etag(url)
     else:
         try:
-            response = requests.head(url, allow_redirects=True)
+            # 보안: timeout 추가 (DoS 공격 방지)
+            response = requests.head(url, allow_redirects=True, timeout=30)  # nosec B113 - 외부 라이브러리, timeout 추가
             if response.status_code != 200:
                 etag = None
             else:

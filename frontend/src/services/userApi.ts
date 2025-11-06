@@ -120,6 +120,7 @@ export const userApi = {
     email: string,
     password: string,
     nickname?: string,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _detectionOptions?: Record<string, boolean>
   ): Promise<RegisterResponse> {
     try {
@@ -157,15 +158,16 @@ export const userApi = {
         throw new Error(errorMessage);
       }
 
-      let data: any;
+      let data: unknown;
       try {
         data = await response.json();
-      } catch (jsonError) {
+      } catch {
         // 보안: 콘솔 로그 제거
         throw new Error('서버 응답을 처리할 수 없습니다');
       }
 
-      if (!data || !data.success) {
+      // 타입 가드: data가 객체이고 success 속성을 가진지 확인
+      if (!data || typeof data !== 'object' || !('success' in data) || !(data as { success: boolean }).success) {
         // 보안: 상세한 서버 에러 정보는 사용자에게 노출하지 않음
         throw new Error('회원가입에 실패했습니다. 잠시 후 다시 시도해주세요.');
       }
@@ -173,7 +175,7 @@ export const userApi = {
       // 응답 형식 변환 (백엔드 응답에 맞춤)
       // 백엔드 응답: { success: true, data: { email } }
       // 실무: 인증 코드는 이메일로만 전송되므로 응답에 포함되지 않음
-      const responseData = data.data || {};
+      const responseData = (data as { data?: { email?: string } }).data || {};
 
       return {
         user: {
@@ -185,7 +187,7 @@ export const userApi = {
         token: '', // 이제 토큰 대신 코드 사용
         verification_code: undefined, // 실무: 코드는 응답에 포함하지 않음
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 네트워크 에러 등 기타 에러 처리
       if (error instanceof TypeError && error.message.includes('fetch')) {
         throw new Error('네트워크 오류가 발생했습니다. 인터넷 연결을 확인하세요.');
@@ -214,6 +216,7 @@ export const userApi = {
     }
     
     // userData에서 csrf_token 제거 (UserResponse에는 포함되지 않음)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { csrf_token, ...userInfo } = userData;
     
     // userInfo가 이미 UserResponse 형식인 경우
@@ -236,7 +239,7 @@ export const userApi = {
   async logout(): Promise<void> {
     try {
       await api.post('/api/v1/auth/logout');
-    } catch (error) {
+    } catch {
       // 로그아웃 API 호출 실패해도 토큰은 제거
       // 보안: 콘솔 로그 제거
     } finally {
@@ -347,14 +350,18 @@ export const verifyEmail = async (data: {
       // 보안: 상세한 서버 에러 정보는 사용자에게 노출하지 않음
       throw new Error('이메일 인증에 실패했습니다. 인증 코드를 확인해주세요.');
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     // 보안: 상세한 서버 에러 정보는 사용자에게 노출하지 않음
     // FastAPI 에러 응답 형식 처리
-    if (error.response?.status === 400) {
+    interface ErrorWithResponse {
+      response?: { status?: number };
+    }
+    const axiosError = error as ErrorWithResponse;
+    if (axiosError.response?.status === 400) {
       throw new Error('인증 코드가 올바르지 않습니다. 다시 확인해주세요.');
-    } else if (error.response?.status === 404) {
+    } else if (axiosError.response?.status === 404) {
       throw new Error('인증 요청을 찾을 수 없습니다. 다시 시도해주세요.');
-    } else if (error.response?.status === 410) {
+    } else if (axiosError.response?.status === 410) {
       throw new Error('인증 코드가 만료되었습니다. 다시 요청해주세요.');
     } else {
       throw new Error('이메일 인증에 실패했습니다. 잠시 후 다시 시도해주세요.');

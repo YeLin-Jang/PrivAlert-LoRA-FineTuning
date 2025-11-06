@@ -1,8 +1,9 @@
 import os
 import logging
 import warnings
+import secrets
 from datetime import timedelta
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, g
 
 # TensorFlow/MediaPipe 경고 억제
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # ERROR만 출력
@@ -187,6 +188,11 @@ def create_app(config_name=None):
     )
     
     # 보안 헤더 설정
+    @app.before_request
+    def inject_nonce():
+        """요청마다 새로운 nonce 생성 (암호학적으로 안전)"""
+        g.csp_nonce = secrets.token_urlsafe(16)
+    
     @app.after_request
     def set_security_headers(response):
         """보안 헤더를 설정하고 버전 정보 유출을 방지합니다.
@@ -216,21 +222,54 @@ def create_app(config_name=None):
         )
         
         # Content Security Policy
-        # 보안: blob: URL 허용 (로컬 파일 미리보기용)
-        csp = (
-            "default-src 'self'; "
-            "script-src 'self'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data: blob:; "
-            "font-src 'self' data:; "
-            "connect-src 'self'; "
-            "frame-ancestors 'none'; "
-            "base-uri 'self'; "
-            "form-action 'self'; "
-            "media-src 'self' blob:"
-        )
+        nonce = getattr(g, 'csp_nonce', '')
+        is_dev = flask_env == "development"
         
-        response.headers['Content-Security-Policy'] = csp
+        if is_dev:
+            # 개발 환경: Vite HMR 및 개발 도구를 위해 일부 완화
+            csp = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:5173; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "img-src 'self' data: blob: http://localhost:5000 http://localhost:8000; "
+                "font-src 'self' data: https://fonts.gstatic.com; "
+                "connect-src 'self' http://localhost:5000 http://localhost:8000 ws://localhost:5173; "
+                "frame-ancestors 'none'; "
+                "base-uri 'self'; "
+                "form-action 'self'; "
+                "object-src 'none'; "
+                "media-src 'self' blob:; "
+                "worker-src 'self' blob:; "
+                "manifest-src 'self'"
+            )
+        else:
+            # 프로덕션: nonce 기반 CSP (unsafe-inline/unsafe-eval 완전 제거)
+            csp = (
+                f"default-src 'self'; "
+                f"script-src 'self' 'nonce-{nonce}'; "
+                f"style-src 'self' 'nonce-{nonce}' https://fonts.googleapis.com; "
+                f"style-src-elem 'self' 'nonce-{nonce}' https://fonts.googleapis.com; "
+                f"img-src 'self' data: blob:; "
+                f"font-src 'self' data: https://fonts.gstatic.com; "
+                f"connect-src 'self' https://api.privalert.com; "
+                f"frame-ancestors 'none'; "
+                f"base-uri 'self'; "
+                f"form-action 'self'; "
+                f"object-src 'none'; "
+                f"media-src 'self' blob:; "
+                f"worker-src 'self'; "
+                f"manifest-src 'self'; "
+                f"upgrade-insecure-requests; "
+                f"report-uri /api/v1/csp-report"
+            )
+        
+        # CSP Report-Only 모드 지원 (환경 변수로 제어)
+        csp_report_only = os.getenv('CSP_REPORT_ONLY', 'false').lower() == 'true'
+        if csp_report_only and not is_dev:
+            response.headers['Content-Security-Policy-Report-Only'] = csp
+        else:
+            response.headers['Content-Security-Policy'] = csp
         
         # 중요: HTTP 전용 환경이므로 HSTS 미설정
         # HSTS는 HTTPS 환경에서만 사용하며, HTTP 환경에서는 설정하지 않음
@@ -438,6 +477,7 @@ def create_app(config_name=None):
     from app.routes.secure_upload_routes import secure_upload_bp
     from app.routes.auth_routes import auth_bp
     from app.routes.user_routes import user_bp
+    from app.routes.security_routes import security_bp
     
     # NER 라우트 등록 (선택적 - 모델이 없는 경우에도 앱이 실행되도록)
     try:
@@ -468,6 +508,7 @@ def create_app(config_name=None):
     app.register_blueprint(secure_upload_bp, url_prefix="/api/v1")  
     app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")
     app.register_blueprint(user_bp, url_prefix="/api/v1/user")
+    app.register_blueprint(security_bp, url_prefix="/api/v1")
     
     # 보안: 인증 관련 엔드포인트에 더 엄격한 Rate Limiting 적용 (라우트 등록 후)
     try:

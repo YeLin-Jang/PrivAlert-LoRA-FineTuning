@@ -16,7 +16,7 @@ export const secureFileCleanup = (file: File | null): void => {
     // 주의: File 객체는 읽기 전용이므로 완전한 삭제는 불가능하지만
     // 참조를 null로 설정하여 메모리에서 제거되도록 함
     Object.defineProperty(file, 'name', { value: '', writable: false });
-  } catch (e) {
+  } catch {
     // 무시 - File 객체는 읽기 전용일 수 있음
   }
 };
@@ -33,6 +33,7 @@ export const secureFilesCleanup = (files: File[]): void => {
  * 텍스트 데이터를 안전하게 제거
  * 민감한 텍스트를 메모리에서 덮어쓰기
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const secureTextCleanup = (_text: string): string => {
   // 텍스트를 빈 문자열로 대체
   // 실제로는 변수가 재할당되면 GC가 처리하지만, 명시적으로 처리
@@ -51,7 +52,7 @@ export const secureFormDataCleanup = (formData: FormData): void => {
     keys.forEach(key => {
       formData.delete(key);
     });
-  } catch (e) {
+  } catch {
     // FormData 정리 실패 시 무시
     // 보안: 콘솔 로그 제거
   }
@@ -65,7 +66,7 @@ export const secureURLCleanup = (url: string): void => {
     if (url && url.startsWith('blob:')) {
       URL.revokeObjectURL(url);
     }
-  } catch (e) {
+  } catch {
     // 보안: 콘솔 로그 제거
   }
 };
@@ -73,23 +74,23 @@ export const secureURLCleanup = (url: string): void => {
 /**
  * 객체에서 민감한 정보를 제거하고 안전하게 정리
  */
-export const secureObjectCleanup = <T extends Record<string, any>>(obj: T): void => {
+export const secureObjectCleanup = <T extends Record<string, unknown>>(obj: T): void => {
   try {
     Object.keys(obj).forEach(key => {
       const value = obj[key];
       if (typeof value === 'string') {
         // 타입 안전성을 위해 타입 단언 사용
-        (obj as Record<string, any>)[key] = '';
+        (obj as Record<string, unknown>)[key] = '';
       } else if (value instanceof File) {
         secureFileCleanup(value);
       } else if (Array.isArray(value)) {
         value.length = 0;
       } else if (typeof value === 'object' && value !== null) {
-        secureObjectCleanup(value);
+        secureObjectCleanup(value as Record<string, unknown>);
       }
       delete obj[key];
     });
-  } catch (e) {
+  } catch {
     // 보안: 콘솔 로그 제거
   }
 };
@@ -97,19 +98,21 @@ export const secureObjectCleanup = <T extends Record<string, any>>(obj: T): void
 /**
  * 민감 정보를 로그에서 마스킹
  */
-export const maskSensitiveData = (data: any): any => {
+export const maskSensitiveData = (data: unknown): unknown => {
   if (typeof data === 'string') {
+    let maskedData = data;
     // 전화번호 패턴 마스킹
     const phonePattern = /\d{2,3}-\d{3,4}-\d{4}/g;
-    data = data.replace(phonePattern, '[전화번호]');
+    maskedData = maskedData.replace(phonePattern, '[전화번호]');
     
     // 이메일 패턴 마스킹
     const emailPattern = /[\w.-]+@[\w.-]+\.\w+/g;
-    data = data.replace(emailPattern, '[이메일]');
+    maskedData = maskedData.replace(emailPattern, '[이메일]');
     
     // 주민등록번호 패턴 마스킹
     const rrnPattern = /\d{6}-\d{7}/g;
-    data = data.replace(rrnPattern, '[주민등록번호]');
+    maskedData = maskedData.replace(rrnPattern, '[주민등록번호]');
+    return maskedData;
   }
   
   return data;
@@ -119,7 +122,8 @@ export const maskSensitiveData = (data: any): any => {
  * 안전한 로깅 (민감 정보 마스킹)
  * 보안: 콘솔 로그 제거
  */
-export const secureLog = (_message: string, _data?: any): void => {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const secureLog = (_message: string, _data?: unknown): void => {
   // 보안: 모든 콘솔 로그 제거
   // 프로덕션 및 개발 환경 모두에서 로깅 비활성화
 };

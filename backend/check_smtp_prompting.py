@@ -4,6 +4,9 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
+# 상수 정의 (보안: hardcoded password string false positive 방지)
+NOT_SET_VALUE = "NOT SET"  # nosec B105 - 설정되지 않음을 나타내는 상수, 실제 비밀번호 아님
+
 # 프로젝트 루트의 .env 파일 로드
 root_dir = Path(__file__).parent.parent
 env_path = root_dir / '.env'
@@ -14,19 +17,19 @@ else:
     print(f"[WARNING] .env 파일을 찾을 수 없습니다: {env_path}")
 
 print("\n=== SMTP 설정 확인 ===")
-smtp_server = os.getenv("SMTP_SERVER", "NOT SET")
-smtp_port = os.getenv("SMTP_PORT", "NOT SET")
-smtp_email = os.getenv("SMTP_EMAIL", "NOT SET")
-smtp_password = os.getenv("SMTP_PASSWORD", "NOT SET")
-smtp_from = os.getenv("SMTP_FROM", "NOT SET")
+smtp_server = os.getenv("SMTP_SERVER", NOT_SET_VALUE)
+smtp_port = os.getenv("SMTP_PORT", NOT_SET_VALUE)
+smtp_email = os.getenv("SMTP_EMAIL", NOT_SET_VALUE)
+smtp_password = os.getenv("SMTP_PASSWORD", NOT_SET_VALUE)
+smtp_from = os.getenv("SMTP_FROM", NOT_SET_VALUE)
 
 print(f"SMTP_SERVER: {smtp_server}")
 print(f"SMTP_PORT: {smtp_port}")
-print(f"SMTP_EMAIL: {smtp_email[:20] + '...' if smtp_email != 'NOT SET' and len(smtp_email) > 20 else smtp_email}")
-print(f"SMTP_PASSWORD: {'*** (설정됨)' if smtp_password != 'NOT SET' else 'NOT SET'}")
+print(f"SMTP_EMAIL: {smtp_email[:20] + '...' if smtp_email != NOT_SET_VALUE and len(smtp_email) > 20 else smtp_email}")
+print(f"SMTP_PASSWORD: {'*** (설정됨)' if smtp_password != NOT_SET_VALUE else NOT_SET_VALUE}")
 print(f"SMTP_FROM: {smtp_from}")
 
-if smtp_server != "NOT SET" and smtp_email != "NOT SET" and smtp_password != "NOT SET":
+if smtp_server != NOT_SET_VALUE and smtp_email != NOT_SET_VALUE and smtp_password != NOT_SET_VALUE:
     print("\n[OK] SMTP 설정이 완료되었습니다!")
 else:
     print("\n[WARNING] SMTP 설정이 완료되지 않았습니다. .env 파일에 다음 변수를 추가하세요:")
@@ -73,7 +76,7 @@ except Exception as e:
     print(f"[ERROR] EmailService 로드 실패: {e}")
 
 print("\n=== 설정 요약 ===")
-smtp_ok = smtp_server != "NOT SET" and smtp_email != "NOT SET" and smtp_password != "NOT SET"
+smtp_ok = smtp_server != NOT_SET_VALUE and smtp_email != NOT_SET_VALUE and smtp_password != NOT_SET_VALUE
 prompting_ok = api_key and client if 'api_key' in locals() and 'client' in locals() else False
 
 print(f"SMTP 설정: {'✅ 완료' if smtp_ok else '❌ 미완료'}")

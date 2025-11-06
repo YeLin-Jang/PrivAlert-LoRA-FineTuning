@@ -112,7 +112,8 @@ export const validateTextLength = (text: string): ValidationResult => {
  * 파일명 정제 (XSS 방지)
  */
 export const sanitizeFileName = (fileName: string): string => {
-  // 경로 조작 방지
+  // 경로 조작 방지 (제어 문자 포함)
+  // eslint-disable-next-line no-control-regex
   const sanitized = fileName.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
   // 파일명 길이 제한
   return sanitized.length > 255 ? sanitized.substring(0, 255) : sanitized;
