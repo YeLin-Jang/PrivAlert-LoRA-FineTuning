@@ -119,19 +119,20 @@ export default function MyPage() {
     }
 
     // filteringSettings가 없으면 초기화
-    const currentSettings = filteringSettings || {
+    const currentSettings: FilteringSettings = filteringSettings || {
       id: 0,
       user_id: 0,
-      detection_options: {},
-      created_at: null,
-      updated_at: null,
+      detection_options: {} as Record<string, boolean>,
+      created_at: undefined,
+      updated_at: undefined,
     };
 
+    const currentOptions = currentSettings.detection_options || {} as Record<string, boolean>;
     setFilteringSettings({
       ...currentSettings,
       detection_options: {
-        ...currentSettings.detection_options,
-        [option]: !(currentSettings.detection_options?.[option] || false),
+        ...currentOptions,
+        [option]: !(currentOptions[option] || false),
       },
     });
   };
