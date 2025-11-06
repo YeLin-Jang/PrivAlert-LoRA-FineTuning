@@ -47,8 +47,6 @@ export default function UploadForm() {
     workplace: false,
     name: false,
     address: false,
-    driverLicense: false,
-    postalCode: false,
   });
 
   // 로그인 체크 - 분석 페이지는 로그인 필수
@@ -58,9 +56,14 @@ export default function UploadForm() {
       return; // 로딩 중이면 대기
     }
     
-    if (!isAuthenticated) {
+    // localStorage에 user_email이 있으면 로그인 상태로 간주 (세션 쿠키 확인 중일 수 있음)
+    const storedEmail = localStorage.getItem('user_email');
+    const isLoggedIn = isAuthenticated || !!storedEmail;
+    
+    if (!isLoggedIn) {
       // 로그인 안된 상태면 로그인 페이지로 리다이렉트
       navigate('/auth/login', { 
+        replace: true,
         state: { 
           redirectTo: '/analyze',
           message: '분석 페이지는 로그인이 필요합니다.'
@@ -71,16 +74,24 @@ export default function UploadForm() {
 
   // 로그인된 사용자의 필터링 설정 로드
   useEffect(() => {
-    if (isAuthenticated) {
+    // localStorage에 user_email이 있으면 로그인 상태로 간주
+    const storedEmail = localStorage.getItem('user_email');
+    const isLoggedIn = isAuthenticated || !!storedEmail;
+    
+    if (isLoggedIn) {
       const loadUserSettings = async () => {
         try {
           const settings = await userApi.getFilteringSettings();
           if (settings && settings.detection_options) {
-            // DB에서 가져온 설정으로 업데이트
-            setDetectionOptions(prev => ({
-              ...prev,
-              ...settings.detection_options,
-            }));
+            // DB에서 가져온 설정으로 완전히 교체 (merge가 아닌 교체)
+            // 모든 옵션을 포함하여 설정 (DB에 없는 옵션은 false로 설정)
+            const allOptions = ['face', 'fingerprint', 'phone', 'rrn', 'passport', 'ip_address', 
+                               'email', 'account', 'school', 'workplace', 'name', 'address'];
+            const newOptions: DetectionOptions = {} as DetectionOptions;
+            allOptions.forEach(option => {
+              newOptions[option as keyof DetectionOptions] = settings.detection_options[option] || false;
+            });
+            setDetectionOptions(newOptions);
           }
         } catch (err) {
           // 설정 로드 실패 시 기본값 유지

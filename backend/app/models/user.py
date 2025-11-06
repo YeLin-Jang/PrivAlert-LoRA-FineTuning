@@ -418,8 +418,7 @@ class UserFilteringSettings(db.Model):
         # 허용된 옵션 키만 저장
         allowed_keys = {
             'face', 'fingerprint', 'phone', 'rrn', 'passport', 'ip_address',
-            'email', 'account', 'school', 'workplace', 'name', 'address',
-            'driverLicense', 'postalCode'
+            'email', 'account', 'school', 'workplace', 'name', 'address'
         }
         
         # 필터링: 허용된 키만 저장

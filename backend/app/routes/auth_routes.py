@@ -485,7 +485,7 @@ def login():
                 error_message="비밀번호 불일치"
             )
             # 보안: 로그인 실패 로그 기록
-            logger.warning(f"로그인 실패 (비밀번호 불일치): user_id={user.id}, email={email[:3]}..., ip={ip}, 실패 횟수={user.login_failure_count}")
+            logger.warning(f"로그인 실패 (비밀번호 불일치): user_id={user.id}, email={email[:3]}..., ip={ip}, 실패 횟수={user.login_failed_count}")
             
             return jsonify({
                 "success": False,

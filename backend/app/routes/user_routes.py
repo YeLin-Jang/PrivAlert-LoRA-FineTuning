@@ -132,8 +132,7 @@ def update_filtering_settings():
         # 보안: 키 검증 (허용된 키만 허용)
         allowed_keys = {
             'face', 'fingerprint', 'phone', 'rrn', 'passport', 'ip_address',
-            'email', 'account', 'school', 'workplace', 'name', 'address',
-            'driverLicense', 'postalCode'
+            'email', 'account', 'school', 'workplace', 'name', 'address'
         }
         
         # 보안: 모든 키가 허용된 키인지 확인

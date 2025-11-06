@@ -106,8 +106,8 @@ def create_app(config_name=None):
         r"/api/*": {
             "origins": cors_origins,
             "methods": ["GET", "POST", "PATCH", "DELETE", "PUT"],
-            "allow_headers": ["Content-Type", "Authorization"],
-            "supports_credentials": flask_env == "development",  # 운영 환경에서는 False 권장
+            "allow_headers": ["Content-Type", "Authorization", "X-CSRF-Token"],
+            "supports_credentials": True,  # 세션 쿠키 전송을 위해 항상 True (개발/운영 환경 모두)
             "max_age": 3600  # preflight 요청 캐싱
         },
         r"/data/*": {
