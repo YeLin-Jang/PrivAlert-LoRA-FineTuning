@@ -94,6 +94,14 @@ export default function UploadForm() {
               newOptions[option as keyof DetectionOptions] = settings.detection_options[option] || false;
             });
             setDetectionOptions(newOptions);
+            
+            // 얼굴/손가락 탐지 옵션이 활성화되면 showFaces/blurFingers도 자동 활성화
+            if (newOptions.face) {
+              setShowFaces(true);
+            }
+            if (newOptions.fingerprint) {
+              setBlurFingers(true);
+            }
           }
         } catch (err) {
           // 설정 로드 실패 시 기본값 유지
@@ -248,14 +256,33 @@ export default function UploadForm() {
             
             // 수정 기록 저장 (백그라운드에서 실행, 실패해도 사용자 경험에 영향 없음)
             // 보안: 민감 정보는 저장하지 않고 수정 문장만 저장
-            userApi.createRevisionHistory(revisedText, categoryKeys)
-              .then(() => {
-                // 저장 성공 (조용히 처리)
-              })
-              .catch(() => {
+            // CSRF 토큰 갱신 후 저장 시도
+            const saveRevisionHistory = async () => {
+              try {
+                // 먼저 CSRF 토큰 갱신 시도 (없거나 만료된 경우 대비)
+                await userApi.getCurrentUser();
+                // CSRF 토큰 갱신 후 저장
+                await userApi.createRevisionHistory(revisedText, categoryKeys);
+              } catch (error: any) {
                 // 저장 실패는 조용히 처리 (사용자에게 알리지 않음)
                 // 보안: 콘솔 로그 제거
-              });
+                
+                // 403 에러인 경우 한 번 더 CSRF 토큰 갱신 후 재시도
+                if (error?.response?.status === 403) {
+                  try {
+                    // CSRF 토큰 갱신
+                    await userApi.getCurrentUser();
+                    // 재시도
+                    await userApi.createRevisionHistory(revisedText, categoryKeys);
+                  } catch {
+                    // 재시도 실패해도 조용히 처리
+                  }
+                }
+              }
+            };
+            
+            // 백그라운드에서 실행 (await 하지 않음)
+            saveRevisionHistory();
           }
         } catch (saveError) {
           // 저장 중 오류는 조용히 처리
@@ -318,7 +345,9 @@ export default function UploadForm() {
       }
     } catch (err) {
       secureLog('분석 오류:', err);
-      setError(err instanceof Error ? err.message : '분석 중 오류가 발생했습니다.');
+      // 보안: 상세한 에러 정보는 사용자에게 노출하지 않음
+      // 일반화된 사용자 친화적 메시지만 표시
+      setError('분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
       
       // 오류 발생 시에도 민감 데이터 정리
       secureFilesCleanup([...limitedFiles]);

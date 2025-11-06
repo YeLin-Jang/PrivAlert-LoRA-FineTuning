@@ -283,17 +283,46 @@ def create_app(config_name=None):
     @app.route('/data/results/<path:filename>')
     def serve_data(filename):
         """보안이 적용된 정적 파일 서빙"""
+        from flask import request
+        from app.utils.file_cleanup import cleanup_file
+        
         # 경로 조작 방지
-        # filename은 results/ 하위의 상대 경로 (예: face/face_xxx.jpg)
+        # filename은 results/ 하위의 상대 경로 (예: image/sanitized_xxx.png)
         is_valid, error = validate_path(BASE_DATA_DIR, filename)
         if not is_valid:
             app.logger.warning(f"경로 조작 시도 감지: {filename}")
             abort(403)
         
         try:
-            response = send_from_directory(BASE_DATA_DIR, filename)
+            # 다운로드 모드 확인 (download 파라미터가 있으면 다운로드 후 삭제)
+            is_download = request.args.get('download', '').lower() == 'true'
+            
+            response = send_from_directory(
+                BASE_DATA_DIR, 
+                filename,
+                as_attachment=is_download  # 다운로드 모드면 attachment로 설정
+            )
             # 보안: 정적 파일에도 X-Content-Type-Options 헤더 명시적 설정 (이중 보장)
             response.headers['X-Content-Type-Options'] = 'nosniff'
+            
+            # 다운로드 모드이고 삭제 플래그가 있으면 다운로드 후 삭제
+            if is_download and request.args.get('delete', '').lower() == 'true':
+                file_path = os.path.join(BASE_DATA_DIR, filename)
+                abs_path = os.path.abspath(file_path)
+                
+                # 보안: 경로 재검증
+                base_abs = os.path.abspath(BASE_DATA_DIR)
+                if abs_path.startswith(base_abs) and os.path.exists(abs_path):
+                    # 다운로드 완료 후 파일 삭제 (백그라운드에서)
+                    import threading
+                    def delayed_delete():
+                        import time
+                        time.sleep(2)  # 다운로드 완료 대기
+                        cleanup_file(abs_path, BASE_DATA_DIR)
+                    
+                    thread = threading.Thread(target=delayed_delete, daemon=True)
+                    thread.start()
+            
             return response
         except FileNotFoundError:
             abort(404)

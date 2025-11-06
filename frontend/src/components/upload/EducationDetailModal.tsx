@@ -23,18 +23,7 @@ export const EducationDetailModal: React.FC<EducationDetailModalProps> = ({
   category,
   data,
 }) => {
-  // 디버깅: 모달 상태 및 데이터 확인
-  if (import.meta.env.DEV) {
-    console.log('EducationDetailModal:', {
-      isOpen,
-      category,
-      data,
-      hasRevisedSentenceRationale: !!data?.revised_sentence_rationale,
-      hasLawSummary: !!data?.law_summary,
-      hasRiskScenarios: !!data?.risk_scenarios,
-      hasTips: !!data?.tips,
-    });
-  }
+  // 보안: 콘솔 로그 제거
   
   if (!isOpen) return null;
 

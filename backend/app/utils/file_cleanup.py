@@ -239,6 +239,13 @@ def get_session_files(session_id: str) -> List[str]:
     return []
 
 
+def get_file_session(file_path: str) -> str | None:
+    """파일 경로로 세션 ID 조회"""
+    abs_path = os.path.abspath(file_path)
+    with _lock:
+        return _file_sessions.get(abs_path)
+
+
 def generate_session_id() -> str:
     """세션 ID 생성"""
     import uuid

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { AnalysisResult } from '../../types';
 import './ResultModal.css';
 import { EducationDetailModal } from './EducationDetailModal';
+import { API_CONFIG } from '../../constants';
 
 interface ResultModalProps {
   result: AnalysisResult & { video_analysis?: any };
@@ -21,15 +22,7 @@ export const ResultModal: React.FC<ResultModalProps> = ({
   eduItems = null,
   revisedSentenceRationale = null,
 }) => {
-  // 디버깅: props 확인
-  if (import.meta.env.DEV) {
-    console.log('ResultModal props:', {
-      hasEduItems: !!eduItems,
-      eduItemsLength: eduItems?.length || 0,
-      hasRevisedSentenceRationale: !!revisedSentenceRationale,
-      revisedSentenceRationale,
-    });
-  }
+  // 보안: 콘솔 로그 제거
   const [selectedParts, setSelectedParts] = useState<Record<number, string>>({}); // 각 부분별로 선택된 수정문장 저장
   const [isAllModified, setIsAllModified] = useState(false); // 전체 수정 여부
   const [hoveredPartIndex, setHoveredPartIndex] = useState<number | null>(null);
@@ -440,11 +433,33 @@ export const ResultModal: React.FC<ResultModalProps> = ({
   const handImages = result.hand_detection?.images || [];
   const sanitizedImages = result.image_sanitization?.items || [];
   
-  // 모든 이미지 합치기 (최대 3개)
-  // sanitizedImages, faceImages, handImages를 합쳐서 표시
-  const allImages = [
-    ...sanitizedImages.slice(0, 3),
-  ];
+  // 표시용 이미지: 얼굴/손가락 탐지 결과 이미지만 (탐지 후 표시된 이미지)
+  // 다운로드용: EXIF 제거 이미지 (별도로 관리)
+  const displayImages: any[] = [];
+  
+  // 얼굴 탐지 결과 이미지 추가 (표시용)
+  faceImages.forEach((img: any) => {
+    if (img.result_image_url && displayImages.length < 3) {
+      displayImages.push({
+        ...img,
+        display_url: img.result_image_url, // 표시용 URL
+        detection_type: 'face'
+      });
+    }
+  });
+  
+  // 손가락 탐지 결과 이미지 추가 (표시용, 같은 image_index가 없을 때만)
+  handImages.forEach((img: any) => {
+    if (img.result_image_url && displayImages.length < 3) {
+      if (!displayImages.find((existing: any) => existing.image_index === img.image_index)) {
+        displayImages.push({
+          ...img,
+          display_url: img.result_image_url, // 표시용 URL
+          detection_type: 'hand'
+        });
+      }
+    }
+  });
 
   return (
     <div className="result-modal-overlay" onClick={onClose}>
@@ -661,67 +676,152 @@ export const ResultModal: React.FC<ResultModalProps> = ({
               </div>
 
               <div className="photo-grid">
-                {allImages.slice(0, 3).map((img: any, idx: number) => {
-                  const faceImg = faceImages.find(f => f.image_index === (idx + 1));
-                  const handImg = handImages.find(h => h.image_index === (idx + 1));
-                  const detections: string[] = [];
-                  
-                  if (faceImg && faceImg.count && faceImg.count > 0) detections.push('얼굴');
-                  if (handImg && handImg.count && handImg.count > 0) detections.push('지문정보');
+                {displayImages.length > 0 ? (
+                  displayImages.map((img: any, idx: number) => {
+                    // 이미지의 image_index를 기준으로 탐지 정보 찾기
+                    const imageIndex = img.image_index || (idx + 1);
+                    const faceImg = faceImages.find(f => f.image_index === imageIndex);
+                    const handImg = handImages.find(h => h.image_index === imageIndex);
+                    const detections: string[] = [];
+                    
+                    if (faceImg && faceImg.count && faceImg.count > 0) detections.push('얼굴');
+                    if (handImg && handImg.count && handImg.count > 0) detections.push('지문정보');
 
-                  // 텍스트 분석 결과에서 탐지된 항목 추가
-                  if (structuredData?.detected && structuredData?.categories) {
-                    const detectedCategories = Object.keys(structuredData.categories);
-                    detectedCategories.forEach(cat => {
-                      const catName = categoryNames[cat] || cat;
-                      if (!detections.includes(catName)) {
-                        detections.push(catName);
-                      }
-                    });
-                  }
+                    // 텍스트 분석 결과에서 탐지된 항목 추가
+                    if (structuredData?.detected && structuredData?.categories) {
+                      const detectedCategories = Object.keys(structuredData.categories);
+                      detectedCategories.forEach(cat => {
+                        const catName = categoryNames[cat] || cat;
+                        if (!detections.includes(catName)) {
+                          detections.push(catName);
+                        }
+                      });
+                    }
 
-                  return (
-                    <div key={idx} className="photo-item">
-                      <div className="photo-placeholder">
-                        {img?.sanitized_url ? (
-                          <img src={img.sanitized_url} alt={`이미지 ${idx + 1}`} />
-                        ) : (
-                          <span>이미지 {idx + 1}</span>
-                        )}
-                      </div>
-                      <div className="photo-detections">
-                        {detections.length > 0 ? (
-                          <div className="detection-alert">
-                            <p className="detection-alert-text">
-                              {detections.join(', ')}이(가) 탐지되었습니다.
-                            </p>
-                            <div className="detection-tags">
-                              {detections.map((det, i) => (
-                            <span key={i} className="detection-tag">{det}</span>
-                              ))}
+                    // 같은 image_index의 EXIF 제거 이미지 찾기 (다운로드용)
+                    const sanitizedImg = Array.isArray(sanitizedImages) 
+                      ? sanitizedImages.find((s: any) => s.image_index === imageIndex)
+                      : null;
+
+                    return (
+                      <div key={idx} className="photo-item">
+                        <div className="photo-placeholder">
+                          {img?.display_url ? (
+                            <img 
+                              src={`${API_CONFIG.BASE_URL}${img.display_url}?t=${Date.now()}`} 
+                              alt={`이미지 ${imageIndex}`}
+                              onError={(e) => {
+                                // 이미지 로드 실패 시 대체 처리
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                const placeholder = target.parentElement;
+                                if (placeholder) {
+                                  const span = document.createElement('span');
+                                  span.textContent = `이미지 ${imageIndex}`;
+                                  placeholder.appendChild(span);
+                                }
+                              }}
+                            />
+                          ) : (
+                            <span>이미지 {imageIndex}</span>
+                          )}
+                        </div>
+                        <div className="photo-detections">
+                          {detections.length > 0 ? (
+                            <div className="detection-alert">
+                              <p className="detection-alert-text">
+                                {detections.join(', ')}이(가) 탐지되었습니다.
+                              </p>
+                              <div className="detection-tags">
+                                {detections.map((det, i) => (
+                              <span key={i} className="detection-tag">{det}</span>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        ) : (
-                          <span className="no-detection">검출 내역 없음</span>
+                          ) : (
+                            <span className="no-detection">검출 내역 없음</span>
+                          )}
+                        </div>
+                        {sanitizedImg?.sanitized_url && (
+                          <button
+                            className="download-image-button"
+                            onClick={async () => {
+                              try {
+                                // 보안: API 엔드포인트를 통한 프록시 다운로드 (파일 경로 노출 방지)
+                                // sanitized_url 형식: /data/results/image/sanitized_xxx.png
+                                // 백엔드의 /api/v1/analyze/download/<path:filename> 엔드포인트 사용
+                                // 파일 경로를 URL에 노출하지 않고 백엔드에서 프록시로 전송
+                                let urlPath = sanitizedImg.sanitized_url;
+                                
+                                // /data/results/로 시작하는 경우 제거 (백엔드에서 BASE_DATA_DIR과 결합)
+                                if (urlPath.startsWith('/data/results/')) {
+                                  urlPath = urlPath.replace('/data/results/', '');
+                                }
+                                
+                                // Flask의 <path:filename>은 슬래시를 포함한 경로를 받을 수 있으므로
+                                // 각 경로 세그먼트만 인코딩 (슬래시는 유지)
+                                const pathSegments = urlPath.split('/');
+                                const encodedSegments = pathSegments.map(segment => encodeURIComponent(segment));
+                                const encodedPath = encodedSegments.join('/');
+                                const downloadUrl = `${API_CONFIG.BASE_URL}/api/v1/analyze/download/${encodedPath}`;
+                                
+                                const response = await fetch(downloadUrl, {
+                                  credentials: 'include', // 쿠키 포함
+                                  method: 'GET',
+                                  cache: 'no-cache', // 304 에러 방지
+                                });
+                                
+                                if (!response.ok) {
+                                  // 보안: 상세한 에러 정보는 사용자에게 노출하지 않음
+                                  if (response.status === 404) {
+                                    throw new Error('FILE_NOT_FOUND');
+                                  } else if (response.status === 403) {
+                                    throw new Error('ACCESS_DENIED');
+                                  } else {
+                                    throw new Error('DOWNLOAD_FAILED');
+                                  }
+                                }
+                                
+                                const blob = await response.blob();
+                                const url = window.URL.createObjectURL(blob);
+                                
+                                // 파일명 생성 (확장자 포함)
+                                const filename = sanitizedImg.sanitized_filename || `sanitized_image_${imageIndex}.jpg`;
+                                
+                                const link = document.createElement('a');
+                                link.href = url;
+                                link.download = filename;
+                                document.body.appendChild(link);
+                                link.click();
+                                
+                                // 정리
+                                document.body.removeChild(link);
+                                window.URL.revokeObjectURL(url);
+                              } catch (error: any) {
+                                // 보안: 일반화된 사용자 친화적 메시지만 표시
+                                let message = '다운로드 중 오류가 발생했습니다.';
+                                if (error?.message === 'FILE_NOT_FOUND') {
+                                  message = '파일을 찾을 수 없습니다. 이미 삭제되었을 수 있습니다.';
+                                } else if (error?.message === 'ACCESS_DENIED') {
+                                  message = '파일 다운로드 권한이 없습니다.';
+                                } else if (error?.message === 'DOWNLOAD_FAILED') {
+                                  message = '파일 다운로드에 실패했습니다. 잠시 후 다시 시도해주세요.';
+                                }
+                                alert(message);
+                              }
+                            }}
+                          >
+                            EXIF 제거 사진 다운로드
+                          </button>
                         )}
                       </div>
-                      {img?.sanitized_url && (
-                        <button
-                          className="download-image-button"
-                          onClick={() => {
-                            // 이미지 다운로드
-                            const link = document.createElement('a');
-                            link.href = img.sanitized_url;
-                            link.download = img.sanitized_filename || `sanitized_image_${idx + 1}.jpg`;
-                            link.click();
-                          }}
-                        >
-                          EXIF 제거 사진 다운로드
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                ) : (
+                  <div className="no-images-message" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: '#666' }}>
+                    이미지가 없습니다. 텍스트 분석 결과만 표시됩니다.
+                  </div>
+                )}
               </div>
 
             </section>
@@ -851,15 +951,7 @@ export const ResultModal: React.FC<ResultModalProps> = ({
                       key={catKey}
                       className="education-simple-card"
                       onClick={() => {
-                        // 디버깅: 클릭 이벤트 확인
-                        if (import.meta.env.DEV) {
-                          console.log('교육 카드 클릭:', {
-                            catName,
-                            eduItem,
-                            revisedSentenceRationale,
-                            eduItems,
-                          });
-                        }
+                        // 보안: 콘솔 로그 제거
                         
                         // 카드 클릭 시 모든 정보를 포함한 모달 열기
                         const modalData: any = {
@@ -878,13 +970,7 @@ export const ResultModal: React.FC<ResultModalProps> = ({
                         setEducationModalCategory('all'); // 모든 정보 표시
                         setEducationModalOpen(true);
                         
-                        // 디버깅: 모달 상태 확인
-                        if (import.meta.env.DEV) {
-                          console.log('모달 열기:', {
-                            modalData,
-                            category: 'all',
-                          });
-                        }
+                        // 보안: 콘솔 로그 제거
                       }}
                     >
                       <div className="simple-card-content">

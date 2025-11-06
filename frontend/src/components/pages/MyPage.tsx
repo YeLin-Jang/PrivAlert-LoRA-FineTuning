@@ -112,17 +112,13 @@ export default function MyPage() {
       setError(null);
       setSuccessMessage(null);
 
-      // CSRF 토큰 확인 (보안: 403 에러 방지)
-      const csrfToken = localStorage.getItem('csrf_token');
-      if (!csrfToken) {
-        // CSRF 토큰이 없으면 사용자 정보를 다시 가져와서 토큰 갱신 시도
-        try {
-          await userApi.getCurrentUser();
-        } catch (tokenErr) {
-          setError('인증 토큰이 만료되었습니다. 페이지를 새로고침하거나 다시 로그인해주세요.');
-          setSaving(false);
-          return;
-        }
+      // CSRF 토큰 항상 갱신 (세션 ID 기반 토큰으로 업데이트)
+      try {
+        await userApi.getCurrentUser();
+      } catch (tokenErr) {
+        setError('인증 토큰이 만료되었습니다. 페이지를 새로고침하거나 다시 로그인해주세요.');
+        setSaving(false);
+        return;
       }
 
       // detection_options 추출
@@ -136,9 +132,21 @@ export default function MyPage() {
       // 3초 후 성공 메시지 제거
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
-      // 403 에러인 경우 명확한 메시지 표시
+      // 403 에러인 경우 CSRF 토큰 갱신 후 재시도
       if (err?.response?.status === 403) {
-        setError('인증 토큰이 만료되었거나 유효하지 않습니다. 페이지를 새로고침하거나 다시 로그인해주세요.');
+        try {
+          // CSRF 토큰 갱신 시도
+          await userApi.getCurrentUser();
+          // 재시도
+          const detectionOptions = filteringSettings.detection_options || {};
+          const updatedSettings = await userApi.updateFilteringSettings(detectionOptions);
+          setFilteringSettings(updatedSettings);
+          setEditingSettings(false);
+          setSuccessMessage('필터링 설정이 성공적으로 저장되었습니다');
+          setTimeout(() => setSuccessMessage(null), 3000);
+        } catch (retryErr) {
+          setError('인증 토큰이 만료되었거나 유효하지 않습니다. 페이지를 새로고침하거나 다시 로그인해주세요.');
+        }
       } else {
         setError(err instanceof Error ? err.message : '설정 저장 중 오류가 발생했습니다');
       }

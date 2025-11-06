@@ -35,10 +35,26 @@ const createApiInstance = (): AxiosInstance => {
       }
       
       if (error.response) {
-        const data = error.response.data as any;
+        // 보안: 상세한 서버 에러 정보는 사용자에게 노출하지 않음
+        // HTTP 상태 코드에 따라 일반화된 메시지만 반환
+        const status = error.response.status;
+        let errorMessage = '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
         
-        // 일반적인 에러 메시지만 반환 (보안: 상세한 서버 정보 노출 방지)
-        const errorMessage = data?.error || data?.message || '서버 오류가 발생했습니다';
+        if (status === 400) {
+          errorMessage = '잘못된 요청입니다. 입력 내용을 확인해주세요.';
+        } else if (status === 401) {
+          errorMessage = '인증이 필요합니다. 다시 로그인해주세요.';
+        } else if (status === 403) {
+          errorMessage = '접근 권한이 없습니다.';
+        } else if (status === 404) {
+          errorMessage = '요청한 리소스를 찾을 수 없습니다.';
+        } else if (status === 413) {
+          errorMessage = '파일 크기가 너무 큽니다.';
+        } else if (status === 429) {
+          errorMessage = '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.';
+        } else if (status >= 500) {
+          errorMessage = '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+        }
         
         return Promise.reject(new Error(errorMessage));
       } else if (error.request) {
@@ -47,7 +63,7 @@ const createApiInstance = (): AxiosInstance => {
         return Promise.reject(new Error('네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.'));
       } else {
         // 요청 설정 오류
-        return Promise.reject(new Error('요청 처리 중 오류가 발생했습니다'));
+        return Promise.reject(new Error('요청 처리 중 오류가 발생했습니다.'));
       }
     }
   );
@@ -77,13 +93,32 @@ fileApi.interceptors.response.use(
     }
     
     if (error.response) {
-      const data = error.response.data as any;
-      const errorMessage = data?.error || data?.message || '서버 오류가 발생했습니다';
+      // 보안: 상세한 서버 에러 정보는 사용자에게 노출하지 않음
+      // HTTP 상태 코드에 따라 일반화된 메시지만 반환
+      const status = error.response.status;
+      let errorMessage = '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+      
+      if (status === 400) {
+        errorMessage = '잘못된 요청입니다. 입력 내용을 확인해주세요.';
+      } else if (status === 401) {
+        errorMessage = '인증이 필요합니다. 다시 로그인해주세요.';
+      } else if (status === 403) {
+        errorMessage = '접근 권한이 없습니다.';
+      } else if (status === 404) {
+        errorMessage = '요청한 리소스를 찾을 수 없습니다.';
+      } else if (status === 413) {
+        errorMessage = '파일 크기가 너무 큽니다.';
+      } else if (status === 429) {
+        errorMessage = '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.';
+      } else if (status >= 500) {
+        errorMessage = '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+      }
+      
       return Promise.reject(new Error(errorMessage));
     } else if (error.request) {
       return Promise.reject(new Error('네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.'));
     } else {
-      return Promise.reject(new Error('요청 처리 중 오류가 발생했습니다'));
+      return Promise.reject(new Error('요청 처리 중 오류가 발생했습니다.'));
     }
   }
 );
