@@ -109,6 +109,56 @@
   color: #ef4444;
 }
 
+/* 로그인 프롬프트 */
+.login-prompt {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+  padding: 60px 20px;
+}
+
+.login-prompt-content {
+  text-align: center;
+  max-width: 500px;
+  padding: 40px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.login-prompt-content h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1e3a8a;
+  margin: 0 0 16px 0;
+}
+
+.login-prompt-content p {
+  font-size: 1rem;
+  color: #666666;
+  margin: 0 0 32px 0;
+  line-height: 1.6;
+}
+
+.login-button {
+  background: #3b82f6;
+  color: #ffffff;
+  border: none;
+  padding: 12px 32px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.login-button:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
 /* 섹션 */
 .settings-section,
 .history-section {
