@@ -8,3 +8,5 @@ if exist venv\Scripts\activate.bat (
 python -m bandit app/utils/logger.py -f screen -s B104
 pause
 
+
+

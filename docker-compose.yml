@@ -48,7 +48,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: ${DOCKER_USERNAME:-honghhj66}/privalert-backend:1.0
+    image: ${DOCKER_USERNAME:-honghhj66}/privalert-backend:1.5
     container_name: privalert-backend
     restart: unless-stopped
     env_file:
@@ -117,7 +117,7 @@ services:
     build:
       context: ./fastapi-backend
       dockerfile: Dockerfile
-    image: ${DOCKER_USERNAME:-honghhj66}/privalert-fastapi:1.0
+    image: ${DOCKER_USERNAME:-honghhj66}/privalert-fastapi:1.5
     container_name: privalert-fastapi-backend
     restart: unless-stopped
     env_file:
@@ -175,7 +175,7 @@ services:
         # 빌드 시 환경 변수
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:5000}
         VITE_FASTAPI_BASE_URL: ${VITE_FASTAPI_BASE_URL:-http://localhost:8000}
-    image: ${DOCKER_USERNAME:-honghhj66}/privalert-frontend:1.0
+    image: ${DOCKER_USERNAME:-honghhj66}/privalert-frontend:1.5
     container_name: privalert-frontend
     restart: unless-stopped
     ports:

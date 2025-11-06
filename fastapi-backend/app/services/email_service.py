@@ -88,3 +88,5 @@ class EmailService:
             logger.error(f"이메일 전송 실패: {str(e)}")
             return False
 
+
+
