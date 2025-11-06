@@ -199,6 +199,16 @@ def analyze_content():
     
     # 보안: 파일 리스트 검증 (최대 5개)
     from app.utils.security_utils import validate_file_list, validate_text_input, validate_image_file
+    import mimetypes
+    
+    # 비디오 처리 서비스 확인
+    VIDEO_PROCESSING_AVAILABLE = False
+    VideoProcessingService = None
+    try:
+        from app.services.video_processing_service import VideoProcessingService
+        VIDEO_PROCESSING_AVAILABLE = True
+    except ImportError:
+        logger.warning("비디오 처리 서비스를 사용할 수 없습니다")
     
     # 파일 개수 검증 (최대 5개)
     # 빈 파일 제외하고 실제 파일 개수 확인
@@ -206,18 +216,36 @@ def analyze_content():
     if len(actual_files) > 5:
         return APIResponse.error("이미지/영상 파일은 최대 5개까지 업로드할 수 있습니다", code=400)
     
+    # 이미지와 비디오 파일 분리
     valid_images = []
+    video_files = []
+    
     for f in actual_files:
-        is_valid, error_msg = validate_image_file(f)
-        if is_valid:
-            valid_images.append(f)
+        mime_type, _ = mimetypes.guess_type(f.filename or '')
+        is_video = mime_type and mime_type.startswith('video/')
+        
+        if is_video:
+            if VIDEO_PROCESSING_AVAILABLE and VideoProcessingService:
+                # 비디오 파일 검증
+                video_service = VideoProcessingService()
+                is_valid, error_msg = video_service._validate_video_file(f)
+                if is_valid:
+                    video_files.append(f)
+                else:
+                    logger.warning(f"비디오 파일 검증 실패: {f.filename}, {error_msg}")
+            else:
+                logger.warning(f"비디오 처리 서비스를 사용할 수 없습니다: {f.filename}")
         else:
-            logger.warning(f"파일 검증 실패: {f.filename}")
-            # 검증 실패한 파일은 건너뛰기
+            # 이미지 파일 검증
+            is_valid, error_msg = validate_image_file(f)
+            if is_valid:
+                valid_images.append(f)
+            else:
+                logger.warning(f"파일 검증 실패: {f.filename}")
     
     # 최소 하나의 입력이 필요
-    if not valid_images and not text_input:
-        return APIResponse.error("이미지 파일 또는 텍스트가 필요합니다", code=400)
+    if not valid_images and not video_files and not text_input:
+        return APIResponse.error("이미지/영상 파일 또는 텍스트가 필요합니다", code=400)
     
     # 보안: 텍스트 검증 (최대 3000자) 및 XSS/SQL Injection 방지
     if text_input:
@@ -241,6 +269,11 @@ def analyze_content():
     # 옵션 파라미터
     blur_fingers = request.form.get('blur_fingers', 'true').lower() in ['true', '1', 'yes']
     show_faces = request.form.get('show_faces', 'false').lower() in ['true', '1', 'yes']
+    
+    # 비디오 처리 서비스 인스턴스 (비디오 파일이 있는 경우에만 생성)
+    video_service = None
+    if video_files and VIDEO_PROCESSING_AVAILABLE and VideoProcessingService:
+        video_service = VideoProcessingService()
     
     # 탐지 옵션 파라미터 (로그인된 사용자는 DB에서, 비로그인은 요청에서)
     # 기본값: 모두 False
@@ -594,16 +627,148 @@ def analyze_content():
             "structured_data": ocr_structured_data
         }
     
-    # 직접 입력 텍스트 분석 (LLM 수정문장 생성)
+    # 비디오 분석 처리 (1초 프레임마다)
+    if video_files and VIDEO_PROCESSING_AVAILABLE and VideoProcessingService:
+        video_face_count = 0
+        video_finger_count = 0
+        video_frame_results = []
+        video_audio_text = ""
+        video_audio_analysis = None
+        
+        for idx, video_file in enumerate(video_files):
+            logger.info(f"비디오 {idx + 1} 분석 시작: {video_file.filename}")
+            
+            try:
+                # 비디오 서비스 인스턴스 재사용 (이미 생성됨)
+                if not video_service:
+                    video_service = VideoProcessingService()
+                video_result = video_service.process_video(
+                    video_file=video_file,
+                    extract_audio=True,  # 오디오 추출 및 Whisper 음성 인식
+                    process_frames=True,  # 프레임 분석
+                    frame_interval=1.0  # 1초마다 프레임 추출
+                )
+                
+                if video_result.get("success"):
+                    for frame_data in video_result.get("frames", []):
+                        frame_result = {
+                            "frame_index": frame_data.get("frame_index", 0),
+                            "timestamp": frame_data.get("timestamp", 0.0),
+                            "faces_detected": frame_data.get("face", {}).get("count", 0) if frame_data.get("face") else 0,
+                            "fingers_detected": frame_data.get("hand", {}).get("count", 0) if frame_data.get("hand") else 0,
+                            "ocr_text": frame_data.get("ocr", {}).get("text", "") if frame_data.get("ocr") else "",
+                            "result_image_url": frame_data.get("face", {}).get("result_image_url") if show_faces and frame_data.get("face") else None
+                        }
+                        video_frame_results.append(frame_result)
+                        
+                        video_face_count += frame_result["faces_detected"]
+                        video_finger_count += frame_result["fingers_detected"]
+                    
+                    audio_transcription = video_result.get("audio_transcription", {})
+                    if audio_transcription.get("success") and audio_transcription.get("text"):
+                        video_audio_text = audio_transcription.get("text", "")
+                        
+                        active_filters = [key for key, value in detection_options.items() if value]
+                        audio_filter_result = filter_service.filter_text(
+                            video_audio_text, 
+                            use_replacements=True, 
+                            filters=active_filters
+                        )
+                        
+                        video_audio_analysis = {
+                            "original_text": video_audio_text,
+                            "masked_text": audio_filter_result.get("filtered_text", video_audio_text),
+                            "detected": audio_filter_result.get("overall_statistics", {}).get("total_detected", 0) > 0,
+                            "total_count": audio_filter_result.get("overall_statistics", {}).get("total_detected", 0),
+                            "categories": {}
+                        }
+                        
+                        for filter_name, result in audio_filter_result.get("filter_results", {}).items():
+                            if result.get("success") and result.get("statistics", {}).get("total_detected", 0) > 0:
+                                video_audio_analysis["categories"][filter_name] = {
+                                    "count": result["statistics"]["total_detected"],
+                                    "items": result["detected_words"]
+                                }
+                        
+                        if video_audio_analysis.get("detected", False):
+                            try:
+                                from app.services.llm_service import LLMService
+                                llm_service = LLMService()
+                                categories_dict = {cat: True for cat in video_audio_analysis.get("categories", {}).keys()}
+                                llm_result = llm_service.suggest(
+                                    video_audio_analysis["masked_text"], 
+                                    categories_dict, 
+                                    language="ko", 
+                                    tone="educational"
+                                )
+                                video_audio_analysis["revised_text"] = llm_result.get("revised_sentence", video_audio_text)
+                            except Exception as e:
+                                logger.warning(f"비디오 음성 텍스트 LLM 수정문장 생성 실패: {e}")
+                                video_audio_analysis["revised_text"] = video_audio_text
+                    
+                    logger.info(f"비디오 {idx + 1} 분석 완료: {len(video_frame_results)}개 프레임, 얼굴 {video_face_count}개, 손가락 {video_finger_count}개")
+                else:
+                    logger.warning(f"비디오 {idx + 1} 분석 실패: {video_result.get('error', '알 수 없는 오류')}")
+            except Exception as e:
+                logger.error(f"비디오 {idx + 1} 분석 중 오류: {e}", exc_info=True)
+        
+        results["video_analysis"] = {
+            "total_videos": len(video_files),
+            "total_frames_processed": len(video_frame_results),
+            "faces_detected": video_face_count,
+            "fingers_detected": video_finger_count,
+            "frames": video_frame_results,
+            "audio_transcription": {
+                "text": video_audio_text,
+                "analysis": video_audio_analysis
+            } if video_audio_text else None
+        }
+        
+        results["summary"]["faces_detected"] += video_face_count
+        results["summary"]["fingers_detected"] += video_finger_count
+        
+        if video_audio_analysis and video_audio_analysis.get("detected", False):
+            results["summary"]["sensitive_text_found"] = True
+            if not results.get("text_analysis"):
+                results["text_analysis"] = {
+                    "original_text": video_audio_text,
+                    "revised_text": video_audio_analysis.get("revised_text", video_audio_text),
+                    "masked_text": video_audio_analysis.get("masked_text", video_audio_text),
+                    "statistics": {},
+                    "structured_data": {
+                        "detected": True,
+                        "total_count": video_audio_analysis.get("total_count", 0),
+                        "categories": video_audio_analysis.get("categories", {})
+                    }
+                }
+    
+    # 텍스트 분석: 직접 입력 텍스트 + OCR 결과 통합
     original_text_input = text_input.strip()
-    if original_text_input:
+    
+    # OCR 텍스트 가져오기 (이미지에서 추출된 텍스트)
+    ocr_combined_text = ""
+    ocr_original_texts = results.get("ocr_text", {}).get("original_texts", [])
+    if ocr_original_texts:
+        ocr_combined_text = "\n".join(ocr_original_texts)
+    
+    # 전체 텍스트 합치기 (직접 입력 + OCR)
+    all_text = ""
+    if original_text_input and ocr_combined_text:
+        all_text = f"{original_text_input}\n{ocr_combined_text}"
+    elif original_text_input:
+        all_text = original_text_input
+    elif ocr_combined_text:
+        all_text = ocr_combined_text
+    
+    if all_text.strip():
         # 활성화된 필터 목록 생성
         active_filters = [key for key, value in detection_options.items() if value]
         logger.info(f"활성화된 탐지 필터: {active_filters}")
+        logger.info(f"분석할 텍스트 길이: {len(all_text)}자 (직접 입력: {len(original_text_input)}자, OCR: {len(ocr_combined_text)}자)")
         
-        # 직접 입력 텍스트 마스킹 (LLM 입력용)
-        filter_result = filter_service.filter_text(original_text_input, use_replacements=True, filters=active_filters)
-        masked_text = filter_result.get("filtered_text", original_text_input)
+        # 전체 텍스트 마스킹 처리 (LLM 입력용)
+        filter_result = filter_service.filter_text(all_text, use_replacements=True, filters=active_filters)
+        masked_text = filter_result.get("filtered_text", all_text)
         
         # 탐지 결과
         structured_data_result = {
@@ -620,8 +785,26 @@ def analyze_content():
                     "items": result["detected_words"]
                 }
         
+        # OCR 결과의 structured_data도 통합 (중복 제거)
+        ocr_structured_data = results.get("ocr_text", {}).get("structured_data", {})
+        if ocr_structured_data.get("categories"):
+            for cat_name, cat_data in ocr_structured_data.get("categories", {}).items():
+                if cat_name in structured_data_result["categories"]:
+                    # 중복 카테고리는 count 합산
+                    structured_data_result["categories"][cat_name]["count"] += cat_data.get("count", 0)
+                    # items 합치기 (중복 제거)
+                    existing_items = set(structured_data_result["categories"][cat_name].get("items", []))
+                    new_items = set(cat_data.get("items", []))
+                    structured_data_result["categories"][cat_name]["items"] = list(existing_items | new_items)
+                else:
+                    structured_data_result["categories"][cat_name] = cat_data
+                # total_count 업데이트
+                structured_data_result["total_count"] = sum(
+                    cat.get("count", 0) for cat in structured_data_result["categories"].values()
+                )
+        
         # LLM으로 수정문장 생성
-        llm_revised_text = original_text_input  # 기본값은 원문
+        llm_revised_text = all_text  # 기본값은 원문
         try:
             from app.services.llm_service import LLMService
             llm_service = LLMService()
@@ -629,21 +812,26 @@ def analyze_content():
                 # 카테고리를 딕셔너리로 변환 (LLM 서비스 형식)
                 categories_dict = {cat: True for cat in structured_data_result.get("categories", {}).keys()}
                 llm_result = llm_service.suggest(masked_text, categories_dict, language="ko", tone="educational")
-                llm_revised_text = llm_result.get("revised_sentence", original_text_input)
+                llm_revised_text = llm_result.get("revised_sentence", all_text)
                 logger.info(f"LLM 수정문장 생성 완료: {len(llm_revised_text)}자")
             else:
-                llm_revised_text = original_text_input
+                llm_revised_text = all_text
                 logger.info("민감 정보 미탐지, LLM 수정문장 생성 생략")
         except Exception as e:
             logger.warning(f"LLM 수정문장 생성 실패: {e}, 원문 사용")
-            llm_revised_text = original_text_input
+            llm_revised_text = all_text
         
         results["text_analysis"] = {
-            "original_text": original_text_input,
+            "original_text": all_text,
             "revised_text": llm_revised_text,  # LLM 수정문장
             "masked_text": masked_text,  # 마스킹 결과 (참고용)
             "statistics": {},
-            "structured_data": structured_data_result
+            "structured_data": structured_data_result,
+            "source": {
+                "direct_input": len(original_text_input) > 0,
+                "ocr": len(ocr_combined_text) > 0,
+                "ocr_count": len(ocr_original_texts)
+            }
         }
         
         results["summary"]["sensitive_text_found"] = structured_data_result.get("detected", False)
@@ -653,13 +841,28 @@ def analyze_content():
             results["summary"]["structured_data_detected"] = True
             results["summary"]["structured_data_count"] = structured_data_result.get("total_count", 0)
     else:
-        # 텍스트가 없는 경우
+        # 텍스트가 없는 경우 (직접 입력도 없고 OCR 결과도 없음)
+        has_images = len(valid_images) > 0
+        has_videos = len(video_files) > 0 if video_files else False
+        
+        if has_images or has_videos:
+            # 이미지/비디오는 있지만 텍스트가 추출되지 않음
+            message = "이미지에서 텍스트를 추출하지 못했습니다. 이미지에 텍스트가 없거나 OCR 처리에 실패했습니다."
+        else:
+            # 이미지/비디오도 없고 텍스트 입력도 없음
+            message = "분석할 텍스트가 없습니다."
+        
         results["text_analysis"] = {
             "original_text": "",
             "revised_text": "",
             "masked_text": "",
             "statistics": {},
-            "message": "텍스트를 발견하지 못했습니다"
+            "structured_data": {
+                "detected": False,
+                "total_count": 0,
+                "categories": {}
+            },
+            "message": message
         }
         results["summary"]["sensitive_text_found"] = False
     

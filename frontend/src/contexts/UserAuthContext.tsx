@@ -29,50 +29,57 @@ export const UserAuthProvider: React.FC<UserAuthProviderProps> = ({ children }) 
   const [loading, setLoading] = useState(true); // 초기 로딩 상태를 true로 설정 (인증 확인 중)
 
   useEffect(() => {
-    // 초기 로드 시 저장된 토큰 확인 및 사용자 정보 조회
+    // 초기 로드 시 세션 쿠키 확인 및 사용자 정보 조회
+    // 세션 쿠키는 자동으로 전송되므로 localStorage 토큰 여부와 무관하게 확인
     const checkAuth = async () => {
-      const storedToken = localStorage.getItem('auth_token') || localStorage.getItem('session_id');
-      if (storedToken) {
-        try {
-          // 백엔드 API는 /api/v1/user/me 사용 (세션 쿠키 기반)
-          const { API_CONFIG } = await import('../constants');
-          const response = await fetch(`${API_CONFIG.BASE_URL}/api/v1/user/me`, {
-            method: 'GET',
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          });
+      try {
+        // 백엔드 API는 /api/v1/user/me 사용 (세션 쿠키 기반)
+        const { API_CONFIG } = await import('../constants');
+        const response = await fetch(`${API_CONFIG.BASE_URL}/api/v1/user/me`, {
+          method: 'GET',
+          credentials: 'include', // 세션 쿠키 자동 전송
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
 
-          if (response.ok) {
-            const data = await response.json();
-            if (data.success && data.data) {
-              // 백엔드 응답: { success: true, data: { ...user data... } }
-              const userData = data.data;
-              setUser(userData);
-              if (userData.email) {
-                localStorage.setItem('user_email', userData.email);
-              }
-            } else {
-              // 인증 실패 시 토큰 제거
-              throw new Error('인증 실패');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data) {
+            // 백엔드 응답: { success: true, data: { ...user data... } }
+            const userData = data.data;
+            setUser(userData);
+            if (userData.email) {
+              localStorage.setItem('user_email', userData.email);
             }
-          } else {
-            throw new Error('인증 실패');
+            setLoading(false);
+            return; // 성공 시 종료
           }
-        } catch (error) {
-          // 토큰이 유효하지 않으면 제거
+        }
+        
+        // 인증 실패 시 (401, 403 등)
+        // localStorage에 user_email이 있으면 유지 (로그인 상태 유지)
+        const storedEmail = localStorage.getItem('user_email');
+        if (!storedEmail) {
+          // 초기 로드이고 토큰도 없으면 비로그인 상태로 설정
           localStorage.removeItem('user_email');
           localStorage.removeItem('user_access_token');
           localStorage.removeItem('auth_token');
           localStorage.removeItem('csrf_token');
           localStorage.removeItem('session_id');
           setUser(null);
-        } finally {
-          setLoading(false);
         }
-      } else {
-        // 토큰이 없으면 로딩 완료
+        // 토큰이 있으면 사용자 정보는 유지 (세션 쿠키가 곧 설정될 수 있음)
+      } catch (error) {
+        // 네트워크 오류 등 - 사용자 정보는 유지 (일시적인 네트워크 문제일 수 있음)
+        const storedEmail = localStorage.getItem('user_email');
+        if (!storedEmail) {
+          // 초기 로드이고 토큰도 없으면 비로그인 상태로 설정
+          setUser(null);
+        }
+        // 토큰이 있으면 사용자 정보는 유지 (네트워크 복구 후 재확인 가능)
+        console.debug('인증 확인 중 네트워크 오류:', error);
+      } finally {
         setLoading(false);
       }
     };
@@ -81,6 +88,7 @@ export const UserAuthProvider: React.FC<UserAuthProviderProps> = ({ children }) 
   }, []);
 
   const handleLogin = async (email: string, password: string) => {
+    setLoading(true); // 로그인 시작 시 로딩 상태 활성화
     try {
       // 백엔드 API는 /api/v1/auth/login을 사용 (email/password)
       const { API_CONFIG } = await import('../constants');
@@ -141,6 +149,7 @@ export const UserAuthProvider: React.FC<UserAuthProviderProps> = ({ children }) 
         if (data.data.user.email) {
           localStorage.setItem('user_email', data.data.user.email);
         }
+        setLoading(false); // 사용자 정보가 있으면 즉시 로딩 종료
       }
 
       // 사용자 정보 최신화 (백그라운드에서 실행, 실패해도 이미 user가 설정되어 있음)
@@ -168,13 +177,18 @@ export const UserAuthProvider: React.FC<UserAuthProviderProps> = ({ children }) 
         .catch(error => {
           // 에러는 무시 (이미 user가 설정되어 있음)
           console.debug('사용자 정보 최신화 실패:', error);
+        })
+        .finally(() => {
+          setLoading(false); // 최신화 완료 후 로딩 종료
         });
     } catch (error: any) {
+      setLoading(false); // 에러 발생 시에도 로딩 종료
       throw new Error(error.message || '로그인에 실패했습니다');
     }
   };
 
   const handleLogout = async () => {
+    setLoading(true); // 로그아웃 시작 시 로딩 상태 활성화
     try {
       await userApi.logout();
     } catch (error) {
@@ -183,16 +197,23 @@ export const UserAuthProvider: React.FC<UserAuthProviderProps> = ({ children }) 
       localStorage.removeItem('user_email');
       localStorage.removeItem('user_access_token');
       localStorage.removeItem('auth_token');
+      localStorage.removeItem('csrf_token');
+      localStorage.removeItem('session_id');
       setUser(null);
+      setLoading(false); // 로그아웃 완료 후 로딩 종료
     }
   };
+
+  // localStorage에 user_email이 있으면 로그인 상태로 간주 (세션 쿠키 확인 중일 수 있음)
+  const storedEmail = localStorage.getItem('user_email');
+  const isAuthenticated = !!user || !!storedEmail;
 
   const value: UserAuthContextType = {
     user,
     loading,
     login: handleLogin,
     logout: handleLogout,
-    isAuthenticated: !!user,
+    isAuthenticated,
   };
 
   return <UserAuthContext.Provider value={value}>{children}</UserAuthContext.Provider>;
