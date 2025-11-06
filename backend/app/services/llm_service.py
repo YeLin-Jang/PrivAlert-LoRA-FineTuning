@@ -167,21 +167,27 @@ class LLMService:
             # 캐시 확인
             cached_data = self._cache_get(key)
             if cached_data:
-                return {
+                result = {
                     "items": cached_data.get("items", []),
                     "revised_sentence": cached_data.get("revised_sentence", masked_text),
                     "cached": True,
                     "model": CLAUDE_MODEL,
                     "ttl_remaining": self._cache_ttl_remaining(key),
                 }
+                # 캐시된 rationale도 포함
+                if "revised_sentence_rationale" in cached_data:
+                    result["revised_sentence_rationale"] = cached_data["revised_sentence_rationale"]
+                return result
 
             # 교육파트: LLM 사용 (Claude API)
-            self.logger.info(f"교육파트 로딩 시작: categories={list(categories.keys()) if categories else []}")
+            print(f"[DEBUG] 교육파트 로딩 시작: categories={list(categories.keys()) if categories else []}")
+            print(f"[DEBUG] Claude 클라이언트 상태: {'있음' if self.client else '없음 (폴백 사용)'}")
             items = []
             revised_from_llm = None  # LLM에서 가져온 revised_sentence 저장
+            revised_sentence_rationale = None  # LLM에서 가져온 revised_sentence_rationale 저장
             
             if self.client:
-                self.logger.info("Claude 클라이언트 사용 가능, LLM 호출 시작")
+                print(f"[DEBUG] ✅ Claude 클라이언트 사용 가능, LLM 호출 시작 (Claude API 사용)")
                 try:
                     # LLM을 사용해서 교육 항목 생성
                     prompt = self._build_prompt(masked_text, categories, language, tone)
@@ -193,6 +199,15 @@ class LLMService:
                     result = self._call_claude(prompt)
                     self.logger.debug(f"Claude API 응답 받음, result 타입: {type(result)}")
                     self.logger.debug(f"Claude API 응답 키: {list(result.keys()) if isinstance(result, dict) else 'None'}")
+                    
+                    # revised_sentence_rationale은 항상 추출 시도 (revised_sentence 유효성과 무관)
+                    if result and "revised_sentence_rationale" in result:
+                        revised_sentence_rationale = result["revised_sentence_rationale"]
+                        print(f"[DEBUG] revised_sentence_rationale 추출: {revised_sentence_rationale[:100] if revised_sentence_rationale else 'None'}...")
+                    else:
+                        print(f"[WARNING] Claude 응답에 revised_sentence_rationale이 없습니다!")
+                        if isinstance(result, dict):
+                            print(f"[DEBUG] Claude 응답의 모든 키: {list(result.keys())}")
                     
                     if result and "items" in result and len(result["items"]) > 0:
                         items = result["items"]
@@ -212,29 +227,45 @@ class LLMService:
                                 self.logger.warning(f"revised_sentence가 예시 문장으로 보임, 무시하고 2-pass 사용: {revised_from_llm[:100]}...")
                                 revised_from_llm = None
                         else:
-                            self.logger.warning(f"LLM 응답에 revised_sentence가 없음. result 키: {list(result.keys())}")
-                            self.logger.debug(f"LLM 응답 전체: {json.dumps(result, ensure_ascii=False, indent=2)[:500]}...")
-                        self.logger.info(f"LLM으로 교육파트 생성 완료: {len(items)}개 항목")
+                            print(f"[WARNING] LLM 응답에 revised_sentence가 없음. result 키: {list(result.keys())}")
+                            print(f"[DEBUG] LLM 응답 전체: {json.dumps(result, ensure_ascii=False, indent=2)[:500]}...")
+                        print(f"[DEBUG] ✅ LLM(Claude API)으로 교육파트 생성 완료: {len(items)}개 항목")
+                        # rationale 필드가 items에 포함되어 있는지 확인
+                        for idx, item in enumerate(items):
+                            print(f"[DEBUG] Item {idx} ({item.get('category', 'unknown')}) 키 목록: {list(item.keys())}")
+                            if "law_summary_rationale" in item:
+                                print(f"[DEBUG] ✅ law_summary_rationale 발견: {item['law_summary_rationale'][:100] if item['law_summary_rationale'] else 'None'}...")
+                            else:
+                                print(f"[WARNING] ❌ law_summary_rationale 없음")
+                            if "risk_scenarios_rationale" in item:
+                                print(f"[DEBUG] ✅ risk_scenarios_rationale 발견: {item['risk_scenarios_rationale'][:100] if item['risk_scenarios_rationale'] else 'None'}...")
+                            else:
+                                print(f"[WARNING] ❌ risk_scenarios_rationale 없음")
+                            if "tips_rationale" in item:
+                                print(f"[DEBUG] ✅ tips_rationale 발견: {item['tips_rationale'][:100] if item['tips_rationale'] else 'None'}...")
+                            else:
+                                print(f"[WARNING] ❌ tips_rationale 없음")
                     else:
-                        self.logger.warning("LLM 응답에 items가 없음, 폴백 사용")
-                        self.logger.debug(f"LLM 응답 내용: {json.dumps(result, ensure_ascii=False, indent=2)[:500] if isinstance(result, dict) else str(result)[:500]}")
+                        print("[WARNING] ❌ LLM 응답에 items가 없음, 폴백 사용")
+                        print(f"[DEBUG] LLM 응답 내용: {json.dumps(result, ensure_ascii=False, indent=2)[:500] if isinstance(result, dict) else str(result)[:500]}")
+                        print("[DEBUG] ⚠️ 폴백 아이템 사용 (하드코딩된 데이터)")
                         items = self._fallback_items(categories)
                 except Exception as e:
                     self.logger.error(f"LLM 교육파트 생성 실패, 폴백 사용: {e}", exc_info=True)
                     items = self._fallback_items(categories)
             else:
                 # 클라이언트가 없으면 레퍼런스 또는 폴백 사용
-                self.logger.warning("Claude 클라이언트가 없습니다! ANTHROPIC_API_KEY 환경변수를 확인하세요.")
-                self.logger.warning("폴백 아이템을 사용합니다.")
+                print(f"[WARNING] ❌ Claude 클라이언트가 없습니다! ANTHROPIC_API_KEY 환경변수를 확인하세요.")
+                print(f"[WARNING] ⚠️ 폴백 아이템을 사용합니다 (하드코딩된 데이터, Claude API 미사용)")
                 try:
                     items = self._educ_reference(categories)
                     if not items:
                         items = self._fallback_items(categories)
-                        self.logger.debug(f"폴백 아이템 사용: {len(items)}개 항목")
+                        print(f"[DEBUG] ⚠️ 폴백 아이템 사용 (하드코딩): {len(items)}개 항목")
                 except Exception as e:
                     self.logger.error(f"레퍼런스 로딩 실패, 폴백 사용: {e}", exc_info=True)
                     items = self._fallback_items(categories)
-                    self.logger.debug(f"폴백 아이템 사용: {len(items)}개 항목")
+                    print(f"[DEBUG] ⚠️ 폴백 아이템 사용 (하드코딩): {len(items)}개 항목")
             
             if not items:
                 # 최종 폴백: general 항목 하나
@@ -285,19 +316,37 @@ class LLMService:
             for it in items:
                 it["revised_sentence"] = revised
 
+            # revised_sentence_rationale 가져오기 (LLM에서 가져온 것이 있으면 사용)
+            revised_sentence_rationale_final = revised_sentence_rationale
+
             # 캐시 저장
             try:
-                self._cache_set(key, {"items": items, "revised_sentence": revised})
+                cache_data = {"items": items, "revised_sentence": revised}
+                if revised_sentence_rationale_final:
+                    cache_data["revised_sentence_rationale"] = revised_sentence_rationale_final
+                self._cache_set(key, cache_data)
             except Exception as e:
                 self.logger.warning(f"캐시 저장 실패: {e}")
             
-            return {
+            result_dict = {
                 "items": items,
                 "revised_sentence": revised,
                 "cached": False,
-                "model": CLAUDE_MODEL,
+                "model": CLAUDE_MODEL if self.client else "fallback",
                 "ttl_remaining": CACHE_TTL_SEC,
             }
+            
+            # revised_sentence_rationale이 있으면 추가
+            if revised_sentence_rationale_final:
+                result_dict["revised_sentence_rationale"] = revised_sentence_rationale_final
+                print(f"[DEBUG] ✅ revised_sentence_rationale 최종 응답에 포함됨")
+            else:
+                print(f"[WARNING] ❌ revised_sentence_rationale 최종 응답에 없음 (Claude API {'사용' if self.client else '미사용'})")
+            
+            print(f"[DEBUG] 최종 응답 모델: {result_dict['model']}")
+            print(f"[DEBUG] 최종 응답에 rationale 포함 여부: revised_sentence_rationale={revised_sentence_rationale_final is not None}")
+            
+            return result_dict
         except Exception as e:
             # 최종 안전망: 모든 것이 실패해도 기본 응답 반환
             self.logger.error(f"suggest() 전체 실패: {e}", exc_info=True)
@@ -686,8 +735,10 @@ class LLMService:
     def _build_prompt(self, masked_text: str, categories: dict, language: str, tone: str) -> str:
         """프롬프트 생성"""
         category_list = list(categories.keys())
+        category_list_str = ', '.join(category_list)
         
-        prompt = f"""
+        # f-string 대신 format() 사용하여 포맷 지정자 문제 방지
+        prompt_template = """
 당신은 개인정보보호 전문가이자 문장을 자연스럽게 다듬는 보조자입니다. 다음 마스킹된 텍스트를 분석하여 안전하고 자연스러운 문장으로 수정하고, 관련 교육 내용을 제공해주세요.
 
 **마스킹된 텍스트 (반드시 이 텍스트를 수정해야 합니다):**
@@ -695,7 +746,7 @@ class LLMService:
 
 **위의 마스킹된 텍스트를 반드시 읽고, revised_sentence 필드에 실제로 수정한 결과를 작성해야 합니다.**
 
-**발견된 민감 정보 유형:** {', '.join(category_list)}
+**발견된 민감 정보 유형:** {category_list_str}
 
 ## 수정 문장 가이드라인
 다음과 같은 방식으로 자연스럽게 수정해주세요:
@@ -724,20 +775,24 @@ class LLMService:
 
 {{
   "revised_sentence": "[위의 마스킹된 텍스트를 실제로 수정한 완전한 문장을 여기에 작성하세요. 예시 문장을 복사하지 마세요. 마스킹된 부분([이름], [전화번호] 등)을 자연스러운 표현으로 대체한 실제 수정 문장이어야 합니다.]",
+  "revised_sentence_rationale": "[수정 문장을 생성한 근거를 설명하세요. 예: '원문의 [전화번호]를 일반화된 표현으로 대체하여 개인정보 노출을 방지하면서도 문장의 의미를 유지했습니다. 전화번호는 스미싱 공격의 표적이 될 수 있어 구체적인 번호 대신 일반적인 표현을 사용했습니다.']",
   "items": [
     {{
       "category": "전화번호",
       "law_summary": "개인정보보호법 제71조 제1항에 따라 개인정보처리자가 개인정보를 목적 외 이용·제공하거나 제3자에게 제공할 경우 최대 3억원의 과태료가 부과됩니다. 개인정보보호법 제75조 제1항에 따라 고의로 개인정보를 유출하거나 타인에게 제공할 경우 5년 이하의 징역 또는 5천만원 이하의 벌금에 처해집니다. 정보통신망 이용촉진 및 정보보호 등에 관한 법률 제48조의2 제1항에 따라 전화번호 등 개인정보를 무단으로 수집·이용할 경우 5년 이하의 징역 또는 5천만원 이하의 벌금에 처해질 수 있습니다.",
+      "law_summary_rationale": "[법령 요약을 생성한 근거를 설명하세요. 예: '전화번호는 개인정보보호법 제2조에서 정의하는 개인정보에 해당하며, 목적 외 이용 시 제71조에 따라 최대 3억원의 과태료가 부과됩니다. 또한 정보통신망법 제48조의2에서 무단 수집·이용 시 형사 처벌을 규정하고 있어, 전화번호 보호를 위한 법적 근거가 명확합니다.']",
       "risk_scenarios": [
         "전화번호 노출 시 스미싱(SMS 피싱) 공격 위험: 공격자가 노출된 전화번호로 사기 메시지를 전송하여 피해자를 피싱 사이트로 유도하고, 이를 통해 금융정보(계좌번호, 비밀번호 등)를 탈취한 후 불법 인출 및 재산 피해를 발생시킬 수 있습니다.",
         "전화번호 노출 시 사칭 전화 및 메신저 피싱 공격: 공격자가 노출된 전화번호를 이용하여 가짜 기관(은행, 경찰서 등)이나 지인을 사칭하는 전화 또는 메시지를 발송하고, 이를 통해 개인정보(주민등록번호, 계좌정보 등)를 탈취하여 신원 도용 및 재산 피해를 유발할 수 있습니다.",
         "전화번호 노출 시 본인 인증 우회 및 계정 탈취: 공격자가 노출된 전화번호를 통해 SMS 기반 본인 인증을 시도하고, 이를 통해 주요 온라인 서비스(이메일, SNS, 금융 서비스 등) 계정을 탈취하여 개인정보 유출, 명예 훼손, 재산 피해를 발생시킬 수 있습니다."
       ],
+      "risk_scenarios_rationale": "[위험 시나리오를 생성한 근거를 설명하세요. 예: '전화번호는 SMS 기반 본인 인증에 광범위하게 사용되며, 공격자가 전화번호를 확보하면 SIM 스와핑, SMS 피싱 등 다양한 공격 경로가 열립니다. 실제 사례에서 전화번호 노출 후 계정 탈취가 빈번하게 발생하고 있어 이 위험 시나리오를 제시했습니다.']",
       "tips": [
         "스미싱 공격 방지를 위한 전화번호 최소수집 원칙 준수: 불필요한 전화번호 수집을 최소화하고, 수집 목적에 필요한 최소한의 정보만 보관하여 노출 범위를 줄임으로써 스미싱 공격의 표적이 될 가능성을 최소화합니다. 또한 전화번호 수집 시 반드시 개인정보보호법에 따른 동의 절차를 거쳐야 합니다.",
         "사칭 공격 방지를 위한 암호화 통신 채널 사용: 전화번호 등 개인정보를 외부로 전송할 경우 TLS/SSL 등 암호화된 채널을 통해 안전하게 전송하여 전송 중 전화번호가 탈취되어 사칭 공격에 악용되는 것을 방지합니다. 또한 전송 로그를 남겨 이상 징후를 조기에 발견할 수 있도록 합니다.",
         "계정 탈취 방지를 위한 접근 권한 관리 및 정기 점검: 전화번호 정보에 접근할 수 있는 직원 권한을 최소화하고(최소 권한 원칙), 정기적으로 접근 로그를 검토하여 이상 징후를 조기에 발견합니다. 또한 다단계 인증(MFA)을 적용하여 전화번호만으로는 계정 접근이 불가능하도록 보안을 강화합니다."
-      ]
+      ],
+      "tips_rationale": "[보안 팁을 생성한 근거를 설명하세요. 예: '위에서 제시한 위험 시나리오(스미싱, 사칭, 계정 탈취)를 직접적으로 방지하기 위해 최소 수집 원칙, 암호화 통신, 접근 권한 관리 등 실무에서 즉시 적용 가능한 기술적 조치를 제시했습니다. ISO 27001, OWASP 가이드라인 등 국제 보안 표준을 참고하여 검증된 보안 조치만 포함했습니다.']"
     }},
     {{
       "category": "학교명",
@@ -764,9 +819,14 @@ class LLMService:
    - 모든 마스킹 태그([이름], [전화번호], [주소] 등)를 자연스러운 표현으로 대체한 완전한 문장이어야 합니다.
    - 문장의 의미와 맥락을 유지하면서 개인정보만 안전하게 일반화된 표현으로 변경해야 합니다.
    - 이 필드는 절대 생략하면 안 되며, 반드시 실제 수정된 문장이어야 합니다.
-2. **발견된 모든 민감 정보 유형에 대해 각각 하나의 item을 생성해야 합니다.** 예를 들어 "전화번호", "학교명", "이름", "주소"가 발견되었다면, items 배열에 4개의 객체가 있어야 합니다.
-3. **category**: 각 발견된 민감 정보 유형을 반드시 한국어로 명시하세요 (예: "전화번호", "학교명", "이름", "주소", "이메일", "주민등록번호", "계좌번호", "직장명" 등)
-4. **law_summary**: 다음 형식을 **무조건** 준수하세요 (반드시 법령명과 조항/항 번호 포함)
+   
+2. **revised_sentence_rationale (필수)**: 
+   - 수정 문장을 생성한 근거를 **간결하게** (2-3문장, 100-150자 이내) 설명해야 합니다.
+   - 어떤 부분을 어떻게 수정했는지, 왜 그렇게 수정했는지를 구체적으로 설명하세요.
+   - 예시: "원문의 '[전화번호]'를 일반화된 표현으로 대체하여 개인정보 노출을 방지했습니다. 전화번호는 스미싱 공격의 표적이 될 수 있어 구체적인 번호 대신 일반적인 표현을 사용했습니다."
+3. **발견된 모든 민감 정보 유형에 대해 각각 하나의 item을 생성해야 합니다.** 예를 들어 "전화번호", "학교명", "이름", "주소"가 발견되었다면, items 배열에 4개의 객체가 있어야 합니다.
+4. **category**: 각 발견된 민감 정보 유형을 반드시 한국어로 명시하세요 (예: "전화번호", "학교명", "이름", "주소", "이메일", "주민등록번호", "계좌번호", "직장명" 등)
+5. **law_summary**: 다음 형식을 **무조건** 준수하세요 (반드시 법령명과 조항/항 번호 포함)
    - **필수**: 모든 법령 인용은 반드시 "법령명 제XX조 제X항" 형식으로 시작해야 합니다
      ✅ 올바른 형식: "개인정보보호법 제71조 제1항에 따라...", "정보통신망 이용촉진 및 정보보호 등에 관한 법률 제48조의2 제1항에 따라...", "초·중등교육법 제30조의2에 따라..."
      ❌ 절대 금지: "법률에 따라", "규정에 따라", "법령에 따르면", "관련 법률에 의하면" 같은 모호한 표현
@@ -785,7 +845,12 @@ class LLMService:
    - **금지**: 법령명 없이 "법률에 따라", "규정에 따라", "관련 법률에 의하면" 같은 모호한 표현 절대 금지
    - **금지**: 조항 번호 없이 "법령에 따르면", "관련 조항에 따라" 같은 일반적인 표현 절대 금지
    - **금지**: "법령에 의해", "법률 규정에 따라" 같은 불명확한 표현 절대 금지
-5. **risk_scenarios**: 해당 카테고리의 개인정보가 노출될 시 발생할 수 있는 구체적이고 전문적인 위험 시나리오를 상세히 작성하세요
+6. **law_summary_rationale (필수)**: 
+   - 법령 요약을 생성한 근거를 명확히 설명해야 합니다.
+   - 어떤 법령을 왜 인용했는지, 해당 법령이 왜 이 카테고리에 적용되는지를 설명하세요.
+   - 예시: "전화번호는 개인정보보호법 제2조에서 정의하는 개인정보에 해당하며, 목적 외 이용 시 제71조에 따라 과태료가 부과됩니다. 또한 정보통신망법 제48조의2에서 무단 수집 시 형사 처벌을 규정하고 있어, 전화번호 보호를 위한 법적 근거가 명확합니다."
+   
+7. **risk_scenarios**: 해당 카테고리의 개인정보가 노출될 시 발생할 수 있는 구체적이고 전문적인 위험 시나리오를 상세히 작성하세요
    - **필수**: 각 위험 시나리오는 반드시 해당 카테고리 정보 노출과 직접적으로 연관된 위험사항이어야 합니다
    - **필수**: 구체적인 사이버 공격 기법과 공격자의 악용 방식을 전문 용어로 상세히 기술
      예시: "스미싱(SMS 피싱)", "피싱(Phishing)", "사칭(Spoofing)", "사회공학적 공격", "본인 인증 우회", "계정 탈취", "신원 도용"
@@ -802,7 +867,13 @@ class LLMService:
    - **필수**: 사이버 보안 전문 용어를 적절히 사용하여 전문성을 높이세요
      예시: "APT(지속적 위협)", "사회공학적 공격", "다단계 공격", "정보 연계 추적", "표적화 공격", "집단 개인정보 침해 사고"
    - **예시 형식**: "[카테고리] 노출 시 [구체적 공격 기법] 위험: [공격 실행 과정 상세 설명]. [탈취 정보 및 악용 방식]. [구체적 피해 유형 및 실제 피해 내용]."
-6. **tips**: 위의 위험 시나리오로부터 보호하기 위한 전문적이고 구체적인 보안 대응 방법을 상세히 제시하세요
+   
+8. **risk_scenarios_rationale (필수)**: 
+   - 위험 시나리오를 생성한 근거를 명확히 설명해야 합니다.
+   - 왜 이 시나리오가 해당 카테고리에 적용되는지, 실제 발생 가능성이 있는지, 어떤 근거로 이 위험을 판단했는지를 설명하세요.
+   - 예시: "전화번호는 SMS 기반 본인 인증에 광범위하게 사용되며, 공격자가 전화번호를 확보하면 SIM 스와핑, SMS 피싱 등 다양한 공격 경로가 열립니다. 실제 사례에서 전화번호 노출 후 계정 탈취가 빈번하게 발생하고 있어 이 위험 시나리오를 제시했습니다."
+   
+9. **tips**: 위의 위험 시나리오로부터 보호하기 위한 전문적이고 구체적인 보안 대응 방법을 상세히 제시하세요
    - **필수**: 각 보안 팁은 위에서 제시한 위험 시나리오를 직접적으로 방지하거나 완화하는 방법이어야 합니다
    - **필수**: 각 팁마다 구체적인 기술적 구현 방법과 보안 표준을 포함하여 실무에서 즉시 적용 가능하도록 전문적으로 작성
    - **필수**: 보안 전문 용어와 국제 보안 표준을 적절히 사용
@@ -813,9 +884,36 @@ class LLMService:
    - **필수**: 보안 표준 및 모범 사례를 참고하여 전문적인 수준의 보안 조치를 제안하세요
      예시: "개인정보보호법 시행령에 따른 기술적·관리적 보호조치", "ISO 27001 정보보안 관리체계", "OWASP 보안 가이드라인"
    - **예시 형식**: "[구체적 보안 조치명] (보안 표준/기법): [구체적 적용 방법 및 기술적 세부사항]. [실행 절차 및 구현 방법]. [기대 효과 및 위험 완화 정도]."
+   
+10. **tips_rationale (필수)**: 
+   - 보안 팁을 생성한 근거를 명확히 설명해야 합니다.
+   - 왜 이 보안 팁이 위험 시나리오를 방지하는지, 어떤 보안 표준이나 모범 사례를 참고했는지를 설명하세요.
+   - 예시: "위에서 제시한 위험 시나리오(스미싱, 사칭, 계정 탈취)를 직접적으로 방지하기 위해 최소 수집 원칙, 암호화 통신, 접근 권한 관리 등 실무에서 즉시 적용 가능한 기술적 조치를 제시했습니다. ISO 27001, OWASP 가이드라인 등 국제 보안 표준을 참고하여 검증된 보안 조치만 포함했습니다."
 
 **중요 (반드시 준수):** 
 - **가장 중요**: 반드시 JSON 응답의 최상위에 "revised_sentence" 필드를 포함해야 합니다. 이 필드가 없으면 응답이 실패합니다.
+- **근거 필드 필수 (절대 생략 금지)**: 모든 AI 결과에 대해 근거(rationale) 필드를 반드시 포함해야 합니다. 이 필드들이 없으면 응답이 실패합니다. 근거는 사용자가 "왜 이런 결과가 나왔는지" 이해할 수 있도록 명확하고 구체적으로 작성해야 합니다.
+  - "revised_sentence_rationale" (최상위 필수, 절대 생략 금지): 수정 문장을 생성한 근거를 반드시 포함해야 합니다. 어떤 부분을 어떻게 수정했는지, 왜 그렇게 수정했는지를 설명하세요.
+  - 각 item의 "law_summary_rationale" (필수, 절대 생략 금지): 법령 요약을 생성한 근거를 반드시 포함해야 합니다. 어떤 법령을 왜 인용했는지, 해당 법령이 왜 이 카테고리에 적용되는지를 설명하세요.
+  - 각 item의 "risk_scenarios_rationale" (필수, 절대 생략 금지): 위험 시나리오를 생성한 근거를 반드시 포함해야 합니다. 왜 이 시나리오가 해당 카테고리에 적용되는지, 실제 발생 가능성이 있는지, 어떤 근거로 이 위험을 판단했는지를 설명하세요.
+  - 각 item의 "tips_rationale" (필수, 절대 생략 금지): 보안 팁을 생성한 근거를 반드시 포함해야 합니다. 왜 이 보안 팁이 위험 시나리오를 방지하는지, 어떤 보안 표준이나 모범 사례를 참고했는지를 설명하세요.
+  
+**JSON 구조 예시 (반드시 이 형식을 따라야 함):**
+{{
+  "revised_sentence": "수정된 문장...",
+  "revised_sentence_rationale": "수정 근거 설명...",
+  "items": [
+    {{
+      "category": "전화번호",
+      "law_summary": "법령 내용...",
+      "law_summary_rationale": "법령 인용 근거 설명...",
+      "risk_scenarios": ["시나리오 1", "시나리오 2"],
+      "risk_scenarios_rationale": "위험 시나리오 근거 설명...",
+      "tips": ["팁 1", "팁 2"],
+      "tips_rationale": "보안 팁 근거 설명..."
+    }}
+  ]
+}}
 - **revised_sentence는 반드시 위에서 제공한 마스킹된 텍스트를 실제로 수정한 결과여야 합니다.** 예시 문장을 복사하지 마세요. 입력된 텍스트의 마스킹된 부분을 자연스러운 표현으로 대체한 실제 수정 문장을 생성해야 합니다.
 - **반드시 발견된 모든 민감 정보 유형에 대해 각각 하나의 item을 생성해야 합니다.**
 - 개인정보는 절대 노출하지 마세요
@@ -839,6 +937,7 @@ class LLMService:
   * 피해 발생 시나리오를 단계별로 상세히 기술 (예: "[카테고리] 노출 → [구체적 공격 기법] → [공격 실행 과정] → [탈취 정보] → [구체적 피해 유형] → [실제 피해 내용]")
   * 각 시나리오는 최소 3-4문장으로 작성하여 공격 기법, 공격 과정, 피해 내용을 전문적으로 상세히 설명
   * 사이버 보안 전문 용어를 적절히 사용하여 전문성을 높이세요 (APT, 사회공학적 공격, 다단계 공격, 정보 연계 추적, 표적화 공격 등)
+  다음과 가이 위험 시나리오를 작성한 근거를 반드시 제시하시오오
 - **보안 팁(tips) 작성 시 무조건 준수:**
   * 위의 위험 시나리오로부터 보호하기 위한 전문적이고 구체적인 보안 대응 방법을 상세히 제시
   * 각 보안 팁은 위에서 제시한 위험 시나리오를 직접적으로 방지하거나 완화하는 방법이어야 함
@@ -848,10 +947,18 @@ class LLMService:
   * 보안 팁은 실무에서 즉시 적용 가능한 구체적인 기술적 조치 방안을 제시해야 함
   * 각 보안 조치의 구체적 적용 방법, 기술적 세부사항, 기대 효과를 단계별로 설명
   * 보안 표준 및 모범 사례를 참고하여 전문적인 수준의 보안 조치를 제안하세요 (개인정보보호법 시행령, ISO 27001, OWASP 가이드라인 등)
+  다음과 같이 보안팁을 작성한 근거를 반드시 제시하시오오
 - **category는 반드시 한국어로 작성하세요**
 - 한국어로 응답하세요
 - JSON 형식으로만 응답하세요 (마크다운 코드 블록 없이)
 """
+        
+        # format()을 사용하여 변수 치환 (f-string 대신)
+        prompt = prompt_template.format(
+            masked_text=masked_text,
+            category_list_str=category_list_str
+        )
+        
         return prompt
 
     def _call_claude_json_raw(self, prompt: str, *, max_tokens: int = 1200, use_high: bool = False) -> dict:
@@ -930,49 +1037,59 @@ class LLMService:
             
         try:
             system_message = """당신은 개인정보보호 전문가이자 사이버 보안 전문가입니다. 
-- **가장 중요**: 반드시 JSON 응답의 최상위에 "revised_sentence" 필드를 포함해야 합니다. 이 필드는 사용자가 제공한 마스킹된 텍스트를 실제로 읽고 수정한 결과여야 합니다. 예시 문장이나 설명 문장을 그대로 사용하지 마세요. 반드시 입력된 마스킹된 텍스트를 기반으로 새로운 수정 문장을 생성해야 합니다.
-- 마스킹된 텍스트를 자연스럽고 안전한 문장으로 수정하세요
-- 개인정보는 절대 노출하지 마세요
-- 발견된 모든 민감 정보 유형에 대해 각각 하나의 item을 생성해야 합니다
-- **법령 요약(law_summary) 작성 시 무조건 준수:**
-  * 모든 법령 인용은 반드시 "법령명 제XX조 제X항" 형식으로 시작 (예: "개인정보보호법 제71조 제1항에 따라...")
-  * 법령명은 전체 정식 명칭을 정확히 사용 (약칭 절대 금지, 예: "정보통신망 이용촉진 및 정보보호 등에 관한 법률" ✅, "정보통신법" ❌)
-  * 조항/항 번호를 정확히 명시 (예: "제71조 제1항", "제48조의2 제1항", "제30조의2")
-  * 각 법령 조항마다 구체적인 내용과 벌칙 금액을 상세히 설명
-  * 법령명 없이 "법률에 따라", "규정에 따라", "관련 법률에 의하면" 같은 모호한 표현 절대 금지
-  * 조항 번호 없이 "법령에 따르면", "관련 조항에 따라" 같은 일반적인 표현 절대 금지
-  * "법령에 의해", "법률 규정에 따라" 같은 불명확한 표현 절대 금지
-- **위험 시나리오(risk_scenarios) 작성 시 무조건 준수:**
-  * 해당 카테고리의 개인정보가 노출될 시 발생할 수 있는 구체적이고 전문적인 위험 시나리오를 상세히 작성
-  * 각 위험 시나리오는 반드시 해당 카테고리 정보 노출과 직접적으로 연관된 위험사항이어야 함
-  * 구체적인 사이버 공격 기법과 공격자의 악용 방식을 전문 용어로 상세히 기술 (스미싱, 피싱, 사칭, 사회공학적 공격, 본인 인증 우회, 계정 탈취, 신원 도용 등)
-  * 공격 단계를 명확히 구분하여 기술 (정보 수집 → 표적화 → 공격 실행 → 정보 탈취 → 피해 발생)
-  * 실제 발생 가능한 구체적인 피해 내용을 전문적으로 설명 (재산 피해 금액 및 유형, 신원 도용 방식, 명예 훼손, 개인 추적 등)
-  * 피해 발생 시나리오를 단계별로 상세히 기술 (예: "[카테고리] 노출 → [구체적 공격 기법] → [공격 실행 과정] → [탈취 정보] → [구체적 피해 유형] → [실제 피해 내용]")
-  * 각 시나리오는 최소 3-4문장으로 작성하여 공격 기법, 공격 과정, 피해 내용을 전문적으로 상세히 설명
-  * 사이버 보안 전문 용어를 적절히 사용하여 전문성을 높이세요 (APT, 사회공학적 공격, 다단계 공격, 정보 연계 추적, 표적화 공격 등)
-- **보안 팁(tips) 작성 시 무조건 준수:**
-  * 위의 위험 시나리오로부터 보호하기 위한 전문적이고 구체적인 보안 대응 방법을 상세히 제시
-  * 각 보안 팁은 위에서 제시한 위험 시나리오를 직접적으로 방지하거나 완화하는 방법이어야 함
-  * 각 팁마다 구체적인 기술적 구현 방법과 보안 표준을 포함하여 실무에서 즉시 적용 가능하도록 전문적으로 작성
-  * 보안 전문 용어와 국제 보안 표준을 적절히 사용 (TLS/SSL 암호화, 접근 권한 최소화(Least Privilege Principle), 정기 보안 감사, 다단계 인증(MFA), 암호화 저장(AES-256), 정보 분리 보관, 접근 로그 모니터링, 침해 사고 대응 매뉴얼 등)
-  * 각 팁은 위험 시나리오와의 대응 관계를 명확히 하여 최소 3-4문장으로 전문적으로 상세히 작성
-  * 보안 팁은 실무에서 즉시 적용 가능한 구체적인 기술적 조치 방안을 제시해야 함
-  * 각 보안 조치의 구체적 적용 방법, 기술적 세부사항, 기대 효과를 단계별로 설명
-  * 보안 표준 및 모범 사례를 참고하여 전문적인 수준의 보안 조치를 제안하세요 (개인정보보호법 시행령, ISO 27001, OWASP 가이드라인 등)
-- category는 반드시 한국어로 작성하세요
-- 정확한 JSON 형식을 유지하세요 (마크다운 코드 블록 없이)
-- 한국어로 응답하세요"""
+
+**절대 준수 사항 (반드시 포함해야 함):**
+
+1. **JSON 형식 준수 (가장 중요)**: 반드시 유효한 JSON 형식으로 응답해야 합니다. 문자열 내의 따옴표는 \"로 이스케이프하고, 모든 중괄호와 대괄호를 올바르게 닫아야 합니다. JSON이 잘리거나 잘못된 형식이면 응답이 실패합니다.
+
+2. **revised_sentence (필수)**: JSON 응답의 최상위에 반드시 포함. 사용자가 제공한 마스킹된 텍스트를 실제로 읽고 수정한 결과여야 합니다. 예시 문장을 복사하지 마세요.
+
+3. **revised_sentence_rationale (필수, 절대 생략 금지)**: JSON 응답의 최상위에 반드시 포함. 수정 문장을 생성한 근거를 **간결하게** (2-3문장, 100-150자 이내) 설명하세요. 이 필드가 없으면 응답이 실패합니다.
+
+4. **각 item의 rationale 필드 (필수, 절대 생략 금지)**: 모든 item에 다음 필드를 반드시 포함해야 합니다:
+   - law_summary_rationale: 법령 요약 생성 근거 (2-3문장, 100-150자 이내, 간결하게)
+   - risk_scenarios_rationale: 위험 시나리오 생성 근거 (2-3문장, 100-150자 이내, 간결하게)
+   - tips_rationale: 보안 팁 생성 근거 (2-3문장, 100-150자 이내, 간결하게)
+
+**중요**: rationale 필드는 명확하고 구체적이어야 하지만, **반드시 간결하게** 작성하세요. 각 rationale은 2-3문장, 100-150자 이내로 작성하여 JSON 응답이 너무 길어지지 않도록 하세요. 너무 길면 JSON이 잘려서 파싱이 실패합니다. 이 필드들이 없으면 응답이 실패합니다.
+
+**중요**: 
+- JSON 문자열 내의 모든 따옴표는 반드시 백슬래시로 이스케이프(\\\")해야 합니다.
+- 모든 중괄호 { }와 대괄호 [ ]를 올바르게 닫아야 합니다.
+- 모든 필드 사이에 콤마(,)를 반드시 포함해야 합니다.
+- JSON 응답이 완전히 끝나야 합니다. 응답이 중간에 잘리면 파싱이 실패합니다.
+- 긴 텍스트를 작성할 때도 JSON 형식 규칙을 반드시 준수하세요."""
             
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=4000,  # 더 긴 응답을 위해 증가
-                system=system_message,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.2  # 더 일관된 응답을 위해 낮춤
-            )
+            # Rate limit 방지를 위해 재시도 로직 추가
+            max_retries = 3
+            retry_delay = 2  # 초
+            
+            for attempt in range(max_retries):
+                try:
+                    response = self.client.messages.create(
+                        model=self.model,
+                        max_tokens=16000,  # rationale 필드 포함으로 매우 긴 응답 필요
+                        system=system_message,
+                        messages=[
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=0.2
+                    )
+                    break  # 성공 시 루프 탈출
+                except Exception as api_error:
+                    error_str = str(api_error)
+                    if "429" in error_str or "Too Many Requests" in error_str:
+                        if attempt < max_retries - 1:
+                            wait_time = retry_delay * (attempt + 1)
+                            print(f"[WARNING] Rate limit (429) 발생. {wait_time}초 후 재시도... ({attempt + 1}/{max_retries})")
+                            import time
+                            time.sleep(wait_time)
+                            continue
+                        else:
+                            print(f"[ERROR] Rate limit (429) - 최대 재시도 횟수 초과")
+                            raise
+                    else:
+                        raise
             
             # Claude 응답은 content가 리스트 형태
             if response.content and len(response.content) > 0:
@@ -980,7 +1097,8 @@ class LLMService:
             else:
                 content = ""
             
-            print(f"[DEBUG] Claude 원본 응답 (처음 500자): {content[:500]}...")  # 디버깅용
+            print(f"[DEBUG] Claude 원본 응답 (처음 1000자): {content[:1000]}...")
+            print(f"[DEBUG] Claude 원본 응답 전체 길이: {len(content)}자")
             
             # ```json 마커 제거
             content = re.sub(r'^```json\s*', '', content, flags=re.MULTILINE)
@@ -989,26 +1107,215 @@ class LLMService:
             
             try:
                 parsed = json.loads(content)
-                print(f"[DEBUG] JSON 파싱 성공. 파싱된 키: {list(parsed.keys()) if isinstance(parsed, dict) else 'None'}")
-                if isinstance(parsed, dict) and "revised_sentence" in parsed:
-                    print(f"[DEBUG] revised_sentence 발견: {parsed['revised_sentence'][:100] if parsed['revised_sentence'] else 'None'}...")
+                print(f"[DEBUG] JSON 파싱 성공. 파싱된 최상위 키: {list(parsed.keys()) if isinstance(parsed, dict) else 'None'}")
+                if isinstance(parsed, dict):
+                    print(f"[DEBUG] ========== Claude 응답 분석 ==========")
+                    print(f"[DEBUG] 파싱된 모든 키: {list(parsed.keys())}")
+                    if "revised_sentence" in parsed:
+                        print(f"[DEBUG] ✅ revised_sentence 발견: {parsed['revised_sentence'][:100] if parsed['revised_sentence'] else 'None'}...")
+                    else:
+                        print(f"[WARNING] ❌ revised_sentence가 응답에 없습니다!")
+                    if "revised_sentence_rationale" in parsed:
+                        print(f"[DEBUG] ✅ revised_sentence_rationale 발견: {parsed['revised_sentence_rationale'][:200] if parsed['revised_sentence_rationale'] else 'None'}...")
+                    else:
+                        print(f"[WARNING] ❌ revised_sentence_rationale가 응답에 없습니다!")
+                        print(f"[DEBUG] Claude가 생성한 모든 최상위 필드: {list(parsed.keys())}")
+                    if "items" in parsed and isinstance(parsed["items"], list) and len(parsed["items"]) > 0:
+                        first_item = parsed["items"][0]
+                        if isinstance(first_item, dict):
+                            print(f"[DEBUG] 첫 번째 item의 모든 키: {list(first_item.keys())}")
+                            if "law_summary_rationale" in first_item:
+                                print(f"[DEBUG] ✅ law_summary_rationale 발견")
+                            else:
+                                print(f"[WARNING] ❌ law_summary_rationale 없음")
+                            if "risk_scenarios_rationale" in first_item:
+                                print(f"[DEBUG] ✅ risk_scenarios_rationale 발견")
+                            else:
+                                print(f"[WARNING] ❌ risk_scenarios_rationale 없음")
+                            if "tips_rationale" in first_item:
+                                print(f"[DEBUG] ✅ tips_rationale 발견")
+                            else:
+                                print(f"[WARNING] ❌ tips_rationale 없음")
+                    print(f"[DEBUG] ========================================")
                 return parsed
             except json.JSONDecodeError as e:
                 print(f"[ERROR] JSON 파싱 오류: {e}")
-                print(f"[ERROR] 파싱 시도한 내용 (처음 1000자): {content[:1000]}...")
+                error_msg = str(e)
+                error_pos = getattr(e, 'pos', len(content))
+                print(f"[ERROR] 오류 위치: char {error_pos}")
+                print(f"[ERROR] 파싱 시도한 내용 (오류 위치 주변 200자): ...{content[max(0, error_pos-100):error_pos+100]}...")
+                
+                # JSON 복구 시도
+                try:
+                    content_fixed = content
+                    
+                    # "Expecting ',' delimiter" 오류 처리
+                    if "Expecting ',' delimiter" in error_msg or "Expecting delimiter" in error_msg:
+                        # 오류 위치 근처에서 문제 찾기
+                        # 오류 위치 앞에서 마지막 완전한 필드 끝 찾기
+                        search_start = max(0, error_pos - 500)
+                        search_end = min(len(content_fixed), error_pos + 100)
+                        
+                        # 오류 위치 앞에서 마지막 완전한 중괄호나 콤마 찾기
+                        last_valid_pos = search_start
+                        for i in range(error_pos, search_start, -1):
+                            if content_fixed[i] in ['}', ']', ',']:
+                                # 이 위치가 유효한 JSON 구조인지 확인
+                                # 중괄호/대괄호 밸런스 체크
+                                test_str = content_fixed[:i+1]
+                                test_braces = test_str.count('{') - test_str.count('}')
+                                test_brackets = test_str.count('[') - test_str.count(']')
+                                
+                                if test_braces == 0 and test_brackets == 0:
+                                    last_valid_pos = i + 1
+                                    break
+                                elif content_fixed[i] == ',':
+                                    last_valid_pos = i + 1
+                                    break
+                        
+                        if last_valid_pos > search_start:
+                            # 마지막 완전한 위치까지 자르고 닫기
+                            content_fixed = content_fixed[:last_valid_pos]
+                            
+                            # 중괄호/대괄호 밸런스 맞추기
+                            open_braces = content_fixed.count('{')
+                            close_braces = content_fixed.count('}')
+                            if open_braces > close_braces:
+                                content_fixed += '}' * (open_braces - close_braces)
+                            
+                            open_brackets = content_fixed.count('[')
+                            close_brackets = content_fixed.count(']')
+                            if open_brackets > close_brackets:
+                                content_fixed += ']' * (open_brackets - close_brackets)
+                            
+                            parsed = json.loads(content_fixed)
+                            print(f"[DEBUG] JSON 복구 후 파싱 성공! (콤마 오류 위치에서 잘림)")
+                            return parsed
+                    
+                    # "Unterminated string" 오류 처리
+                    if "Unterminated string" in error_msg:
+                        # 오류 위치에서 문자열이 시작된 위치 찾기
+                        # 오류 위치 앞에서 마지막 따옴표 찾기
+                        string_start = content_fixed.rfind('"', 0, error_pos)
+                        
+                        if string_start > 0:
+                            # 문자열 시작 위치에서 오류 위치까지의 텍스트 확인
+                            # 이스케이프된 따옴표가 아닌 실제 문자열 끝 찾기
+                            # 오류 위치 앞에서 마지막 완전한 중괄호나 콤마 찾기
+                            last_valid_pos = string_start
+                            
+                            # 오류 위치 앞에서 역방향으로 검색
+                            for i in range(error_pos - 1, string_start, -1):
+                                if content_fixed[i] == '"':
+                                    # 이스케이프된 따옴표인지 확인
+                                    if i > 0 and content_fixed[i-1] != '\\':
+                                        last_valid_pos = i
+                                        break
+                            
+                            # 문자열이 제대로 닫히지 않았다면, 해당 필드 전체 제거
+                            if last_valid_pos == string_start:
+                                # 필드 시작 위치 찾기 (콜론 이전)
+                                field_start = content_fixed.rfind('"', 0, string_start - 10)
+                                if field_start > 0:
+                                    # 콜론 찾기
+                                    colon_pos = content_fixed.find(':', field_start, string_start)
+                                    if colon_pos > 0:
+                                        # 이 필드 전체를 제거 (이전 콤마까지)
+                                        prev_comma = content_fixed.rfind(',', 0, field_start)
+                                        if prev_comma > 0:
+                                            content_fixed = content_fixed[:prev_comma] + content_fixed[string_start-1:]
+                                        else:
+                                            # 첫 번째 필드인 경우
+                                            next_comma = content_fixed.find(',', string_start)
+                                            if next_comma > 0:
+                                                content_fixed = content_fixed[:field_start-1] + content_fixed[next_comma+1:]
+                                            else:
+                                                # 마지막 필드인 경우
+                                                content_fixed = content_fixed[:field_start-1] + '\n}'
+                            
+                            # 중괄호/대괄호 밸런스 맞추기
+                            open_braces = content_fixed.count('{')
+                            close_braces = content_fixed.count('}')
+                            if open_braces > close_braces:
+                                content_fixed += '}' * (open_braces - close_braces)
+                            
+                            open_brackets = content_fixed.count('[')
+                            close_brackets = content_fixed.count(']')
+                            if open_brackets > close_brackets:
+                                content_fixed += ']' * (open_brackets - close_brackets)
+                            
+                            parsed = json.loads(content_fixed)
+                            print(f"[DEBUG] JSON 복구 후 파싱 성공! (잘린 문자열 필드 제거)")
+                            return parsed
+                        else:
+                            # 마지막 완전한 중괄호 찾기
+                            last_valid_close = content_fixed.rfind('}', 0, error_pos)
+                            if last_valid_close > 0:
+                                content_fixed = content_fixed[:last_valid_close+1]
+                                
+                                open_braces = content_fixed.count('{')
+                                close_braces = content_fixed.count('}')
+                                if open_braces > close_braces:
+                                    content_fixed += '}' * (open_braces - close_braces)
+                                
+                                open_brackets = content_fixed.count('[')
+                                close_brackets = content_fixed.count(']')
+                                if open_brackets > close_brackets:
+                                    content_fixed += ']' * (open_brackets - close_brackets)
+                                
+                                parsed = json.loads(content_fixed)
+                                print(f"[DEBUG] JSON 복구 후 파싱 성공! (잘린 문자열 제거)")
+                                return parsed
+                    
+                    # 기본 복구: 마지막 완전한 중괄호까지 자르기
+                    last_valid_close = content_fixed.rfind('}', 0, error_pos)
+                    if last_valid_close > 0:
+                        content_fixed = content_fixed[:last_valid_close+1]
+                        
+                        open_braces = content_fixed.count('{')
+                        close_braces = content_fixed.count('}')
+                        if open_braces > close_braces:
+                            content_fixed += '}' * (open_braces - close_braces)
+                        
+                        open_brackets = content_fixed.count('[')
+                        close_brackets = content_fixed.count(']')
+                        if open_brackets > close_brackets:
+                            content_fixed += ']' * (open_brackets - close_brackets)
+                        
+                        parsed = json.loads(content_fixed)
+                        print(f"[DEBUG] JSON 복구 후 파싱 성공! (기본 복구)")
+                        return parsed
+                        
+                except Exception as fix_error:
+                    print(f"[WARNING] JSON 복구 시도 실패: {fix_error}")
+                
                 # JSON이 아닌 경우 텍스트에서 JSON 부분만 추출 시도
                 json_match = re.search(r'\{.*\}', content, re.DOTALL)
                 if json_match:
                     try:
-                        parsed = json.loads(json_match.group())
-                        print(f"[DEBUG] 정규식으로 JSON 추출 성공. 파싱된 키: {list(parsed.keys()) if isinstance(parsed, dict) else 'None'}")
-                        if isinstance(parsed, dict) and "revised_sentence" in parsed:
-                            print(f"[DEBUG] revised_sentence 발견: {parsed['revised_sentence'][:100] if parsed['revised_sentence'] else 'None'}...")
-                        return parsed
+                        json_str = json_match.group()
+                        # 중괄호 밸런스 체크
+                        if json_str.count('{') == json_str.count('}'):
+                            parsed = json.loads(json_str)
+                            print(f"[DEBUG] 정규식으로 JSON 추출 성공. 파싱된 키: {list(parsed.keys()) if isinstance(parsed, dict) else 'None'}")
+                            if isinstance(parsed, dict) and "revised_sentence" in parsed:
+                                print(f"[DEBUG] revised_sentence 발견: {parsed['revised_sentence'][:100] if parsed['revised_sentence'] else 'None'}...")
+                            return parsed
+                        else:
+                            # 중괄호 불균형 시 마지막 닫는 중괄호까지 잘라서 파싱
+                            last_close = json_str.rfind('}')
+                            if last_close > 0:
+                                json_str = json_str[:last_close+1]
+                                parsed = json.loads(json_str)
+                                print(f"[DEBUG] 중괄호 밸런스 수정 후 파싱 성공!")
+                                return parsed
                     except json.JSONDecodeError as e2:
                         print(f"[ERROR] 정규식으로 추출한 JSON도 파싱 실패: {e2}")
                         pass
-                raise Exception("유효한 JSON 응답을 받지 못했습니다.")
+                
+                # 최종 실패: 빈 dict 반환 (폴백 사용)
+                print(f"[WARNING] 모든 JSON 파싱 시도 실패. 빈 dict 반환하여 폴백 사용")
+                return {}
             
         except Exception as e:
             print(f"Claude API error: {e}")
