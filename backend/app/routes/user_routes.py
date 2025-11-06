@@ -45,12 +45,48 @@ def get_filtering_settings():
         try:
             settings = user.filtering_settings
             if not settings:
-                # 설정이 없으면 기본값으로 생성
+                # 설정이 없으면 모든 옵션이 false인 기본값으로 생성
                 settings = UserFilteringSettings(user_id=user.id)
-                settings.set_detection_options({})
+                # 모든 탐지 옵션을 false로 초기화
+                default_options = {
+                    'face': False,
+                    'fingerprint': False,
+                    'phone': False,
+                    'rrn': False,
+                    'passport': False,
+                    'ip_address': False,
+                    'email': False,
+                    'account': False,
+                    'school': False,
+                    'workplace': False,
+                    'name': False,
+                    'address': False,
+                    'driverLicense': False,
+                    'postalCode': False
+                }
+                settings.set_detection_options(default_options)
                 db.session.add(settings)
                 db.session.commit()
                 logger.info(f"필터링 설정 생성: user_id={user.id}")
+            
+            # 설정을 가져올 때 모든 옵션이 포함되도록 보장
+            detection_options = settings.get_detection_options()
+            
+            # 모든 허용된 옵션 목록
+            allowed_keys = {
+                'face', 'fingerprint', 'phone', 'rrn', 'passport', 'ip_address',
+                'email', 'account', 'school', 'workplace', 'name', 'address',
+                'driverLicense', 'postalCode'
+            }
+            
+            # 누락된 옵션은 false로 설정
+            for key in allowed_keys:
+                if key not in detection_options:
+                    detection_options[key] = False
+            
+            # 업데이트된 옵션 저장
+            settings.set_detection_options(detection_options)
+            db.session.commit()
             
             return jsonify({
                 "success": True,

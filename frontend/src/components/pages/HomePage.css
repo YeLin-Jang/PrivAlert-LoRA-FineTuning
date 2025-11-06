@@ -9,9 +9,9 @@
   flex-direction: column;
 }
 
-/* 메인 콘텐츠 */
-.homepage-main {
-  flex: 1;
+/* 히어로 섹션 */
+.hero-section {
+  min-height: 100vh;
   position: relative;
   display: flex;
   align-items: center;
@@ -33,35 +33,67 @@
 }
 
 .brand-section {
-  margin-bottom: 32px;
+  margin-bottom: 40px;
+}
+
+.brand-icon-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
 }
 
 .brand-icon {
-  font-size: 4rem;
-  margin-bottom: 16px;
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border-radius: 20px;
+  color: #ffffff;
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3);
+}
+
+.brand-icon svg {
+  width: 48px;
+  height: 48px;
 }
 
 .brand-name {
-  font-size: 3rem;
-  font-weight: 700;
-  margin-bottom: 12px;
+  font-size: 3.5rem;
+  font-weight: 800;
+  margin-bottom: 16px;
   color: #1e3a8a;
-  letter-spacing: -1px;
+  letter-spacing: -2px;
   line-height: 1.1;
+  background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .concept-slogan {
-  font-size: 1.1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #64748b;
+  margin: 0 0 8px 0;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.concept-slogan-kr {
+  font-size: 1.15rem;
   font-weight: 500;
   color: #3b82f6;
   margin: 0;
-  letter-spacing: -0.2px;
+  letter-spacing: -0.3px;
 }
 
 .service-description {
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-weight: 400;
-  color: #4b5563;
+  color: #64748b;
   line-height: 1.8;
   letter-spacing: -0.2px;
   margin: 0;
@@ -127,9 +159,197 @@
   }
 }
 
+/* 기능 소개 섹션 */
+.features-section {
+  background: #ffffff;
+  padding: 100px 40px;
+  position: relative;
+}
+
+.features-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.section-title {
+  font-size: 3rem;
+  font-weight: 800;
+  color: #1e293b;
+  text-align: center;
+  margin-bottom: 80px;
+  letter-spacing: -2px;
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+
+.section-title::after {
+  content: '';
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80px;
+  height: 4px;
+  background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+  border-radius: 2px;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 32px;
+  margin-bottom: 40px;
+}
+
+.feature-card {
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 48px 40px;
+  text-align: center;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.feature-card:hover {
+  transform: translateY(-12px);
+  box-shadow: 0 20px 60px rgba(30, 58, 138, 0.15);
+  border-color: #3b82f6;
+}
+
+.feature-icon-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 32px;
+}
+
+.feature-icon {
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border-radius: 16px;
+  color: #3b82f6;
+  transition: all 0.3s ease;
+}
+
+.feature-card:hover .feature-icon {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: #ffffff;
+  transform: scale(1.1);
+}
+
+.feature-icon svg {
+  width: 40px;
+  height: 40px;
+}
+
+.feature-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 16px;
+  letter-spacing: -0.5px;
+}
+
+.feature-description {
+  font-size: 1rem;
+  color: #64748b;
+  line-height: 1.8;
+  margin: 0;
+}
+
+/* 가치 제안 섹션 */
+.value-section {
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #1e3a8a 100%);
+  padding: 100px 40px;
+  position: relative;
+}
+
+.value-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 40px;
+}
+
+.value-card {
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 64px 56px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+}
+
+.value-card:hover {
+  transform: translateY(-12px);
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.25);
+}
+
+.value-card.main-value {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(240, 247, 255, 0.95) 100%);
+}
+
+.value-card.highlight-value {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(239, 246, 255, 0.95) 100%);
+  border: 2px solid #3b82f6;
+  box-shadow: 0 20px 60px rgba(59, 130, 246, 0.2);
+}
+
+.value-icon-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 32px;
+}
+
+.value-icon {
+  width: 96px;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border-radius: 24px;
+  color: #ffffff;
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3);
+  transition: all 0.3s ease;
+}
+
+.value-card:hover .value-icon {
+  transform: scale(1.1) rotate(5deg);
+  box-shadow: 0 12px 32px rgba(59, 130, 246, 0.4);
+}
+
+.value-icon svg {
+  width: 56px;
+  height: 56px;
+}
+
+.value-title {
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: #1e293b;
+  margin-bottom: 24px;
+  letter-spacing: -1px;
+}
+
+.value-description {
+  font-size: 1.15rem;
+  color: #64748b;
+  line-height: 1.9;
+  margin: 0;
+}
+
 /* 반응형 */
 @media (max-width: 768px) {
-  .homepage-main {
+  .hero-section {
     padding: 60px 20px;
   }
 
@@ -138,7 +358,13 @@
   }
 
   .brand-icon {
-    font-size: 3rem;
+    width: 64px;
+    height: 64px;
+  }
+
+  .brand-icon svg {
+    width: 36px;
+    height: 36px;
   }
 
   .brand-name {
@@ -152,10 +378,45 @@
   .service-description {
     font-size: 0.95rem;
   }
+
+  .features-section {
+    padding: 60px 20px;
+  }
+
+  .section-title {
+    font-size: 2rem;
+    margin-bottom: 40px;
+  }
+
+  .features-grid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .feature-card {
+    padding: 32px 24px;
+  }
+
+  .value-section {
+    padding: 60px 20px;
+  }
+
+  .value-container {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .value-card {
+    padding: 48px 32px;
+  }
+
+  .value-title {
+    font-size: 1.75rem;
+  }
 }
 
 @media (max-width: 480px) {
-  .homepage-main {
+  .hero-section {
     padding: 40px 16px;
   }
 
@@ -164,8 +425,13 @@
   }
 
   .brand-icon {
-    font-size: 2.5rem;
-    margin-bottom: 12px;
+    width: 56px;
+    height: 56px;
+  }
+
+  .brand-icon svg {
+    width: 32px;
+    height: 32px;
   }
 
   .brand-name {
@@ -182,6 +448,54 @@
 
   .decoration-box {
     display: none;
+  }
+
+  .features-section {
+    padding: 40px 16px;
+  }
+
+  .section-title {
+    font-size: 1.75rem;
+    margin-bottom: 32px;
+  }
+
+  .feature-icon {
+    width: 56px;
+    height: 56px;
+  }
+
+  .feature-icon svg {
+    width: 32px;
+    height: 32px;
+  }
+
+  .feature-title {
+    font-size: 1.25rem;
+  }
+
+  .feature-description {
+    font-size: 0.95rem;
+  }
+
+  .value-section {
+    padding: 40px 16px;
+  }
+
+  .value-card {
+    padding: 40px 24px;
+  }
+
+  .value-icon {
+    font-size: 3rem;
+    margin-bottom: 16px;
+  }
+
+  .value-title {
+    font-size: 1.5rem;
+  }
+
+  .value-description {
+    font-size: 1rem;
   }
 }
 

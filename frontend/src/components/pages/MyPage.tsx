@@ -1,7 +1,7 @@
 /**
  * 마이페이지 컴포넌트
  * 필터링 설정 및 수정 기록 표시
- * 보안: 로그인 필수
+ * 로그인 없이도 접근 가능 (데이터는 로그인 상태에서만 표시)
  */
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -22,30 +22,27 @@ export default function MyPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  // 로그인 체크
-  useEffect(() => {
-    // 인증 확인이 완료된 후에만 체크
-    if (authLoading) {
-      return; // 로딩 중이면 대기
-    }
-    
-    if (!isAuthenticated) {
-      // 로그인 안된 상태면 로그인 페이지로 리다이렉트
-      navigate('/auth/login', { 
-        state: { 
-          redirectTo: '/mypage',
-          message: '마이페이지는 로그인이 필요합니다.'
-        } 
-      });
-    }
-  }, [isAuthenticated, authLoading, navigate]);
-
   // 초기 로드 (로그인 상태일 때만)
   useEffect(() => {
+    // 인증 확인이 완료된 후에만 데이터 로드
+    if (authLoading) {
+      return;
+    }
+    
     if (isAuthenticated) {
       loadData();
+    } else {
+      // 로그인 안된 상태에서는 데이터 없이 페이지 표시
+      setLoading(false);
     }
-  }, [currentPage, isAuthenticated]);
+  }, [currentPage, isAuthenticated, authLoading]);
+
+  // 모든 탐지 옵션 목록 (순서대로)
+  const allDetectionOptions = [
+    'face', 'fingerprint', 'phone', 'rrn', 'passport', 'ip_address',
+    'email', 'account', 'school', 'workplace', 'name', 'address',
+    'driverLicense', 'postalCode'
+  ];
 
   const loadData = async () => {
     if (!isAuthenticated) return;
@@ -56,7 +53,17 @@ export default function MyPage() {
 
       // 실제 사용자 필터링 설정 조회
       const settings = await userApi.getFilteringSettings();
-      setFilteringSettings(settings);
+      
+      // 모든 옵션이 포함되도록 보장 (없는 옵션은 false)
+      const normalizedOptions: Record<string, boolean> = {};
+      allDetectionOptions.forEach(key => {
+        normalizedOptions[key] = settings.detection_options[key] || false;
+      });
+      
+      setFilteringSettings({
+        ...settings,
+        detection_options: normalizedOptions
+      });
 
       // 수정 기록 조회
       const historyData = await userApi.getRevisionHistory(currentPage, 20);
@@ -92,22 +99,19 @@ export default function MyPage() {
     if (!filteringSettings || !editingSettings) return;
 
     // 보안: 허용된 옵션만 허용
-    const allowedOptions: string[] = [
-      'face', 'fingerprint', 'phone', 'rrn', 'passport', 'ip_address',
-      'email', 'account', 'school', 'workplace', 'name', 'address',
-      'driverLicense', 'postalCode'
-    ];
-    
-    if (!allowedOptions.includes(option)) {
+    if (!allDetectionOptions.includes(option)) {
       setError('허용되지 않은 옵션입니다');
       return;
     }
 
+    // 현재 값이 true면 false로, false면 true로 토글
+    const currentValue = filteringSettings.detection_options[option] === true;
+    
     setFilteringSettings({
       ...filteringSettings,
       detection_options: {
         ...filteringSettings.detection_options,
-        [option]: !filteringSettings.detection_options[option],
+        [option]: !currentValue,
       },
     });
   };
@@ -149,9 +153,9 @@ export default function MyPage() {
       </header>
 
       <main className="mypage-main">
-        {loading ? (
+        {loading && isAuthenticated ? (
           <div className="loading">로딩 중...</div>
-        ) : error ? (
+        ) : error && isAuthenticated ? (
           <div className="error-message">{error}</div>
         ) : (
           <>
@@ -162,14 +166,14 @@ export default function MyPage() {
                   <h2>필터링 설정</h2>
                   <h3 className="section-subtitle">탐지 옵션</h3>
                 </div>
-                {!editingSettings ? (
+                {isAuthenticated && !editingSettings ? (
                   <button
                     className="edit-button"
                     onClick={() => setEditingSettings(true)}
                   >
                     수정
                   </button>
-                ) : (
+                ) : isAuthenticated && editingSettings ? (
                   <div className="edit-actions">
                     <button
                       className="save-button"
@@ -186,18 +190,22 @@ export default function MyPage() {
                       취소
                     </button>
                   </div>
-                )}
+                ) : null}
               </div>
 
               <div className="settings-content">
-                {filteringSettings && (
+                {!isAuthenticated ? (
+                  <div className="empty-state">
+                    <p>로그인하면 필터링 설정을 관리할 수 있습니다.</p>
+                  </div>
+                ) : filteringSettings ? (
                   <div className="detection-options">
                     <div className="options-grid">
-                      {Object.keys(filteringSettings.detection_options).map((key) => (
+                      {allDetectionOptions.map((key) => (
                         <label key={key} className="option-item">
                           <input
                             type="checkbox"
-                            checked={filteringSettings.detection_options[key] || false}
+                            checked={filteringSettings.detection_options[key] === true}
                             onChange={() => handleToggleOption(key)}
                             disabled={!editingSettings}
                           />
@@ -205,6 +213,10 @@ export default function MyPage() {
                         </label>
                       ))}
                     </div>
+                  </div>
+                ) : (
+                  <div className="empty-state">
+                    <p>필터링 설정을 불러오는 중...</p>
                   </div>
                 )}
               </div>
@@ -217,7 +229,11 @@ export default function MyPage() {
               </div>
 
               <div className="history-content">
-                {revisionHistory.length === 0 ? (
+                {!isAuthenticated ? (
+                  <div className="empty-state">
+                    <p>로그인하면 수정 기록을 확인할 수 있습니다.</p>
+                  </div>
+                ) : revisionHistory.length === 0 ? (
                   <div className="empty-state">
                     <p>아직 수정 기록이 없습니다.</p>
                     <p className="empty-hint">분석 결과에서 LLM이 생성한 수정 문장이 여기에 저장됩니다.</p>
@@ -234,9 +250,9 @@ export default function MyPage() {
                             {record.categories && record.categories.length > 0 && (
                               <div className="history-categories">
                                 {record.categories.map((cat, idx) => (
-                                  <button key={idx} className="category-badge">
+                                  <span key={idx} className="category-badge">
                                     {cat}
-                                  </button>
+                                  </span>
                                 ))}
                               </div>
                             )}
@@ -244,12 +260,6 @@ export default function MyPage() {
                           <div className="history-sentence">
                             {record.revised_sentence}
                           </div>
-                          <input
-                            type="text"
-                            className="history-text-input"
-                            placeholder="수정된 텍스트를 확인하세요"
-                            readOnly
-                          />
                         </div>
                       ))}
                     </div>
