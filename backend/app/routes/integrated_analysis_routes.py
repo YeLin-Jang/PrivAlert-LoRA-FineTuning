@@ -651,18 +651,20 @@ def analyze_content():
                 
                 if video_result.get("success"):
                     for frame_data in video_result.get("frames", []):
+                        # 프론트엔드 형식에 맞게 변환: face: { count }, hand: { count }
+                        face_count = frame_data.get("face", {}).get("count", 0) if frame_data.get("face") else 0
+                        hand_count = frame_data.get("hand", {}).get("count", 0) if frame_data.get("hand") else 0
+                        
                         frame_result = {
                             "frame_index": frame_data.get("frame_index", 0),
                             "timestamp": frame_data.get("timestamp", 0.0),
-                            "faces_detected": frame_data.get("face", {}).get("count", 0) if frame_data.get("face") else 0,
-                            "fingers_detected": frame_data.get("hand", {}).get("count", 0) if frame_data.get("hand") else 0,
-                            "ocr_text": frame_data.get("ocr", {}).get("text", "") if frame_data.get("ocr") else "",
-                            "result_image_url": frame_data.get("face", {}).get("result_image_url") if show_faces and frame_data.get("face") else None
+                            "face": {"count": face_count} if face_count > 0 else {"count": 0},
+                            "hand": {"count": hand_count} if hand_count > 0 else {"count": 0}
                         }
                         video_frame_results.append(frame_result)
                         
-                        video_face_count += frame_result["faces_detected"]
-                        video_finger_count += frame_result["fingers_detected"]
+                        video_face_count += face_count
+                        video_finger_count += hand_count
                     
                     audio_transcription = video_result.get("audio_transcription", {})
                     if audio_transcription.get("success") and audio_transcription.get("text"):
@@ -685,9 +687,25 @@ def analyze_content():
                         
                         for filter_name, result in audio_filter_result.get("filter_results", {}).items():
                             if result.get("success") and result.get("statistics", {}).get("total_detected", 0) > 0:
+                                # 프론트엔드 형식에 맞게 변환: items는 { value, category } 형식
+                                items = []
+                                for word in result.get("detected_words", []):
+                                    if isinstance(word, dict):
+                                        items.append({
+                                            "type": filter_name,
+                                            "value": word.get("word", word.get("value", "")),
+                                            "category": filter_name
+                                        })
+                                    elif isinstance(word, str):
+                                        items.append({
+                                            "type": filter_name,
+                                            "value": word,
+                                            "category": filter_name
+                                        })
+                                
                                 video_audio_analysis["categories"][filter_name] = {
                                     "count": result["statistics"]["total_detected"],
-                                    "items": result["detected_words"]
+                                    "items": items
                                 }
                         
                         if video_audio_analysis.get("detected", False):
@@ -792,10 +810,21 @@ def analyze_content():
                 if cat_name in structured_data_result["categories"]:
                     # 중복 카테고리는 count 합산
                     structured_data_result["categories"][cat_name]["count"] += cat_data.get("count", 0)
-                    # items 합치기 (중복 제거)
-                    existing_items = set(structured_data_result["categories"][cat_name].get("items", []))
-                    new_items = set(cat_data.get("items", []))
-                    structured_data_result["categories"][cat_name]["items"] = list(existing_items | new_items)
+                    # items 합치기 (중복 제거) - dict 리스트이므로 value 필드를 기준으로 중복 제거
+                    existing_items = structured_data_result["categories"][cat_name].get("items", [])
+                    new_items = cat_data.get("items", [])
+                    
+                    # value 필드를 기준으로 중복 제거
+                    existing_values = {item.get("value") for item in existing_items if item.get("value")}
+                    merged_items = existing_items.copy()
+                    
+                    for new_item in new_items:
+                        item_value = new_item.get("value")
+                        if item_value and item_value not in existing_values:
+                            merged_items.append(new_item)
+                            existing_values.add(item_value)
+                    
+                    structured_data_result["categories"][cat_name]["items"] = merged_items
                 else:
                     structured_data_result["categories"][cat_name] = cat_data
                 # total_count 업데이트

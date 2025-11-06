@@ -21,6 +21,15 @@ export const ResultModal: React.FC<ResultModalProps> = ({
   eduItems = null,
   revisedSentenceRationale = null,
 }) => {
+  // 디버깅: props 확인
+  if (import.meta.env.DEV) {
+    console.log('ResultModal props:', {
+      hasEduItems: !!eduItems,
+      eduItemsLength: eduItems?.length || 0,
+      hasRevisedSentenceRationale: !!revisedSentenceRationale,
+      revisedSentenceRationale,
+    });
+  }
   const [selectedParts, setSelectedParts] = useState<Record<number, string>>({}); // 각 부분별로 선택된 수정문장 저장
   const [isAllModified, setIsAllModified] = useState(false); // 전체 수정 여부
   const [hoveredPartIndex, setHoveredPartIndex] = useState<number | null>(null);
@@ -207,25 +216,13 @@ export const ResultModal: React.FC<ResultModalProps> = ({
 
   // 텍스트 하이라이트 함수 (위험도별 색상 적용, 개별 수정 제안)
   const highlightText = (text: string) => {
-    // 디버깅: structuredData와 categories 확인
-    if (import.meta.env.DEV) {
-      console.log('[highlightText] text:', text);
-      console.log('[highlightText] structuredData:', structuredData);
-      console.log('[highlightText] categories:', categories);
-      console.log('[highlightText] categories keys:', Object.keys(categories));
-    }
+    // 보안: 콘솔 로그 제거
 
     if (!text || !structuredData) {
-      if (import.meta.env.DEV) {
-        console.warn('[highlightText] text 또는 structuredData가 없습니다:', { text, structuredData });
-      }
       return text;
     }
 
     if (!categories || Object.keys(categories).length === 0) {
-      if (import.meta.env.DEV) {
-        console.warn('[highlightText] categories가 비어있습니다:', categories);
-      }
       return text;
     }
 
@@ -319,11 +316,7 @@ export const ResultModal: React.FC<ResultModalProps> = ({
       });
     }
 
-    // 디버깅: parts 확인
-    if (import.meta.env.DEV && parts.length > 0) {
-      console.log('[highlightText] parts:', parts);
-      console.log('[highlightText] parts with category:', parts.filter(p => p.category));
-    }
+    // 보안: 콘솔 로그 제거
 
     return parts.map((part, idx) => {
       // 선택된 수정문장이 있으면 해당 부분 교체 (형광펜 제거)
@@ -337,9 +330,7 @@ export const ResultModal: React.FC<ResultModalProps> = ({
       }
 
       if (part.category && part.riskLevel) {
-        if (import.meta.env.DEV) {
-          console.log('[highlightText] part with category:', part);
-        }
+        // 보안: 콘솔 로그 제거
         const revisedSuggestion = getGeneralizedText(part.category);
         const isHovered = hoveredPartIndex === part.partIndex;
         const isFixed = fixedTooltipIndex === part.partIndex;
@@ -829,7 +820,7 @@ export const ResultModal: React.FC<ResultModalProps> = ({
           )}
 
           {/* 교육 안내 - 탐지된 민감정보 항목별 카드 */}
-          {totalDetected > 0 && (eduItems && eduItems.length > 0 || revisedSentenceRationale) && (
+          {totalDetected > 0 && ((eduItems && eduItems.length > 0) || revisedSentenceRationale) && (
             <section className="result-section education-section">
               <div className="section-header">
                 <h2>교육 안내</h2>
@@ -860,23 +851,40 @@ export const ResultModal: React.FC<ResultModalProps> = ({
                       key={catKey}
                       className="education-simple-card"
                       onClick={() => {
-                        // 카드 클릭 시 모든 정보를 포함한 모달 열기
-                        if (eduItem) {
-                          setEducationModalData({
-                            ...eduItem,
-                            category: catName,
-                            revised_sentence_rationale: revisedSentenceRationale || undefined,
+                        // 디버깅: 클릭 이벤트 확인
+                        if (import.meta.env.DEV) {
+                          console.log('교육 카드 클릭:', {
+                            catName,
+                            eduItem,
+                            revisedSentenceRationale,
+                            eduItems,
                           });
-                          setEducationModalCategory('all'); // 모든 정보 표시
-                        } else {
-                          // eduItem이 없어도 카테고리 정보만 표시
-                          setEducationModalData({
-                            category: catName,
-                            revised_sentence_rationale: revisedSentenceRationale || undefined,
-                          });
-                          setEducationModalCategory('all');
                         }
+                        
+                        // 카드 클릭 시 모든 정보를 포함한 모달 열기
+                        const modalData: any = {
+                          category: catName,
+                        };
+                        
+                        if (eduItem) {
+                          Object.assign(modalData, eduItem);
+                        }
+                        
+                        if (revisedSentenceRationale) {
+                          modalData.revised_sentence_rationale = revisedSentenceRationale;
+                        }
+                        
+                        setEducationModalData(modalData);
+                        setEducationModalCategory('all'); // 모든 정보 표시
                         setEducationModalOpen(true);
+                        
+                        // 디버깅: 모달 상태 확인
+                        if (import.meta.env.DEV) {
+                          console.log('모달 열기:', {
+                            modalData,
+                            category: 'all',
+                          });
+                        }
                       }}
                     >
                       <div className="simple-card-content">

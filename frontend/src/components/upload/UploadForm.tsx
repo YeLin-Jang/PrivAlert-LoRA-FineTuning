@@ -51,213 +51,6 @@ export default function UploadForm() {
     address: false,
   });
 
-  // 개발 모드: 더미 데이터로 결과 페이지 보기
-  const loadDummyResult = () => {
-    const dummyResult: AnalysisResult & { video_analysis?: any } = {
-      text_analysis: {
-        original_text: '안녕하세요. 제 이름은 홍길동이고, 전화번호는 010-1234-5678입니다. 주소는 서울시 강남구 테헤란로 123이고, 이메일은 hong@example.com입니다. 제 주민등록번호는 880612-1234567이고, 계좌번호는 123-456-789012입니다.',
-        masked_text: '안녕하세요. 제 이름은 [이름]이고, 전화번호는 [전화번호]입니다. 주소는 [주소]이고, 이메일은 [이메일]입니다. 제 주민등록번호는 [주민등록번호]이고, 계좌번호는 [계좌번호]입니다.',
-        revised_text: '',
-        statistics: {
-          total_detected: 6,
-          total_words: 50,
-          detection_rate: 0.12,
-          applied_filters: ['phone', 'rrn', 'email', 'account', 'name', 'address']
-        },
-        structured_data: {
-          detected: true,
-          total_count: 6,
-          categories: {
-            name: {
-              count: 1,
-              items: [{ type: 'name', value: '홍길동', category: 'name' }]
-            },
-            phone: {
-              count: 1,
-              items: [{ type: 'phone', value: '010-1234-5678', category: 'phone' }]
-            },
-            address: {
-              count: 1,
-              items: [{ type: 'address', value: '서울시 강남구 테헤란로 123', category: 'address' }]
-            },
-            email: {
-              count: 1,
-              items: [{ type: 'email', value: 'hong@example.com', category: 'email' }]
-            },
-            rrn: {
-              count: 1,
-              items: [{ type: 'rrn', value: '880612-1234567', category: 'rrn' }]
-            },
-            account: {
-              count: 1,
-              items: [{ type: 'account', value: '123-456-789012', category: 'account' }]
-            }
-          }
-        },
-        source: {
-          direct_input: true,
-          ocr: false,
-          ocr_count: 0
-        }
-      },
-      summary: {
-        faces_detected: 3,
-        fingers_detected: 2,
-        sensitive_text_found: true,
-        message: '분석이 완료되었습니다.'
-      },
-      face_detection: {
-        total_count: 3,
-        message: '얼굴 감지 완료',
-        images: [
-          {
-            image_index: 1,
-            filename: 'dummy_image_1.jpg',
-            count: 2,
-            result_image_url: 'https://via.placeholder.com/400x300?text=Face+Detection+1',
-            faces: [
-              { index: 0, box: { x: 100, y: 150, w: 80, h: 100 }, score: 0.95 },
-              { index: 1, box: { x: 250, y: 120, w: 70, h: 90 }, score: 0.88 }
-            ]
-          },
-          {
-            image_index: 2,
-            filename: 'dummy_image_2.jpg',
-            count: 1,
-            result_image_url: 'https://via.placeholder.com/400x300?text=Face+Detection+2',
-            faces: [
-              { index: 0, box: { x: 180, y: 100, w: 90, h: 110 }, score: 0.92 }
-            ]
-          }
-        ]
-      },
-      hand_detection: {
-        total_count: 2,
-        message: '손가락 감지 완료',
-        images: [
-          {
-            image_index: 1,
-            filename: 'dummy_image_1.jpg',
-            count: 1,
-            result_image_url: 'https://via.placeholder.com/400x300?text=Hand+Detection+1',
-            fingers: [
-              { index: 0, pos: { x: 150, y: 200 } }
-            ]
-          },
-          {
-            image_index: 2,
-            filename: 'dummy_image_2.jpg',
-            count: 1,
-            result_image_url: 'https://via.placeholder.com/400x300?text=Hand+Detection+2',
-            fingers: [
-              { index: 0, pos: { x: 220, y: 180 } }
-            ]
-          }
-        ]
-      },
-      image_sanitization: {
-        message: '이미지 처리 완료',
-        items: [
-          {
-            image_index: 1,
-            filename: 'dummy_image_1.jpg',
-            sanitized_filename: 'dummy_image_1_sanitized.jpg',
-            sanitized_url: 'https://via.placeholder.com/400x300?text=Sanitized+Image+1',
-            report: {
-              source_format: 'JPEG',
-              target_format: 'JPEG',
-              exif_removed: true,
-              gps_removed: true,
-              size: 245678
-            }
-          },
-          {
-            image_index: 2,
-            filename: 'dummy_image_2.jpg',
-            sanitized_filename: 'dummy_image_2_sanitized.jpg',
-            sanitized_url: 'https://via.placeholder.com/400x300?text=Sanitized+Image+2',
-            report: {
-              source_format: 'JPEG',
-              target_format: 'JPEG',
-              exif_removed: true,
-              gps_removed: true,
-              size: 198234
-            }
-          }
-        ]
-      },
-      video_analysis: {
-        total_frames_processed: 30,
-        faces_detected: 5,
-        fingers_detected: 3,
-        frames: [
-          { frame_index: 0, timestamp: 0.0, face: { count: 1 }, hand: { count: 0 } },
-          { frame_index: 1, timestamp: 1.0, face: { count: 0 }, hand: { count: 1 } },
-          { frame_index: 2, timestamp: 2.0, face: { count: 2 }, hand: { count: 0 } },
-          { frame_index: 3, timestamp: 3.0, face: { count: 0 }, hand: { count: 1 } },
-          { frame_index: 4, timestamp: 4.0, face: { count: 1 }, hand: { count: 1 } },
-          { frame_index: 5, timestamp: 5.0, face: { count: 1 }, hand: { count: 0 } },
-        ],
-        audio_transcription: {
-          text: '안녕하세요. 제 이름은 김철수이고, 전화번호는 010-9876-5432입니다. 제 주소는 부산시 해운대구 해운대해변로 264입니다.',
-          analysis: {
-            detected: true,
-            total_count: 3,
-            categories: {
-              name: {
-                count: 1,
-                items: [{ type: 'name', value: '김철수', category: 'name' }]
-              },
-              phone: {
-                count: 1,
-                items: [{ type: 'phone', value: '010-9876-5432', category: 'phone' }]
-              },
-              address: {
-                count: 1,
-                items: [{ type: 'address', value: '부산시 해운대구 해운대해변로 264', category: 'address' }]
-              }
-            }
-          }
-        }
-      }
-    };
-
-    const dummyEduItems = [
-      {
-        category: '전화번호',
-        law_summary: '개인정보보호법 제71조 제1항에 따라 개인정보처리자가 개인정보를 목적 외 이용·제공하거나 제3자에게 제공할 경우 최대 3억원의 과태료가 부과됩니다.',
-        law_summary_rationale: '전화번호는 개인정보보호법 제2조에서 정의하는 개인정보에 해당하며, 목적 외 이용 시 제71조에 따라 과태료가 부과됩니다.',
-        risk_scenarios: [
-          '전화번호 노출 시 스미싱(SMS 피싱) 공격 위험: 공격자가 노출된 전화번호로 사기 메시지를 전송하여 피해자를 피싱 사이트로 유도하고, 이를 통해 금융정보(계좌번호, 비밀번호 등)를 탈취한 후 불법 인출 및 재산 피해를 발생시킬 수 있습니다.'
-        ],
-        risk_scenarios_rationale: '전화번호는 SMS 기반 본인 인증에 광범위하게 사용되며, 공격자가 전화번호를 확보하면 SIM 스와핑, SMS 피싱 등 다양한 공격 경로가 열립니다.',
-        tips: [
-          '스미싱 공격 방지를 위한 전화번호 최소수집 원칙 준수: 불필요한 전화번호 수집을 최소화하고, 수집 목적에 필요한 최소한의 정보만 보관하여 노출 범위를 줄임으로써 스미싱 공격의 표적이 될 가능성을 최소화합니다.'
-        ],
-        tips_rationale: '위에서 제시한 위험 시나리오(스미싱, 사칭, 계정 탈취)를 직접적으로 방지하기 위해 최소 수집 원칙, 암호화 통신, 접근 권한 관리 등 실무에서 즉시 적용 가능한 기술적 조치를 제시했습니다.'
-      },
-      {
-        category: '주민등록번호',
-        law_summary: '개인정보보호법 제75조 제1항에 따라 고의로 개인정보를 유출하거나 타인에게 제공할 경우 5년 이하의 징역 또는 5천만원 이하의 벌금에 처해집니다.',
-        law_summary_rationale: '주민등록번호는 개인정보보호법에서 특별히 보호되는 고유식별정보로 분류되며, 유출 시 심각한 법적 처벌을 받을 수 있습니다.',
-        risk_scenarios: [
-          '주민등록번호 노출 시 신원 도용 위험: 공격자가 노출된 주민등록번호를 이용하여 대출, 신용카드 발급, 계좌 개설 등 불법적인 금융 거래를 수행할 수 있습니다.'
-        ],
-        risk_scenarios_rationale: '주민등록번호는 한국에서 가장 중요한 개인 식별 정보이며, 이를 악용하면 신원 도용, 금융 사기 등 심각한 피해가 발생할 수 있습니다.',
-        tips: [
-          '주민등록번호 수집 최소화: 법령에서 명시적으로 요구하는 경우를 제외하고는 주민등록번호를 수집하지 않도록 합니다.'
-        ],
-        tips_rationale: '주민등록번호 보호를 위한 최소 수집 원칙과 암호화 저장 등 보안 조치를 제시했습니다.'
-      }
-    ];
-
-    setResult(dummyResult);
-    setShowResultModal(true);
-    setEduItems(dummyEduItems);
-    setRevisedSentence('안녕하세요. 제 이름은 [이름]이고, 연락처는 [연락처]입니다. 주소는 [주소]이고, 이메일은 [이메일]입니다. 제 주민등록번호는 [주민등록번호]이고, 계좌번호는 [계좌번호]입니다.');
-    setRevisedSentenceRationale('원문의 개인정보(이름, 전화번호, 주소, 이메일, 주민등록번호, 계좌번호)를 모두 마스킹 처리하여 개인정보 노출을 방지했습니다. 각 항목은 개인 식별이 가능한 정보로 신원 도용 및 표적 공격의 위험이 있어 구체적인 정보 대신 일반화된 표현으로 대체했습니다.');
-  };
-
   // 로그인 체크 - 분석 페이지는 로그인 필수
   useEffect(() => {
     // 인증 확인이 완료된 후에만 체크
@@ -304,7 +97,7 @@ export default function UploadForm() {
           }
         } catch (err) {
           // 설정 로드 실패 시 기본값 유지
-          console.debug('필터링 설정 로드 실패:', err);
+          // 보안: 콘솔 로그 제거
         }
       };
       loadUserSettings();
@@ -435,6 +228,41 @@ export default function UploadForm() {
       
       setResult(analysisResult);
       setShowResultModal(true);
+      
+      // 보안: LLM 수정 문장 저장 (로그인한 사용자만, 민감 정보가 탐지되고 수정 문장이 있을 때만)
+      // 보안: 로그인하지 않은 사용자는 수정 기록을 저장하지 않음
+      if (isAuthenticated && !authLoading) {
+        try {
+          const revisedText = analysisResult?.text_analysis?.revised_text;
+          const structuredData = analysisResult?.text_analysis?.structured_data;
+          const detected = structuredData?.detected;
+          const categories = structuredData?.categories || {};
+          
+          // 민감 정보가 탐지되고 수정 문장이 있고, 원본과 다른 경우에만 저장
+          if (detected && revisedText && revisedText.trim() && 
+              revisedText !== analysisResult?.text_analysis?.original_text) {
+            // 카테고리 키 추출 (민감 정보 종류)
+            const categoryKeys = Object.keys(categories).filter(key => 
+              categories[key]?.count > 0
+            );
+            
+            // 수정 기록 저장 (백그라운드에서 실행, 실패해도 사용자 경험에 영향 없음)
+            // 보안: 민감 정보는 저장하지 않고 수정 문장만 저장
+            userApi.createRevisionHistory(revisedText, categoryKeys)
+              .then(() => {
+                // 저장 성공 (조용히 처리)
+              })
+              .catch(() => {
+                // 저장 실패는 조용히 처리 (사용자에게 알리지 않음)
+                // 보안: 콘솔 로그 제거
+              });
+          }
+        } catch (saveError) {
+          // 저장 중 오류는 조용히 처리
+          // 보안: 콘솔 로그 제거
+        }
+      }
+      
       // 교육 패널 자동 로딩 (마스킹 텍스트와 카테고리 기반)
       // 보안: text_analysis에 통합된 텍스트(직접 입력 + OCR)가 있고, 마스킹된 텍스트나 검출된 카테고리가 있을 때만 교육 제안 요청
       try {
@@ -454,7 +282,8 @@ export default function UploadForm() {
               setEduItems(edu.items || []);
               setRevisedSentence(edu.revised_sentence || null);
               setRevisedSentenceRationale(edu.revised_sentence_rationale || null);
-              setShowEduPanel(true);
+              // 자동으로 패널을 열지 않음 (사용자가 직접 열도록 함)
+              // setShowEduPanel(true);
             } else {
               // 응답은 받았지만 데이터가 없음
               secureLog('교육 제안 데이터 없음', { edu });
@@ -733,28 +562,6 @@ export default function UploadForm() {
           >
             초기화
           </button>
-          {/* 개발 모드: 더미 데이터로 결과 페이지 보기 */}
-          {import.meta.env.DEV && (
-            <button
-              type="button"
-              onClick={loadDummyResult}
-              className="dummy-result-button"
-              style={{
-                marginLeft: '12px',
-                padding: '12px 24px',
-                background: '#8b5cf6',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '1rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              🧪 더미 결과 보기 (개발용)
-            </button>
-          )}
         </div>
 
         {/* 오류 메시지 */}
@@ -773,8 +580,8 @@ export default function UploadForm() {
           detectionOptions={detectionOptions}
           blurFingers={blurFingers}
           onShowEducation={(_maskedText, _categories) => {
+            // 교육 패널 표시 로직 (사용자가 직접 버튼을 클릭할 때만 열림)
             setShowEduPanel(true);
-            // 교육 패널 표시 로직
           }}
           eduItems={eduItems}
           revisedSentenceRationale={revisedSentenceRationale}
@@ -1044,7 +851,7 @@ export default function UploadForm() {
                                   // 보안: URL 즉시 해제
                                   secureURLCleanup(objectURL);
                                 } catch (e) {
-                                  console.error(e);
+                                  // 보안: 콘솔 로그 제거
                                   alert('다운로드 중 오류가 발생했습니다.');
                                 }
                               }}
@@ -1258,11 +1065,11 @@ export default function UploadForm() {
                                 alt={`얼굴 감지 결과 ${index + 1}`}
                                 className="result-image"
                                 onError={(e) => {
-                                  console.error('이미지 로딩 실패:', img.result_image_url);
+                                  // 보안: 이미지 URL은 민감 정보일 수 있으므로 로그 제거
                                   e.currentTarget.style.display = 'none';
                                 }}
                                 onLoad={() => {
-                                  console.log('이미지 로딩 성공:', img.result_image_url);
+                                  // 보안: 이미지 URL은 민감 정보일 수 있으므로 로그 제거
                                 }}
                               />
                             </div>
@@ -1288,11 +1095,11 @@ export default function UploadForm() {
                                 alt={`손가락 감지 결과 ${index + 1}`}
                                 className="result-image"
                                 onError={(e) => {
-                                  console.error('이미지 로딩 실패:', img.result_image_url);
+                                  // 보안: 이미지 URL은 민감 정보일 수 있으므로 로그 제거
                                   e.currentTarget.style.display = 'none';
                                 }}
                                 onLoad={() => {
-                                  console.log('이미지 로딩 성공:', img.result_image_url);
+                                  // 보안: 이미지 URL은 민감 정보일 수 있으므로 로그 제거
                                 }}
                               />
                             </div>

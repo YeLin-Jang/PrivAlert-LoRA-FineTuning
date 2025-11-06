@@ -434,13 +434,22 @@ def get_profile():
     """
     현재 사용자 정보 조회
     GET /api/v1/user/me
+    보안: CSRF 토큰도 함께 반환하여 프론트엔드에서 토큰 갱신 가능
     """
     try:
         user = request.current_user
+        user_id_str = str(user.id)
+        
+        # CSRF 토큰 생성 (프론트엔드에서 토큰 갱신 가능하도록)
+        from app.utils.csrf_protection import generate_csrf_token
+        csrf_token = generate_csrf_token(user_id_str)
         
         return jsonify({
             "success": True,
-            "data": user.to_dict()
+            "data": {
+                **user.to_dict(),
+                "csrf_token": csrf_token
+            }
         }), 200
         
     except Exception as e:

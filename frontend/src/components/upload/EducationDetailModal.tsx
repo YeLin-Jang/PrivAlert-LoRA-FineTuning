@@ -23,6 +23,19 @@ export const EducationDetailModal: React.FC<EducationDetailModalProps> = ({
   category,
   data,
 }) => {
+  // 디버깅: 모달 상태 및 데이터 확인
+  if (import.meta.env.DEV) {
+    console.log('EducationDetailModal:', {
+      isOpen,
+      category,
+      data,
+      hasRevisedSentenceRationale: !!data?.revised_sentence_rationale,
+      hasLawSummary: !!data?.law_summary,
+      hasRiskScenarios: !!data?.risk_scenarios,
+      hasTips: !!data?.tips,
+    });
+  }
+  
   if (!isOpen) return null;
 
   const getTitle = () => {
@@ -49,9 +62,14 @@ export const EducationDetailModal: React.FC<EducationDetailModalProps> = ({
       return (
         <div className="education-detail-content">
           {data.revised_sentence_rationale && (
-            <div className="education-section-item">
-              <h3>수정 문장 근거</h3>
-              <p>{data.revised_sentence_rationale}</p>
+            <div className="education-section-item rationale-highlight">
+              <h3 className="rationale-title">
+                <span className="rationale-icon">📋</span>
+                수정 문장 근거
+              </h3>
+              <div className="rationale-content">
+                <p>{data.revised_sentence_rationale}</p>
+              </div>
             </div>
           )}
           
@@ -60,9 +78,14 @@ export const EducationDetailModal: React.FC<EducationDetailModalProps> = ({
               <h3>법령 요약</h3>
               <p>{data.law_summary}</p>
               {data.law_summary_rationale && (
-                <div className="rationale-section">
-                  <h4>법령 인용 근거</h4>
-                  <p>{data.law_summary_rationale}</p>
+                <div className="rationale-section rationale-highlight">
+                  <h4 className="rationale-subtitle">
+                    <span className="rationale-icon">⚖️</span>
+                    법령 인용 근거
+                  </h4>
+                  <div className="rationale-content">
+                    <p>{data.law_summary_rationale}</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -73,13 +96,21 @@ export const EducationDetailModal: React.FC<EducationDetailModalProps> = ({
               <h3>위험 시나리오</h3>
               <ul className="risk-scenarios-list">
                 {data.risk_scenarios.map((scenario, idx) => (
-                  <li key={idx}>{scenario}</li>
+                  <li key={idx}>
+                    <span className="scenario-number">{idx + 1}</span>
+                    <span className="scenario-text">{scenario}</span>
+                  </li>
                 ))}
               </ul>
               {data.risk_scenarios_rationale && (
-                <div className="rationale-section">
-                  <h4>위험 시나리오 근거</h4>
-                  <p>{data.risk_scenarios_rationale}</p>
+                <div className="rationale-section rationale-highlight">
+                  <h4 className="rationale-subtitle">
+                    <span className="rationale-icon">⚠️</span>
+                    위험 시나리오 근거
+                  </h4>
+                  <div className="rationale-content">
+                    <p>{data.risk_scenarios_rationale}</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -94,9 +125,14 @@ export const EducationDetailModal: React.FC<EducationDetailModalProps> = ({
                 ))}
               </ul>
               {data.tips_rationale && (
-                <div className="rationale-section">
-                  <h4>보안 팁 근거</h4>
-                  <p>{data.tips_rationale}</p>
+                <div className="rationale-section rationale-highlight">
+                  <h4 className="rationale-subtitle">
+                    <span className="rationale-icon">💡</span>
+                    보안 팁 근거
+                  </h4>
+                  <div className="rationale-content">
+                    <p>{data.tips_rationale}</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -119,9 +155,14 @@ export const EducationDetailModal: React.FC<EducationDetailModalProps> = ({
             <h3>법령 요약</h3>
             <p>{data.law_summary || '법령 정보가 없습니다.'}</p>
             {data.law_summary_rationale && (
-              <div className="rationale-section">
-                <h4>법령 인용 근거</h4>
-                <p>{data.law_summary_rationale}</p>
+              <div className="rationale-section rationale-highlight">
+                <h4 className="rationale-subtitle">
+                  <span className="rationale-icon">⚖️</span>
+                  법령 인용 근거
+                </h4>
+                <div className="rationale-content">
+                  <p>{data.law_summary_rationale}</p>
+                </div>
               </div>
             )}
           </div>
@@ -133,16 +174,24 @@ export const EducationDetailModal: React.FC<EducationDetailModalProps> = ({
             {data.risk_scenarios && data.risk_scenarios.length > 0 ? (
               <ul className="risk-scenarios-list">
                 {data.risk_scenarios.map((scenario, idx) => (
-                  <li key={idx}>{scenario}</li>
+                  <li key={idx}>
+                    <span className="scenario-number">{idx + 1}</span>
+                    <span className="scenario-text">{scenario}</span>
+                  </li>
                 ))}
               </ul>
             ) : (
               <p>위험 시나리오 정보가 없습니다.</p>
             )}
             {data.risk_scenarios_rationale && (
-              <div className="rationale-section">
-                <h4>위험 시나리오 근거</h4>
-                <p>{data.risk_scenarios_rationale}</p>
+              <div className="rationale-section rationale-highlight">
+                <h4 className="rationale-subtitle">
+                  <span className="rationale-icon">⚠️</span>
+                  위험 시나리오 근거
+                </h4>
+                <div className="rationale-content">
+                  <p>{data.risk_scenarios_rationale}</p>
+                </div>
               </div>
             )}
           </div>
@@ -161,9 +210,14 @@ export const EducationDetailModal: React.FC<EducationDetailModalProps> = ({
               <p>보안 팁 정보가 없습니다.</p>
             )}
             {data.tips_rationale && (
-              <div className="rationale-section">
-                <h4>보안 팁 근거</h4>
-                <p>{data.tips_rationale}</p>
+              <div className="rationale-section rationale-highlight">
+                <h4 className="rationale-subtitle">
+                  <span className="rationale-icon">💡</span>
+                  보안 팁 근거
+                </h4>
+                <div className="rationale-content">
+                  <p>{data.tips_rationale}</p>
+                </div>
               </div>
             )}
           </div>

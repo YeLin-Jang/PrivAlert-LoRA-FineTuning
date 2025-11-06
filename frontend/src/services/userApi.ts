@@ -43,6 +43,11 @@ const createApiInstance = (): AxiosInstance => {
   instance.interceptors.response.use(
     (response) => response,
     (error) => {
+      // 타임아웃 에러 처리
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        return Promise.reject(new Error('요청 시간이 초과되었습니다. 서버 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.'));
+      }
+      
       if (error.response?.status === 401) {
         // 인증 실패 시 토큰 제거
         localStorage.removeItem('auth_token');
@@ -158,7 +163,7 @@ export const userApi = {
       try {
         data = await response.json();
       } catch (jsonError) {
-        console.error('회원가입 응답 파싱 실패:', jsonError);
+        // 보안: 콘솔 로그 제거
         throw new Error('서버 응답을 처리할 수 없습니다');
       }
 
@@ -225,7 +230,7 @@ export const userApi = {
       await api.post('/api/v1/auth/logout');
     } catch (error) {
       // 로그아웃 API 호출 실패해도 토큰은 제거
-      console.error('로그아웃 API 호출 실패:', error);
+      // 보안: 콘솔 로그 제거
     } finally {
       localStorage.removeItem('auth_token');
       localStorage.removeItem('user_email');

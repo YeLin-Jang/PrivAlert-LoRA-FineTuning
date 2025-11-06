@@ -1,7 +1,7 @@
 // API 설정
 export const API_CONFIG = {
   BASE_URL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000',
-  TIMEOUT: 30000, // 30초
+  TIMEOUT: 120000, // 120초 (2분) - 백엔드 처리 시간이 오래 걸릴 수 있음
   MAX_RETRIES: 3,
 } as const;
 

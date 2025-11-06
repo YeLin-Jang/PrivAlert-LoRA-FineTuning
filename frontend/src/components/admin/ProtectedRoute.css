@@ -1,8 +1,0 @@
-/* ProtectedRoute 로딩 스타일 */
-.protected-route-loading {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-}
-
