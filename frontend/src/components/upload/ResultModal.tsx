@@ -19,7 +19,14 @@ export const ResultModal: React.FC<ResultModalProps> = ({
   const [showOriginal, setShowOriginal] = useState(false);
 
   // 텍스트 분석 결과
-  const textAnalysis = result.text_analysis;
+  const textAnalysis = result.text_analysis as (typeof result.text_analysis & {
+    message?: string;
+    source?: {
+      direct_input: boolean;
+      ocr: boolean;
+      ocr_count: number;
+    };
+  }) | undefined;
   const structuredData = textAnalysis?.structured_data;
   const categories = structuredData?.categories || {};
   
@@ -67,8 +74,9 @@ export const ResultModal: React.FC<ResultModalProps> = ({
   const sanitizedImages = result.image_sanitization?.items || [];
   
   // 모든 이미지 합치기 (최대 3개)
+  // sanitizedImages, faceImages, handImages를 합쳐서 표시
   const allImages = [
-    ...sanitizedImages.slice(0, 3 - sanitizedImages.length),
+    ...sanitizedImages.slice(0, 3),
   ];
 
   return (
@@ -88,68 +96,99 @@ export const ResultModal: React.FC<ResultModalProps> = ({
                 <span className="detection-count">{totalDetected}개 검출</span>
               </div>
 
-              <div className="text-analysis-content">
-                {/* 왼쪽: 검출 항목 요약 */}
-                <div className="detection-summary-box">
-                  {Object.entries(detectedCounts).map(([key, count]) => (
-                    <div key={key} className="detection-item">
-                      <span className="detection-label">{categoryNames[key] || key}</span>
-                      <span className="detection-value">{count}개</span>
+              {/* 텍스트가 없을 때 메시지 표시 */}
+              {(!textAnalysis.original_text || textAnalysis.original_text.trim().length === 0) && textAnalysis.message ? (
+                <div className="text-analysis-content">
+                  <div className="no-text-message-box">
+                    <p className="no-text-message">{textAnalysis.message}</p>
+                    {textAnalysis.source && (
+                      <div className="text-source-info">
+                        {textAnalysis.source.ocr && (
+                          <span className="source-tag">OCR: {textAnalysis.source.ocr_count}개 이미지 처리됨</span>
+                        )}
+                        {textAnalysis.source.direct_input && (
+                          <span className="source-tag">직접 입력</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-analysis-content">
+                  {/* 왼쪽: 검출 항목 요약 */}
+                  <div className="detection-summary-box">
+                    {Object.entries(detectedCounts).map(([key, count]) => (
+                      <div key={key} className="detection-item">
+                        <span className="detection-label">{categoryNames[key] || key}</span>
+                        <span className="detection-value">{count}개</span>
+                      </div>
+                    ))}
+                    {totalDetected === 0 && (
+                      <div className="detection-item">
+                        <span className="detection-label">검출된 항목 없음</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 중앙: 분석된 텍스트 */}
+                  <div className="analyzed-text-box">
+                    <div className="text-content">
+                      {showOriginal 
+                        ? textAnalysis.original_text 
+                        : highlightText(textAnalysis.original_text || '')
+                      }
                     </div>
-                  ))}
-                  {totalDetected === 0 && (
-                    <div className="detection-item">
-                      <span className="detection-label">검출된 항목 없음</span>
+                    {textAnalysis.source && (
+                      <div className="text-source-info">
+                        {textAnalysis.source.ocr && (
+                          <span className="source-tag">OCR: {textAnalysis.source.ocr_count}개 이미지에서 추출</span>
+                        )}
+                        {textAnalysis.source.direct_input && (
+                          <span className="source-tag">직접 입력</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 오른쪽: 위험 레벨 범례 */}
+                  <div className="risk-legend-box">
+                    <div className="risk-level">
+                      <div className="risk-circle very-dangerous"></div>
+                      <span>ㅈㄴ 위험</span>
                     </div>
-                  )}
-                </div>
-
-                {/* 중앙: 분석된 텍스트 */}
-                <div className="analyzed-text-box">
-                  <div className="text-content">
-                    {showOriginal 
-                      ? textAnalysis.original_text 
-                      : highlightText(textAnalysis.original_text || '')
-                    }
+                    <div className="risk-level">
+                      <div className="risk-circle dangerous"></div>
+                      <span>위험</span>
+                    </div>
+                    <div className="risk-level">
+                      <div className="risk-circle caution"></div>
+                      <span>주의</span>
+                    </div>
                   </div>
                 </div>
+              )}
 
-                {/* 오른쪽: 위험 레벨 범례 */}
-                <div className="risk-legend-box">
-                  <div className="risk-level">
-                    <div className="risk-circle very-dangerous"></div>
-                    <span>ㅈㄴ 위험</span>
-                  </div>
-                  <div className="risk-level">
-                    <div className="risk-circle dangerous"></div>
-                    <span>위험</span>
-                  </div>
-                  <div className="risk-level">
-                    <div className="risk-circle caution"></div>
-                    <span>주의</span>
-                  </div>
+              {/* 액션 버튼 - 텍스트가 있을 때만 표시 */}
+              {textAnalysis.original_text && textAnalysis.original_text.trim().length > 0 && (
+                <div className="text-action-buttons">
+                  <button 
+                    className="action-btn secondary"
+                    onClick={() => setShowOriginal(!showOriginal)}
+                  >
+                    원본 보기
+                  </button>
+                  <button 
+                    className="action-btn primary"
+                    onClick={() => {
+                      if (onShowEducation && textAnalysis.masked_text) {
+                        onShowEducation(textAnalysis.masked_text, categories);
+                      }
+                    }}
+                  >
+                    전체 수정하기
+                  </button>
                 </div>
-              </div>
-
-              {/* 액션 버튼 */}
-              <div className="text-action-buttons">
-                <button 
-                  className="action-btn secondary"
-                  onClick={() => setShowOriginal(!showOriginal)}
-                >
-                  원본 보기
-                </button>
-                <button 
-                  className="action-btn primary"
-                  onClick={() => {
-                    if (onShowEducation && textAnalysis.masked_text) {
-                      onShowEducation(textAnalysis.masked_text, categories);
-                    }
-                  }}
-                >
-                  전체 수정하기
-                </button>
-              </div>
+              )}
             </section>
           )}
 
@@ -201,6 +240,64 @@ export const ResultModal: React.FC<ResultModalProps> = ({
                   전체 수정사진 다운로드
                 </button>
               )}
+            </section>
+          )}
+
+          {/* 비디오 분석 결과 */}
+          {result.video_analysis && (
+            <section className="result-section video-analysis-section">
+              <div className="section-header">
+                <h2>영상 분석 결과</h2>
+                <span className="detection-count">
+                  {result.video_analysis.faces_detected + result.video_analysis.fingers_detected}개 검출
+                </span>
+              </div>
+              
+              <div className="video-summary">
+                <div className="video-stats">
+                  <div className="stat-item">
+                    <span className="stat-label">총 프레임 분석</span>
+                    <span className="stat-value">{result.video_analysis.total_frames_processed}개</span>
+                  </div>
+                  <div className="stat-item">
+                    <span className="stat-label">얼굴 탐지</span>
+                    <span className="stat-value">{result.video_analysis.faces_detected}개</span>
+                  </div>
+                  <div className="stat-item">
+                    <span className="stat-label">손가락 탐지</span>
+                    <span className="stat-value">{result.video_analysis.fingers_detected}개</span>
+                  </div>
+                </div>
+                
+                {result.video_analysis.audio_transcription?.text && (
+                  <div className="video-audio-section">
+                    <h3>음성 인식 텍스트</h3>
+                    <div className="audio-text-content">
+                      {result.video_analysis.audio_transcription.text}
+                    </div>
+                    
+                    {result.video_analysis.audio_transcription.analysis && (
+                      <div className="audio-analysis">
+                        {result.video_analysis.audio_transcription.analysis.detected && (
+                          <>
+                            <div className="audio-detection-summary">
+                              <span className="detection-badge">
+                                {result.video_analysis.audio_transcription.analysis.total_count}개 검출
+                              </span>
+                            </div>
+                            {result.video_analysis.audio_transcription.analysis.revised_text && (
+                              <div className="audio-revised-text">
+                                <h4>수정 제안:</h4>
+                                <p>{result.video_analysis.audio_transcription.analysis.revised_text}</p>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </section>
           )}
 

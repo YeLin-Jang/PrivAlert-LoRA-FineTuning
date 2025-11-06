@@ -88,6 +88,7 @@ export const UserAuthProvider: React.FC<UserAuthProviderProps> = ({ children }) 
   }, []);
 
   const handleLogin = async (email: string, password: string) => {
+    setLoading(true); // 로그인 시작 시 로딩 상태 활성화
     try {
       // 백엔드 API는 /api/v1/auth/login을 사용 (email/password)
       const { API_CONFIG } = await import('../constants');
@@ -148,6 +149,7 @@ export const UserAuthProvider: React.FC<UserAuthProviderProps> = ({ children }) 
         if (data.data.user.email) {
           localStorage.setItem('user_email', data.data.user.email);
         }
+        setLoading(false); // 사용자 정보가 있으면 즉시 로딩 종료
       }
 
       // 사용자 정보 최신화 (백그라운드에서 실행, 실패해도 이미 user가 설정되어 있음)
@@ -175,13 +177,18 @@ export const UserAuthProvider: React.FC<UserAuthProviderProps> = ({ children }) 
         .catch(error => {
           // 에러는 무시 (이미 user가 설정되어 있음)
           console.debug('사용자 정보 최신화 실패:', error);
+        })
+        .finally(() => {
+          setLoading(false); // 최신화 완료 후 로딩 종료
         });
     } catch (error: any) {
+      setLoading(false); // 에러 발생 시에도 로딩 종료
       throw new Error(error.message || '로그인에 실패했습니다');
     }
   };
 
   const handleLogout = async () => {
+    setLoading(true); // 로그아웃 시작 시 로딩 상태 활성화
     try {
       await userApi.logout();
     } catch (error) {
@@ -190,7 +197,10 @@ export const UserAuthProvider: React.FC<UserAuthProviderProps> = ({ children }) 
       localStorage.removeItem('user_email');
       localStorage.removeItem('user_access_token');
       localStorage.removeItem('auth_token');
+      localStorage.removeItem('csrf_token');
+      localStorage.removeItem('session_id');
       setUser(null);
+      setLoading(false); // 로그아웃 완료 후 로딩 종료
     }
   };
 

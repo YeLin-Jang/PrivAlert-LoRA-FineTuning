@@ -39,13 +39,16 @@ const createApiInstance = (): AxiosInstance => {
       if (error.response) {
         const data = error.response.data as any;
         
-        // 일반적인 에러 메시지만 반환
+        // 일반적인 에러 메시지만 반환 (보안: 상세한 서버 정보 노출 방지)
         const errorMessage = data?.error || data?.message || '서버 오류가 발생했습니다';
         
         return Promise.reject(new Error(errorMessage));
       } else if (error.request) {
-        return Promise.reject(new Error('네트워크 오류가 발생했습니다'));
+        // 네트워크 오류 (서버에 도달하지 못함)
+        // 보안: 네트워크 오류는 민감 정보를 포함하지 않으므로 안전하게 표시 가능
+        return Promise.reject(new Error('네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.'));
       } else {
+        // 요청 설정 오류
         return Promise.reject(new Error('요청 처리 중 오류가 발생했습니다'));
       }
     }
@@ -149,18 +152,61 @@ export const suggestEducation = async (
   language: string = 'ko',
   tone: string = 'educational'
 ) => {
-  const response = await api.post(`${API_CONFIG.BASE_URL}/api/v1/education/suggest`, {
-    masked_text: maskedText,
-    categories,
-    language,
-    tone,
-  });
-  
-  if (!response.data?.success) {
-    throw new Error(response.data?.error || '교육 제안 생성 실패');
+  try {
+    const response = await api.post(`${API_CONFIG.BASE_URL}/api/v1/education/suggest`, {
+      masked_text: maskedText,
+      categories,
+      language,
+      tone,
+    });
+    
+    // 디버깅: 응답 구조 확인 (개발 환경에서만)
+    if (import.meta.env.DEV) {
+      console.log('교육 제안 응답:', {
+        success: response.data?.success,
+        hasData: !!response.data?.data,
+        dataKeys: response.data?.data ? Object.keys(response.data.data) : [],
+        fullResponse: response.data,
+      });
+    }
+    
+    // 응답 데이터 구조 확인
+    if (!response || !response.data) {
+      throw new Error('서버로부터 응답을 받지 못했습니다');
+    }
+    
+    if (!response.data.success) {
+      const errorMsg = response.data.error || response.data.message || '교육 제안 생성 실패';
+      throw new Error(errorMsg);
+    }
+    
+    // 응답 데이터 확인
+    if (!response.data.data) {
+      throw new Error('교육 제안 데이터가 없습니다');
+    }
+    
+    return response.data.data;
+  } catch (error: any) {
+    // 디버깅: 에러 상세 정보 (개발 환경에서만)
+    if (import.meta.env.DEV) {
+      console.error('교육 제안 API 에러 상세:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        request: error.request,
+        isNetworkError: !error.response && error.request,
+        isTimeout: error.code === 'ECONNABORTED',
+      });
+    }
+    
+    // 네트워크 오류인 경우 더 명확한 메시지
+    if (!error.response && error.request) {
+      throw new Error('네트워크 오류가 발생했습니다. 서버 연결을 확인해주세요.');
+    }
+    
+    throw error;
   }
-  
-  return response.data.data;
 };
 
 /**

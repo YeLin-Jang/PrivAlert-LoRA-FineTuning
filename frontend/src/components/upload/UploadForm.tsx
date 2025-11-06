@@ -21,6 +21,7 @@ export default function UploadForm() {
   const navigate = useNavigate();
   const { isAuthenticated, loading: authLoading } = useUserAuth();
   const [files, setFiles] = useState<File[]>([]);
+  const [fileUrls, setFileUrls] = useState<string[]>([]); // blob URL 저장
   const [text, setText] = useState('');
   const [blurFingers, setBlurFingers] = useState(false);
   const [showFaces, setShowFaces] = useState(false);
@@ -113,6 +114,12 @@ export default function UploadForm() {
       if (videoFile) {
         secureFilesCleanup([videoFile]);
       }
+      // blob URL 정리 (메모리 누수 방지)
+      fileUrls.forEach(url => {
+        if (url) {
+          URL.revokeObjectURL(url);
+        }
+      });
       // 결과 데이터도 정리
       if (result) {
         setResult(null);
@@ -124,15 +131,34 @@ export default function UploadForm() {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files);
       
+      // 파일 타입 검증 (이미지 또는 비디오만 허용)
+      const validFiles = newFiles.filter(file => {
+        const fileType = file.type;
+        const isImage = fileType.startsWith('image/');
+        const isVideo = fileType.startsWith('video/');
+        return isImage || isVideo;
+      });
+      
+      if (validFiles.length !== newFiles.length) {
+        setError('이미지 또는 비디오 파일만 업로드할 수 있습니다.');
+      }
+      
       // 파일 개수 검증 (최대 5개)
-      const allFiles = [...files, ...newFiles];
+      const allFiles = [...files, ...validFiles];
       if (allFiles.length > 5) {
-        setError('이미지는 최대 5개까지 업로드할 수 있습니다.');
+        setError('이미지/영상 파일은 최대 5개까지 업로드할 수 있습니다.');
         e.target.value = '';
         return;
       }
       
-      setFiles(prev => [...prev, ...newFiles]);
+      // blob URL 생성 (이미지 미리보기용)
+      // files 배열과 동일한 인덱스로 매핑 (비디오는 null)
+      const newUrls = validFiles.map(file => 
+        file.type.startsWith('image/') ? URL.createObjectURL(file) : ''
+      );
+      
+      setFiles(prev => [...prev, ...validFiles]);
+      setFileUrls(prev => [...prev, ...newUrls]);
       e.target.value = '';
       setError(null);
     }
@@ -176,12 +202,12 @@ export default function UploadForm() {
     
     // 파일 개수 검증
     if (files.length > 5) {
-      setError('이미지는 최대 5개까지 업로드할 수 있습니다.');
+      setError('이미지/영상 파일은 최대 5개까지 업로드할 수 있습니다.');
       return;
     }
 
     if (files.length === 0 && !text.trim()) {
-      setError('텍스트를 입력하거나 이미지를 업로드해주세요.');
+      setError('텍스트를 입력하거나 이미지/영상 파일을 업로드해주세요.');
       return;
     }
     
@@ -202,16 +228,52 @@ export default function UploadForm() {
       setResult(analysisResult);
       setShowResultModal(true);
       // 교육 패널 자동 로딩 (마스킹 텍스트와 카테고리 기반)
+      // 보안: text_analysis에 통합된 텍스트(직접 입력 + OCR)가 있고, 마스킹된 텍스트나 검출된 카테고리가 있을 때만 교육 제안 요청
       try {
+        // text_analysis는 이제 직접 입력 텍스트와 OCR 결과가 통합되어 있음
         const masked = analysisResult?.text_analysis?.masked_text || '';
         const cats = (analysisResult as any)?.text_analysis?.structured_data?.categories || {};
-        setEduLoading(true);
-        const edu = await suggestEducation(masked, cats, 'ko', 'educational');
-        setEduItems(edu?.items || []);
-        setRevisedSentence(edu?.revised_sentence || null);
-        setShowEduPanel(true);
+        
+        // 텍스트나 검출된 카테고리가 있을 때만 교육 제안 요청
+        const hasContent = masked.trim().length > 0 || Object.keys(cats).length > 0;
+        
+        if (hasContent) {
+          setEduLoading(true);
+          try {
+            const edu = await suggestEducation(masked, cats, 'ko', 'educational');
+            // 응답 데이터 검증
+            if (edu && (edu.items || edu.revised_sentence)) {
+              setEduItems(edu.items || []);
+              setRevisedSentence(edu.revised_sentence || null);
+              setShowEduPanel(true);
+            } else {
+              // 응답은 받았지만 데이터가 없음
+              secureLog('교육 제안 데이터 없음', { edu });
+              setShowEduPanel(false);
+              setEduItems([]);
+              setRevisedSentence(null);
+            }
+          } catch (eduError: any) {
+            // 에러 상세 정보 로깅
+            secureLog('교육 제안 로딩 실패', {
+              message: eduError?.message,
+              response: eduError?.response?.data,
+              status: eduError?.response?.status,
+            });
+            setShowEduPanel(false);
+            setEduItems([]);
+            setRevisedSentence(null);
+          }
+        } else {
+          // 텍스트나 검출된 항목이 없으면 교육 패널 숨김
+          setShowEduPanel(false);
+          setEduItems([]);
+          setRevisedSentence(null);
+        }
       } catch (e) {
-        secureLog('교육 제안 로딩 실패', e);
+        // 예상치 못한 오류
+        secureLog('교육 제안 처리 중 오류', e);
+        setShowEduPanel(false);
       } finally {
         setEduLoading(false);
       }
@@ -236,7 +298,15 @@ export default function UploadForm() {
     // 텍스트 데이터 정리
     const cleanedText = secureTextCleanup(text);
     
+    // blob URL 정리
+    fileUrls.forEach(url => {
+      if (url) {
+        URL.revokeObjectURL(url);
+      }
+    });
+    
     setFiles([]);
+    setFileUrls([]);
     setText(cleanedText);
     setVideoFile(null);
     setResult(null);
@@ -273,8 +343,16 @@ export default function UploadForm() {
   };
 
   const handleImageRemove = (index: number) => {
+    // blob URL 정리 (이미지 파일인 경우만)
+    if (fileUrls[index] && files[index]?.type.startsWith('image/')) {
+      URL.revokeObjectURL(fileUrls[index]);
+    }
+    
     const newFiles = files.filter((_, i) => i !== index);
+    const newUrls = fileUrls.filter((_, i) => i !== index);
+    
     setFiles(newFiles);
+    setFileUrls(newUrls);
     secureFilesCleanup([files[index]]);
   };
 
@@ -314,9 +392,9 @@ export default function UploadForm() {
           </div>
         </div>
 
-        {/* 이미지 추가 섹션 */}
+        {/* 이미지/영상 추가 섹션 */}
         <div className="image-upload-section">
-          <h2 className="section-title">이미지 추가하기</h2>
+          <h2 className="section-title">이미지/영상 추가하기</h2>
           <div className="image-slots">
             {Array.from({ length: 5 }).map((_, index) => {
               const file = files[index];
@@ -334,11 +412,23 @@ export default function UploadForm() {
                 >
                   {file ? (
                     <>
-                      <img
-                        src={URL.createObjectURL(file)}
-                        alt={`업로드 ${index + 1}`}
-                        className="image-preview"
-                      />
+                      {file.type.startsWith('video/') ? (
+                        <div className="video-preview">
+                          <div className="video-icon">🎬</div>
+                          <div className="video-filename">{file.name}</div>
+                        </div>
+                      ) : (
+                        <img
+                          src={fileUrls[index] || (file.type.startsWith('image/') ? URL.createObjectURL(file) : '')}
+                          alt={`업로드 ${index + 1}`}
+                          className="image-preview"
+                          onError={(e) => {
+                            // blob URL 로드 실패 시 대체 처리
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                          }}
+                        />
+                      )}
                       <button
                         className="image-remove"
                         onClick={(e) => {
@@ -360,7 +450,7 @@ export default function UploadForm() {
           <input
             type="file"
             id="file-upload"
-            accept="image/*"
+            accept="image/*,video/*"
             multiple
             onChange={handleFileChange}
             style={{ display: 'none' }}

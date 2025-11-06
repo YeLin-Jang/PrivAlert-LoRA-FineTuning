@@ -24,6 +24,7 @@ export default function MyPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [editingSettings, setEditingSettings] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -91,18 +92,26 @@ export default function MyPage() {
   };
 
   const handleSaveSettings = async () => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !filteringSettings) {
+      setError('로그인이 필요하거나 필터링 설정을 불러올 수 없습니다');
+      return;
+    }
 
     try {
       setSaving(true);
       setError(null);
+      setSuccessMessage(null);
 
-      // filteringSettings가 없으면 빈 객체로 초기화
-      const detectionOptions = filteringSettings?.detection_options || {};
+      // detection_options 추출
+      const detectionOptions = filteringSettings.detection_options || {};
       
       const updatedSettings = await userApi.updateFilteringSettings(detectionOptions);
       setFilteringSettings(updatedSettings);
       setEditingSettings(false);
+      setSuccessMessage('필터링 설정이 성공적으로 저장되었습니다');
+      
+      // 3초 후 성공 메시지 제거
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : '설정 저장 중 오류가 발생했습니다');
     } finally {
@@ -213,6 +222,17 @@ export default function MyPage() {
                   </div>
                 )}
               </div>
+
+              {error && (
+                <div className="error-message" style={{ marginTop: '15px', marginBottom: '15px' }}>
+                  {error}
+                </div>
+              )}
+              {successMessage && (
+                <div className="success-message" style={{ marginTop: '15px', marginBottom: '15px', color: '#22c55e', backgroundColor: '#d1fae5', padding: '12px 16px', borderRadius: '6px', border: '1px solid #86efac' }}>
+                  {successMessage}
+                </div>
+              )}
 
               <div className="settings-content">
                 {ALLOWED_OPTIONS && ALLOWED_OPTIONS.length > 0 ? (

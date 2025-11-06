@@ -172,14 +172,14 @@ def create_app(config_name=None):
         if flask_env == "production":
             raise
         else:
-            # 개발 환경에서는 경고만 출력하고 계속 진행 (더미 데이터 사용 가능)
+            # 개발 환경에서는 경고만 출력하고 계속 진행
             app.logger.warning("개발 환경: 데이터베이스 연결 실패했지만 계속 진행합니다")
     
     # Rate Limiter 설정
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,
-        default_limits=["200 per day", "50 per hour"],
+        default_limits=["1000 per hour", "100 per minute"],  # 완화: 시간당 1000회, 분당 100회
         storage_uri="memory://"  # 개발 환경 (프로덕션에서는 Redis 사용 권장)
     )
     
@@ -234,31 +234,32 @@ def create_app(config_name=None):
                 "default-src 'self'; "
                 "script-src 'self'; "
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-                "img-src 'self' data:; "
+                "img-src 'self' data: blob:; "
                 "font-src 'self' data: https://fonts.gstatic.com; "
                 "connect-src 'self'; "
                 "frame-ancestors 'none'; "
                 "base-uri 'self'; "
                 "form-action 'self'; "
                 "object-src 'none'; "
-                "media-src 'none'; "
+                "media-src 'self' blob:; "
                 "worker-src 'none'; "
                 "manifest-src 'self'; "
                 "upgrade-insecure-requests"
             )
         else:
             # 일반 페이지용 CSP 정책
-            # 보안: 와일드카드 제거, 'self'와 data:만 허용 (외부 이미지가 필요하면 특정 도메인 명시)
+            # 보안: blob: URL 허용 (로컬 파일 미리보기용)
             csp = (
                 "default-src 'self'; "
                 "script-src 'self'; "
                 "style-src 'self' 'unsafe-inline'; "
-                "img-src 'self' data:; "
+                "img-src 'self' data: blob:; "
                 "font-src 'self' data:; "
                 "connect-src 'self'; "
                 "frame-ancestors 'none'; "
                 "base-uri 'self'; "
-                "form-action 'self'"
+                "form-action 'self'; "
+                "media-src 'self' blob:"
             )
         
         response.headers['Content-Security-Policy'] = csp
@@ -474,9 +475,6 @@ def create_app(config_name=None):
     app.register_blueprint(secure_upload_bp, url_prefix="/api/v1")  
     app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")
     app.register_blueprint(user_bp, url_prefix="/api/v1/user")
-    # 더미 사용자 라우트 (인증 없이 접근 가능)
-    from app.routes.dummy_user_routes import dummy_user_bp
-    app.register_blueprint(dummy_user_bp, url_prefix="/api/v1")
     
     # 보안: 인증 관련 엔드포인트에 더 엄격한 Rate Limiting 적용 (라우트 등록 후)
     try:
@@ -488,12 +486,20 @@ def create_app(config_name=None):
         # 라우트가 아직 등록되지 않은 경우 조용히 무시
         pass
     
-    # 보안: 비밀번호 확인 및 변경 엔드포인트에 Rate Limiting 적용
+    # 보안: 인증된 사용자 API 엔드포인트에 대해 더 관대한 Rate Limiting 적용
+    # 인증된 사용자는 브루트포스 공격 위험이 낮고, 정상적인 사용 활동을 방해하지 않도록 설정
     try:
-        # 비밀번호 확인: 분당 5회 제한 (브루트포스 공격 방지)
-        limiter.limit("5 per minute")(dummy_user_bp.view_functions['verify_demo_password'])
-        # 비밀번호 변경: 5분에 3회 제한 (브루트포스 공격 방지)
-        limiter.limit("3 per 5 minutes")(dummy_user_bp.view_functions['change_demo_password'])
+        # 사용자 필터링 설정 조회/수정: 분당 30회 제한 (정상적인 사용 활동 허용)
+        if 'get_filtering_settings' in user_bp.view_functions:
+            limiter.limit("30 per minute")(user_bp.view_functions['get_filtering_settings'])
+        if 'update_filtering_settings' in user_bp.view_functions:
+            limiter.limit("30 per minute")(user_bp.view_functions['update_filtering_settings'])
+        # 사용자 정보 조회: 분당 60회 제한
+        if 'get_user_info' in user_bp.view_functions:
+            limiter.limit("60 per minute")(user_bp.view_functions['get_user_info'])
+        # 수정 기록 조회: 분당 30회 제한
+        if 'get_revision_history' in user_bp.view_functions:
+            limiter.limit("30 per minute")(user_bp.view_functions['get_revision_history'])
     except (KeyError, AttributeError):
         # 라우트가 아직 등록되지 않은 경우 조용히 무시
         pass
