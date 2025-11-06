@@ -515,8 +515,17 @@ def update_profile():
                 expiry_hours=24
             )
             
-            # TODO: 이메일 전송
-            # send_verification_email(user.email, token_plaintext)
+            # 이메일 변경 인증 메일 전송
+            verification_url = f"{request.host_url.rstrip('/')}/api/v1/auth/verify?token={token_plaintext}"
+            try:
+                from app.services.email_service import EmailService
+                email_sent = EmailService.send_verification_email(new_email, token_plaintext, verification_url)
+                if email_sent:
+                    logger.info(f"이메일 변경 인증 메일 전송 성공: {new_email}")
+                else:
+                    logger.warning(f"이메일 변경 인증 메일 전송 실패: {new_email}")
+            except Exception as e:
+                logger.error(f"이메일 변경 인증 메일 전송 중 오류: {e}", exc_info=True)
             
             db.session.commit()
             
@@ -599,6 +608,9 @@ def change_password():
         
         # 현재 비밀번호 확인
         if not user.check_password(current_password):
+            ip = get_client_ip()
+            # 보안: 비밀번호 변경 실패 로그 기록
+            logger.warning(f"비밀번호 변경 실패 (현재 비밀번호 불일치): user_id={user.id}, ip={ip}")
             return jsonify({
                 "success": False,
                 "error": "현재 비밀번호가 올바르지 않습니다",
@@ -631,12 +643,14 @@ def change_password():
         
         db.session.commit()
         
-        logger.info(f"비밀번호 변경 성공: {user.email}")
+        ip = get_client_ip()
+        # 보안: 비밀번호 변경 성공 로그 기록
+        logger.warning(f"비밀번호 변경 성공: user_id={user.id}, email={user.email[:3] if user.email else 'unknown'}..., ip={ip}")
         
         # 감사 로그
         AuditLog.log_password_change(
             user_id=user.id,
-            ip_address=get_client_ip(),
+            ip_address=ip,
             user_agent=get_user_agent()
         )
         
@@ -874,14 +888,15 @@ def delete_account():
         # 계정 삭제 요청
         user.request_deletion()
         
-        logger.info(f"계정 삭제 요청: {user.email}")
-        
         # 감사 로그
+        ip = get_client_ip()
         AuditLog.log_account_deletion(
             user_id=user.id,
-            ip_address=get_client_ip(),
+            ip_address=ip,
             user_agent=get_user_agent()
         )
+        # 보안: 계정 삭제 요청 로그 기록
+        logger.warning(f"계정 삭제 요청: user_id={user.id}, email={user.email[:3] if user.email else 'unknown'}..., ip={ip}")
         
         return jsonify({
             "success": True,

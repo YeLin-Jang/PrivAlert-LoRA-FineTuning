@@ -1,12 +1,12 @@
 """
 입력값 정제 유틸리티
-보안: XSS, SQL 인젝션 방지, 입력값 검증 및 정제
+XSS 방지, SQL 인젝션 방지, 입력값 검증 및 정제
 """
 import re
 import html
 from typing import Optional
 
-# 보안: 허용되지 않은 문자 패턴
+# XSS 방지: 허용되지 않은 문자 패턴
 UNSAFE_CHARS = re.compile(r'[<>"\']')
 SQL_INJECTION_PATTERNS = [
     re.compile(r'(?i)(union|select|insert|update|delete|drop|create|alter|exec|execute)'),
@@ -19,8 +19,8 @@ SQL_INJECTION_PATTERNS = [
 
 def sanitize_string(input_str: str, max_length: Optional[int] = None) -> str:
     """
-    문자열 정제 (XSS 방지)
-    보안: HTML 특수문자 이스케이프
+    문자열 정제
+    XSS 방지: HTML 특수문자 이스케이프
     
     Args:
         input_str: 정제할 문자열
@@ -32,11 +32,11 @@ def sanitize_string(input_str: str, max_length: Optional[int] = None) -> str:
     if not isinstance(input_str, str):
         return ""
     
-    # 보안: 길이 제한
+    # DoS 방지: 길이 제한
     if max_length and len(input_str) > max_length:
         input_str = input_str[:max_length]
     
-    # 보안: HTML 이스케이프
+    # XSS 방지: HTML 이스케이프
     sanitized = html.escape(input_str)
     
     return sanitized
@@ -45,7 +45,7 @@ def sanitize_string(input_str: str, max_length: Optional[int] = None) -> str:
 def validate_no_sql_injection(input_str: str) -> tuple[bool, Optional[str]]:
     """
     SQL 인젝션 패턴 검증
-    보안: SQL 인젝션 시도 감지
+    SQL 인젝션 방지: SQL 인젝션 시도 감지
     
     Args:
         input_str: 검증할 문자열

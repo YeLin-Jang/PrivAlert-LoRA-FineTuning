@@ -25,7 +25,7 @@ class OCRService:
             # 한국어(ko)와 영어(en) 지원
             # GPU 사용 가능 시 자동으로 GPU 사용, 없으면 CPU 사용
             reader = easyocr.Reader(['ko', 'en'], gpu=False)
-            logger.info("EasyOCR 리더 초기화 완료")
+            # 초기화 완료 (로그 제거)
             return reader
         except Exception as e:
             logger.error(f"EasyOCR 초기화 오류: {str(e)}")

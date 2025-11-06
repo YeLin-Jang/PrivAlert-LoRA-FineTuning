@@ -41,6 +41,7 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
+    nickname = db.Column(db.String(50), nullable=True)  # 별명 (이메일 대신 표시용)
     
     # 이메일 검증
     email_verified = db.Column(db.Boolean, default=False, nullable=False)
@@ -331,6 +332,7 @@ class User(db.Model):
         data = {
             'id': self.id,
             'email': self.email,
+            'nickname': self.nickname,  # 별명 추가
             'email_verified': self.email_verified,
             'email_verified_at': self.email_verified_at.isoformat() if self.email_verified_at else None,
             'mfa_enabled': self.mfa_enabled,
@@ -360,9 +362,19 @@ class User(db.Model):
         return User.query.filter_by(email=email.lower().strip(), is_deleted=False).first()
     
     @staticmethod
+    def find_by_username(username: str) -> Optional['User']:
+        """
+        사용자명으로 사용자 검색 (더미 사용자용, email과 동일하게 처리)
+        보안: SQLAlchemy ORM 사용으로 SQL 인젝션 방지
+        """
+        # 더미 사용자는 email과 동일하게 처리 (username 필드가 없으므로)
+        return User.query.filter_by(email=username.lower().strip(), is_deleted=False).first()
+    
+    @staticmethod
     def create_user(email: str, password: str) -> 'User':
         """
         새 사용자 생성
+        보안: 이메일 인증 완료 전까지는 is_active=False로 설정
         """
         if User.find_by_email(email):
             raise ValueError("이미 등록된 이메일입니다")
@@ -371,7 +383,7 @@ class User(db.Model):
             email=email.lower().strip(),
             email_verified=False,
             mfa_enabled=False,
-            is_active=True,
+            is_active=False,  # 이메일 인증 완료 전까지 비활성화
             is_deleted=False
         )
         user.set_password(password)

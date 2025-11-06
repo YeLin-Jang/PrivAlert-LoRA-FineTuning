@@ -219,11 +219,19 @@ def analyze_content():
     if not valid_images and not text_input:
         return APIResponse.error("이미지 파일 또는 텍스트가 필요합니다", code=400)
     
-    # 보안: 텍스트 검증 (최대 3000자)
+    # 보안: 텍스트 검증 (최대 3000자) 및 XSS/SQL Injection 방지
     if text_input:
+        # 길이 검증
         is_valid, error_msg = validate_text_input(text_input, max_length=3000)
         if not is_valid:
             return APIResponse.error(error_msg or "텍스트 입력 검증 실패", code=400)
+        
+        # SQL Injection 패턴 검증
+        from app.utils.input_sanitizer import validate_no_sql_injection
+        is_safe, sql_error = validate_no_sql_injection(text_input)
+        if not is_safe:
+            logger.warning(f"SQL Injection 시도 감지: text_length={len(text_input)}, ip={request.remote_addr}")
+            return APIResponse.error("허용되지 않은 문자가 포함되어 있습니다", code=400)
     
     # 세션 ID 생성 또는 가져오기 (프론트엔드에서 전달 가능)
     session_id = request.form.get('session_id') or request.headers.get('X-Session-ID')
@@ -234,19 +242,58 @@ def analyze_content():
     blur_fingers = request.form.get('blur_fingers', 'true').lower() in ['true', '1', 'yes']
     show_faces = request.form.get('show_faces', 'false').lower() in ['true', '1', 'yes']
     
-    # 탐지 옵션 파라미터 (프론트엔드에서 전달) - 정형 데이터 + AI 탐지
-    detection_options = {
-        'phone': request.form.get('detect_phone', 'false').lower() in ['true', '1', 'yes'],
-        'rrn': request.form.get('detect_rrn', 'false').lower() in ['true', '1', 'yes'],
-        'passport': request.form.get('detect_passport', 'false').lower() in ['true', '1', 'yes'],
-        'ip_address': request.form.get('detect_ip_address', 'false').lower() in ['true', '1', 'yes'],
-        'email': request.form.get('detect_email', 'false').lower() in ['true', '1', 'yes'],
-        'account': request.form.get('detect_account', 'false').lower() in ['true', '1', 'yes'],
-        'school': request.form.get('detect_school', 'false').lower() in ['true', '1', 'yes'],
-        'workplace': request.form.get('detect_workplace', 'false').lower() in ['true', '1', 'yes'],
-        'name': request.form.get('detect_name', 'false').lower() in ['true', '1', 'yes'],
-        'address': request.form.get('detect_address', 'false').lower() in ['true', '1', 'yes']
+    # 탐지 옵션 파라미터 (로그인된 사용자는 DB에서, 비로그인은 요청에서)
+    # 기본값: 모두 False
+    default_detection_options = {
+        'phone': False,
+        'rrn': False,
+        'passport': False,
+        'ip_address': False,
+        'email': False,
+        'account': False,
+        'school': False,
+        'workplace': False,
+        'name': False,
+        'address': False,
+        'face': False,
+        'fingerprint': False,
+        'driverLicense': False,
+        'postalCode': False
     }
+    
+    detection_options = default_detection_options.copy()
+    
+    # 로그인된 사용자인 경우 DB에서 필터링 설정 가져오기
+    try:
+        from app.utils.decorators import login_required
+        from app.models.user import UserFilteringSettings
+        
+        # 세션 쿠키 확인
+        session_id = request.cookies.get('session_id')
+        if session_id:
+            from app.models.session import UserSession
+            session = UserSession.find_by_session_id(session_id)
+            if session and session.is_active and not session.is_expired():
+                user = session.user
+                if user and user.is_active:
+                    # 사용자 필터링 설정 조회
+                    settings = user.filtering_settings
+                    if settings:
+                        user_options = settings.get_detection_options()
+                        # DB에서 가져온 설정으로 업데이트
+                        for key in detection_options.keys():
+                            if key in user_options:
+                                detection_options[key] = user_options[key]
+                        logger.info(f"사용자 필터링 설정 사용: user_id={user.id}, options={detection_options}")
+    except Exception as e:
+        # 로그인 체크 실패 시 무시하고 기본값 사용
+        logger.debug(f"사용자 필터링 설정 로드 실패 (무시됨): {e}")
+    
+    # 프론트엔드에서 명시적으로 전달된 옵션이 있으면 우선 적용
+    for key in detection_options.keys():
+        form_value = request.form.get(f'detect_{key}', None)
+        if form_value is not None:
+            detection_options[key] = form_value.lower() in ['true', '1', 'yes']
     
     # 서비스 인스턴스 생성 (사용 가능한 것만)
     face_service = FaceDetectionService() if FACE_DETECTION_AVAILABLE else None
@@ -360,19 +407,23 @@ def analyze_content():
                 original_bytes = None
                 cleaned_bytes = None
             
-            # 얼굴 검출 (사용 가능한 경우만)
-            if face_service:
-                face_result = face_service.detect_faces(image_file, save_result=True, return_image=show_faces)
-                if show_faces and isinstance(face_result, tuple):
+            # 얼굴 검출 (사용자 선택에 따라)
+            if show_faces and face_service:
+                face_result = face_service.detect_faces(image_file, save_result=True, return_image=True)
+                if isinstance(face_result, tuple):
                     face_data, _ = face_result
                 else:
                     face_data = face_result
+            elif face_service:
+                # 얼굴 검출만 수행 (이미지 반환 안 함)
+                face_result = face_service.detect_faces(image_file, save_result=False, return_image=False)
+                face_data = face_result if isinstance(face_result, dict) else {"success": False}
             else:
                 face_data = {"success": False, "message": "얼굴 탐지 서비스를 사용할 수 없습니다 (OpenCV 미설치)"}
                 
             if face_data.get("success"):
                 all_face_count += face_data["count"]
-                result_url = face_data.get("result_image_url")
+                result_url = face_data.get("result_image_url") if show_faces else None
                 # URL에서 실제 파일 경로 계산하여 세션에 등록
                 if result_url:
                     # /data/results/face/... -> BASE_DATA_DIR/face/...
@@ -381,47 +432,73 @@ def analyze_content():
                     if os.path.exists(file_path):
                         register_file(session_id, file_path, BASE_DATA_DIR)
                 
-                face_results.append({
-                    "image_index": idx + 1,
-                    "filename": image_file.filename,
-                    "count": face_data["count"],
-                    "faces": face_data["faces"] if show_faces else None,
-                    "result_image_url": result_url
-                })
+                # 사용자가 얼굴 결과를 요청한 경우에만 상세 정보 포함
+                if show_faces:
+                    face_results.append({
+                        "image_index": idx + 1,
+                        "filename": image_file.filename,
+                        "count": face_data["count"],
+                        "faces": face_data.get("faces"),
+                        "result_image_url": result_url
+                    })
+                else:
+                    # 얼굴 수만 반환
+                    face_results.append({
+                        "image_index": idx + 1,
+                        "filename": image_file.filename,
+                        "count": face_data["count"]
+                    })
+                logger.info(f"얼굴 감지 성공: {face_data['count']}개, 상세 표시: {show_faces}")
             
-            # 손가락 검출 (항상 실행)
-            logger.info(f"손가락 감지 시작: blur_fingers={blur_fingers}")
-            hand_result = hand_service.detect_fingertips(image_file, save_preview=True, return_image=True)
-            
-            # hand_result가 튜플인지 딕셔너리인지 확인
-            if isinstance(hand_result, tuple):
-                hand_data, _ = hand_result
-            else:
-                hand_data = hand_result
+            # 손가락 검출 (사용자 선택에 따라)
+            if blur_fingers and hand_service:
+                logger.info(f"손가락 감지 시작: blur_fingers={blur_fingers}")
+                hand_result = hand_service.detect_fingertips(image_file, save_preview=True, return_image=True)
                 
-            logger.info(f"손가락 감지 결과: success={hand_data.get('success', False)}, count={hand_data.get('count', 0)}")
-                
-            if hand_data.get("success"):
-                all_finger_count += hand_data["count"]
-                result_url = hand_data.get("result_image_url")
-                # URL에서 실제 파일 경로 계산하여 세션에 등록
-                if result_url:
-                    # /data/results/hand/... -> BASE_DATA_DIR/hand/...
-                    rel_path = result_url.replace("/data/results/", "")
-                    file_path = os.path.join(BASE_DATA_DIR, rel_path)
-                    if os.path.exists(file_path):
-                        register_file(session_id, file_path, BASE_DATA_DIR)
-                
-                hand_results.append({
-                    "image_index": idx + 1,
-                    "filename": image_file.filename,
-                    "count": hand_data["count"],
-                    "fingers": hand_data["fingers"] if blur_fingers else None,
-                    "result_image_url": result_url
-                })
-                logger.info(f"손가락 감지 성공: {hand_data['count']}개, 이미지 URL: {result_url}")
-            else:
-                logger.warning(f"손가락 감지 실패: {hand_data}")
+                # hand_result가 튜플인지 딕셔너리인지 확인
+                if isinstance(hand_result, tuple):
+                    hand_data, _ = hand_result
+                else:
+                    hand_data = hand_result
+                    
+                logger.info(f"손가락 감지 결과: success={hand_data.get('success', False)}, count={hand_data.get('count', 0)}")
+                    
+                if hand_data.get("success"):
+                    all_finger_count += hand_data["count"]
+                    result_url = hand_data.get("result_image_url")
+                    # URL에서 실제 파일 경로 계산하여 세션에 등록
+                    if result_url:
+                        # /data/results/hand/... -> BASE_DATA_DIR/hand/...
+                        rel_path = result_url.replace("/data/results/", "")
+                        file_path = os.path.join(BASE_DATA_DIR, rel_path)
+                        if os.path.exists(file_path):
+                            register_file(session_id, file_path, BASE_DATA_DIR)
+                    
+                    hand_results.append({
+                        "image_index": idx + 1,
+                        "filename": image_file.filename,
+                        "count": hand_data["count"],
+                        "fingers": hand_data.get("fingers"),
+                        "result_image_url": result_url
+                    })
+                    logger.info(f"손가락 감지 성공: {hand_data['count']}개, 이미지 URL: {result_url}")
+                else:
+                    logger.warning(f"손가락 감지 실패: {hand_data}")
+            elif hand_service:
+                # 손가락 검출만 수행 (블러 처리 안 함)
+                hand_result = hand_service.detect_fingertips(image_file, save_preview=False, return_image=False)
+                if isinstance(hand_result, tuple):
+                    hand_data, _ = hand_result
+                else:
+                    hand_data = hand_result
+                if hand_data.get("success"):
+                    all_finger_count += hand_data["count"]
+                    hand_results.append({
+                        "image_index": idx + 1,
+                        "filename": image_file.filename,
+                        "count": hand_data["count"]
+                    })
+                    logger.info(f"손가락 감지 성공 (블러 없음): {hand_data['count']}개")
             
             # OCR 텍스트 추출 (파일 접근 충돌 방지를 위해 다른 방식 사용)
             try:
@@ -469,26 +546,66 @@ def analyze_content():
                 "items": sanitize_results
             }
         
-        # OCR 텍스트 결과 추가 (항상 포함)
+        # OCR 텍스트 결과 처리 (마스킹 결과 출력)
         logger.info(f"최종 OCR 텍스트 배열: {all_ocr_text} (개수: {len(all_ocr_text)})")
-        results["ocr_text"] = {
-            "texts": all_ocr_text,
-            "total_count": len(all_ocr_text),
-            "message": f"총 {len(all_ocr_text)}개 이미지에서 텍스트가 추출되었습니다" if all_ocr_text else "텍스트를 발견하지 못했습니다"
+        
+        # OCR 텍스트를 마스킹 처리
+        ocr_masked_texts = []
+        ocr_structured_data = {
+            "detected": False,
+            "total_count": 0,
+            "categories": {}
         }
+        
         if all_ocr_text:
-            text_input += "\n" + "\n".join(all_ocr_text)
+            # OCR 텍스트들을 하나로 합치기
+            ocr_combined = "\n".join(all_ocr_text)
+            active_filters = [key for key, value in detection_options.items() if value]
+            
+            # OCR 텍스트 마스킹 처리
+            ocr_filter_result = filter_service.filter_text(ocr_combined, use_replacements=True, filters=active_filters)
+            ocr_masked = ocr_filter_result.get("filtered_text", ocr_combined)
+            
+            # 마스킹된 텍스트를 다시 분리 (원래 형식 유지)
+            ocr_masked_lines = ocr_masked.split("\n")
+            ocr_masked_texts = ocr_masked_lines[:len(all_ocr_text)]
+            
+            # OCR 텍스트 탐지 결과
+            ocr_statistics = ocr_filter_result.get("overall_statistics", {})
+            ocr_structured_data = {
+                "detected": ocr_statistics.get("total_detected", 0) > 0,
+                "total_count": ocr_statistics.get("total_detected", 0),
+                "categories": {}
+            }
+            
+            # 필터별 결과를 카테고리로 변환
+            for filter_name, result in ocr_filter_result.get("filter_results", {}).items():
+                if result.get("success") and result.get("statistics", {}).get("total_detected", 0) > 0:
+                    ocr_structured_data["categories"][filter_name] = {
+                        "count": result["statistics"]["total_detected"],
+                        "items": result["detected_words"]
+                    }
+        
+        results["ocr_text"] = {
+            "original_texts": all_ocr_text,
+            "masked_texts": ocr_masked_texts,
+            "total_count": len(all_ocr_text),
+            "message": f"총 {len(all_ocr_text)}개 이미지에서 텍스트가 추출되었습니다" if all_ocr_text else "텍스트를 발견하지 못했습니다",
+            "structured_data": ocr_structured_data
+        }
     
-    # 텍스트 분석 (OCR 결과 + 직접 입력 텍스트) - 항상 포함
-    if text_input.strip():
+    # 직접 입력 텍스트 분석 (LLM 수정문장 생성)
+    original_text_input = text_input.strip()
+    if original_text_input:
         # 활성화된 필터 목록 생성
         active_filters = [key for key, value in detection_options.items() if value]
         logger.info(f"활성화된 탐지 필터: {active_filters}")
         
-        # 통합 필터 서비스 사용 (이름 탐지 포함)
-        filter_result = filter_service.filter_text(text_input.strip(), use_replacements=True, filters=active_filters)
+        # 직접 입력 텍스트 마스킹 (LLM 입력용)
+        filter_result = filter_service.filter_text(original_text_input, use_replacements=True, filters=active_filters)
+        masked_text = filter_result.get("filtered_text", original_text_input)
         
-        # 결과 처리
+        # 탐지 결과
         structured_data_result = {
             "detected": filter_result.get("overall_statistics", {}).get("total_detected", 0) > 0,
             "total_count": filter_result.get("overall_statistics", {}).get("total_detected", 0),
@@ -503,11 +620,28 @@ def analyze_content():
                     "items": result["detected_words"]
                 }
         
-        masked_text = filter_result.get("filtered_text", text_input.strip())
+        # LLM으로 수정문장 생성
+        llm_revised_text = original_text_input  # 기본값은 원문
+        try:
+            from app.services.llm_service import LLMService
+            llm_service = LLMService()
+            if structured_data_result.get("detected", False):
+                # 카테고리를 딕셔너리로 변환 (LLM 서비스 형식)
+                categories_dict = {cat: True for cat in structured_data_result.get("categories", {}).keys()}
+                llm_result = llm_service.suggest(masked_text, categories_dict, language="ko", tone="educational")
+                llm_revised_text = llm_result.get("revised_sentence", original_text_input)
+                logger.info(f"LLM 수정문장 생성 완료: {len(llm_revised_text)}자")
+            else:
+                llm_revised_text = original_text_input
+                logger.info("민감 정보 미탐지, LLM 수정문장 생성 생략")
+        except Exception as e:
+            logger.warning(f"LLM 수정문장 생성 실패: {e}, 원문 사용")
+            llm_revised_text = original_text_input
         
         results["text_analysis"] = {
-            "original_text": text_input.strip(),
-            "masked_text": masked_text,  # 마스킹된 텍스트 추가
+            "original_text": original_text_input,
+            "revised_text": llm_revised_text,  # LLM 수정문장
+            "masked_text": masked_text,  # 마스킹 결과 (참고용)
             "statistics": {},
             "structured_data": structured_data_result
         }
@@ -522,6 +656,7 @@ def analyze_content():
         # 텍스트가 없는 경우
         results["text_analysis"] = {
             "original_text": "",
+            "revised_text": "",
             "masked_text": "",
             "statistics": {},
             "message": "텍스트를 발견하지 못했습니다"

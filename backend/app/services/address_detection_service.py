@@ -50,7 +50,7 @@ class AddressDetectionService:
         })
         # SSL 검증 활성화 (보안)
         self.session.verify = True
-        logger.info("주소 탐지 서비스 초기화 완료 (Postcodify API 사용)")
+        # 초기화 완료 (로그 제거)
     
     def detect_addresses_in_text(self, text: str) -> List[Dict]:
         """

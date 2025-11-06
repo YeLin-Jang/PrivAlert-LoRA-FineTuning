@@ -1,7 +1,16 @@
 import os
 import logging
-import mimetypes
-from flask import Flask, jsonify, request, Response, send_file
+import warnings
+from flask import Flask, jsonify, request
+
+# TensorFlow/MediaPipe 경고 억제
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # ERROR만 출력
+warnings.filterwarnings('ignore', category=UserWarning)
+warnings.filterwarnings('ignore', message='.*TensorFlow.*')
+warnings.filterwarnings('ignore', message='.*MediaPipe.*')
+
+# APScheduler 로그 억제
+logging.getLogger('apscheduler').setLevel(logging.WARNING)
 from flasgger import Swagger
 from dotenv import load_dotenv
 from flask_cors import CORS
@@ -10,11 +19,10 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from app.utils.file_utils import ensure_dir
 from app.extensions.database import init_db, db
-from config import BASE_DATA_DIR, BASE_DIR
+from config import BASE_DATA_DIR
 
 # 환경변수 로드 (루트 디렉토리의 .env 파일)
 # 프로젝트 루트로 이동하여 .env 파일 찾기
-import sys
 from pathlib import Path
 root_dir = Path(__file__).parent.parent.parent  # backend/app/__init__.py -> 프로젝트 루트
 env_path = root_dir / '.env'
@@ -122,7 +130,7 @@ def create_app(config_name=None):
     app.config["JWT_COOKIE_HTTPONLY"] = True
     app.config["JWT_COOKIE_SAMESITE"] = "Strict"  # CSRF 공격 방지 (HTTP 환경에서는 Strict 권장)
     
-    jwt = JWTManager(app)
+    JWTManager(app)  # JWT 초기화 (변수 할당 불필요)
     
     # 데이터베이스 초기화
     # 보안: Docker 환경 감지 및 MySQL 호스트 설정
@@ -152,7 +160,14 @@ def create_app(config_name=None):
         init_db(app)
         app.logger.info("데이터베이스 연결 성공")
     except Exception as e:
-        app.logger.error(f"데이터베이스 연결 실패: {e}")
+        error_msg = str(e)
+        app.logger.error(
+            f"데이터베이스 연결 실패: {error_msg} | "
+            f"호스트: {os.getenv('MYSQL_HOST', 'localhost')}:{os.getenv('MYSQL_PORT', '3306')} | "
+            f"DB: {os.getenv('MYSQL_DATABASE', 'privalert')} | "
+            f"사용자: {os.getenv('MYSQL_USER', 'privalert_user')} | "
+            f"해결: MySQL 서버 실행 확인 및 .env 파일 확인"
+        )
         # 보안: 프로덕션 환경에서는 데이터베이스 연결 실패 시 중단
         if flask_env == "production":
             raise
@@ -167,6 +182,16 @@ def create_app(config_name=None):
         default_limits=["200 per day", "50 per hour"],
         storage_uri="memory://"  # 개발 환경 (프로덕션에서는 Redis 사용 권장)
     )
+    
+    # 관리자 경로 접근 보호 (일반 사용자 차단)
+    @app.before_request
+    def protect_admin_routes():
+        """관리자 경로 접근 보호 - 일반 사용자 차단"""
+        from app.utils.admin_route_protection import check_admin_route_access
+        
+        is_blocked, error_response, status_code = check_admin_route_access()
+        if is_blocked:
+            return error_response, status_code
     
     # 보안 헤더 설정
     @app.after_request
@@ -415,8 +440,7 @@ def create_app(config_name=None):
     from app.routes.admin_auth_routes import admin_auth_bp
     from app.routes.admin_routes import admin_bp
     from app.routes.secure_upload_routes import secure_upload_bp
-    from app.routes.video_processing_routes import video_bp
-    from app.routes.user_auth_routes import user_auth_bp
+    from app.routes.auth_routes import auth_bp
     from app.routes.user_routes import user_bp
     
     # NER 라우트 등록 (선택적 - 모델이 없는 경우에도 앱이 실행되도록)
@@ -429,6 +453,16 @@ def create_app(config_name=None):
     except Exception as e:
         app.logger.warning(f"NER routes not available (Error): {e}")
 
+    # 비디오 처리 라우트 등록 (선택적 - easyocr 등 의존성이 없는 경우에도 앱이 실행되도록)
+    try:
+        from app.routes.video_processing_routes import video_bp
+        app.register_blueprint(video_bp, url_prefix="/api/v1/video")
+        app.logger.info("Video processing routes registered successfully")
+    except ImportError as e:
+        app.logger.warning(f"Video processing routes not available (ImportError): {e}")
+    except Exception as e:
+        app.logger.warning(f"Video processing routes not available (Error): {e}")
+
     
     app.register_blueprint(integrated_filter_bp, url_prefix="/api/v1/filter")
     app.register_blueprint(integrated_analysis_bp, url_prefix="/api/v1")
@@ -438,8 +472,7 @@ def create_app(config_name=None):
     app.register_blueprint(admin_auth_bp, url_prefix="/api/v1/admin/auth")
     app.register_blueprint(admin_bp, url_prefix="/api/v1/admin")
     app.register_blueprint(secure_upload_bp, url_prefix="/api/v1")  
-    app.register_blueprint(video_bp, url_prefix="/api/v1/video")
-    app.register_blueprint(user_auth_bp, url_prefix="/api/v1/user/auth")
+    app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")
     app.register_blueprint(user_bp, url_prefix="/api/v1/user")
     # 더미 사용자 라우트 (인증 없이 접근 가능)
     from app.routes.dummy_user_routes import dummy_user_bp
@@ -448,13 +481,12 @@ def create_app(config_name=None):
     # 보안: 인증 관련 엔드포인트에 더 엄격한 Rate Limiting 적용 (라우트 등록 후)
     try:
         # 회원가입: 분당 5회 제한
-        limiter.limit("5 per minute")(user_auth_bp.view_functions['register'])
+        limiter.limit("5 per minute")(auth_bp.view_functions['signup'])
         # 로그인: 분당 10회 제한 (브루트포스 공격 방지)
-        limiter.limit("10 per minute")(user_auth_bp.view_functions['login'])
-        app.logger.info("사용자 인증 Rate Limiter 적용 완료")
-    except (KeyError, AttributeError) as e:
-        # 라우트가 아직 등록되지 않은 경우 경고만 출력
-        app.logger.warning(f"Rate Limiter 적용 실패: {e}")
+        limiter.limit("10 per minute")(auth_bp.view_functions['login'])
+    except (KeyError, AttributeError):
+        # 라우트가 아직 등록되지 않은 경우 조용히 무시
+        pass
     
     # 보안: 비밀번호 확인 및 변경 엔드포인트에 Rate Limiting 적용
     try:
@@ -462,29 +494,29 @@ def create_app(config_name=None):
         limiter.limit("5 per minute")(dummy_user_bp.view_functions['verify_demo_password'])
         # 비밀번호 변경: 5분에 3회 제한 (브루트포스 공격 방지)
         limiter.limit("3 per 5 minutes")(dummy_user_bp.view_functions['change_demo_password'])
-        app.logger.info("비밀번호 확인 및 변경 Rate Limiter 적용 완료")
-    except (KeyError, AttributeError) as e:
-        app.logger.warning(f"비밀번호 확인 및 변경 Rate Limiter 적용 실패: {e}")
+    except (KeyError, AttributeError):
+        # 라우트가 아직 등록되지 않은 경우 조용히 무시
+        pass
     
     # 데이터베이스 초기화 (테이블 생성 및 기본 계정 생성)
     with app.app_context():
         try:
             from app.utils.db_init import init_database
             init_database()
-        except Exception as e:
-            app.logger.warning(f"데이터베이스 초기화 실패 (건너뜀): {e}")
+        except Exception:
+            # db_init.py에서 이미 상세 로그를 출력하므로 여기서는 조용히 처리
             # 개발 환경에서는 데이터베이스 없이도 실행 가능
+            pass
         
-        # 파일 자동 정리 시스템 초기화
+        # 파일 자동 정리 시스템 초기화 (조용히)
         try:
             from app.utils.file_cleanup import load_session_tracker, start_cleanup_thread
             load_session_tracker(BASE_DATA_DIR)
             start_cleanup_thread(BASE_DATA_DIR)
-            app.logger.info("파일 자동 정리 시스템 초기화 완료")
-        except Exception as e:
-            app.logger.warning(f"파일 자동 정리 시스템 초기화 실패: {e}")
+        except Exception:
+            pass
         
-        # CSRF 토큰 자동 정리 시스템 초기화
+        # CSRF 토큰 자동 정리 시스템 초기화 (조용히)
         try:
             import threading
             import time
@@ -495,20 +527,18 @@ def create_app(config_name=None):
                     try:
                         time.sleep(3600)  # 1시간마다 정리
                         cleanup_expired_tokens()
-                    except Exception as e:
-                        app.logger.error(f"CSRF 토큰 정리 오류: {e}")
+                    except Exception:
+                        pass
             
             thread = threading.Thread(target=csrf_cleanup_loop, daemon=True)
             thread.start()
-            app.logger.info("CSRF 토큰 자동 정리 시스템 초기화 완료")
-        except Exception as e:
-            app.logger.warning(f"CSRF 토큰 자동 정리 시스템 초기화 실패: {e}")
+        except Exception:
+            pass
         
-        # 백그라운드 파일 정리 작업 초기화
+        # 백그라운드 파일 정리 작업 초기화 (조용히)
         try:
             from app.tasks.cleanup_worker import start_cleanup_scheduler
             scheduler = start_cleanup_scheduler()
-            app.logger.info("백그라운드 파일 정리 작업 초기화 완료")
             
             # 토큰 및 세션 정리 작업 추가
             from apscheduler.triggers.interval import IntervalTrigger
@@ -518,20 +548,16 @@ def create_app(config_name=None):
             def cleanup_tokens():
                 """만료된 토큰 정리"""
                 try:
-                    deleted = Token.cleanup_expired_tokens()
-                    if deleted > 0:
-                        app.logger.info(f"만료된 토큰 {deleted}개 정리 완료")
-                except Exception as e:
-                    app.logger.error(f"토큰 정리 오류: {e}")
+                    Token.cleanup_expired_tokens()
+                except Exception:
+                    pass
             
             def cleanup_sessions():
                 """만료된 세션 정리"""
                 try:
-                    deleted = UserSession.cleanup_expired_sessions()
-                    if deleted > 0:
-                        app.logger.info(f"만료된 세션 {deleted}개 정리 완료")
-                except Exception as e:
-                    app.logger.error(f"세션 정리 오류: {e}")
+                    UserSession.cleanup_expired_sessions()
+                except Exception:
+                    pass
             
             # 1시간마다 토큰 정리
             scheduler.add_job(
@@ -552,8 +578,8 @@ def create_app(config_name=None):
             # 앱 종료 시 스케줄러 종료
             import atexit
             atexit.register(lambda: scheduler.shutdown())
-        except Exception as e:
-            app.logger.warning(f"백그라운드 파일 정리 작업 초기화 실패: {e}")  
+        except Exception:
+            pass  
     
     # 루트 경로
     @app.route("/")
@@ -627,6 +653,17 @@ def create_app(config_name=None):
         # 보안: X-Content-Type-Options 헤더 명시적 설정 (이중 보장)
         response.headers['X-Content-Type-Options'] = 'nosniff'
         return response, 413
+    
+    @app.errorhandler(429)
+    def rate_limit_exceeded(error):
+        """Rate Limiting 위반 핸들러 (브루트포스 공격 방지)"""
+        # 보안: Rate Limiting 위반 로그 기록
+        ip = request.remote_addr if request else 'unknown'
+        path = request.path if request else 'unknown'
+        app.logger.warning(f"Rate Limiting 위반 (브루트포스 공격 가능성): ip={ip}, path={path}")
+        response = jsonify({"success": False, "error": "요청 횟수가 초과되었습니다. 잠시 후 다시 시도해주세요", "code": 429})
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        return response, 429
     
     @app.errorhandler(500)
     def internal_server_error(error):

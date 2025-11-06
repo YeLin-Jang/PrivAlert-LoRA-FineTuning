@@ -10,6 +10,7 @@ const createApiInstance = (): AxiosInstance => {
   const instance = axios.create({
     baseURL: API_CONFIG.BASE_URL,
     timeout: API_CONFIG.TIMEOUT,
+    withCredentials: true, // 쿠키 전송을 위해 필요 (세션 인증)
     headers: {
       'Content-Type': 'application/json',
     },
@@ -55,12 +56,15 @@ export interface LoginResponse {
     id: number;
     username: string;
     email: string;
+    nickname?: string;  // 별명 추가
     is_active: boolean;
   };
   token: string;
 }
 
-export interface RegisterResponse extends LoginResponse {}
+export interface RegisterResponse extends LoginResponse {
+  verification_code?: string; // 개발 모드에서만 제공
+}
 
 export interface FilteringSettings {
   id: number;
@@ -77,6 +81,8 @@ export interface RevisionHistory {
   categories: string[];
   created_at: string;
 }
+
+export type UserResponse = LoginResponse['user'];
 
 export const userApi = {
   /**
@@ -102,33 +108,126 @@ export const userApi = {
     username: string,
     email: string,
     password: string,
+    nickname?: string,
     detectionOptions?: Record<string, boolean>
   ): Promise<RegisterResponse> {
-    const response = await api.post('/api/v1/user/auth/register', {
-      username,
-      email,
-      password,
-      detection_options: detectionOptions || {},
-    });
+    try {
+      // 백엔드 API는 /api/v1/auth/signup 사용 (API_CONFIG.BASE_URL 사용)
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/v1/auth/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          email,
+          password,
+          nickname: nickname || undefined,
+        }),
+      });
 
-    if (!response.data?.success) {
-      throw new Error(response.data?.error || '회원가입 실패');
+      if (!response.ok) {
+        let errorMessage = '회원가입에 실패했습니다';
+        
+        try {
+          const errorText = await response.text();
+          if (errorText) {
+            const errorData = JSON.parse(errorText);
+            errorMessage = errorData.error || errorMessage;
+          }
+        } catch (parseError) {
+          // JSON 파싱 실패 시 상태 코드로 메시지 생성
+          if (response.status === 404) {
+            errorMessage = '서버를 찾을 수 없습니다. 백엔드 서버가 실행 중인지 확인하세요.';
+          } else if (response.status === 500) {
+            errorMessage = '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+          } else if (response.status === 409) {
+            errorMessage = '이미 등록된 이메일입니다';
+          }
+        }
+        
+        throw new Error(errorMessage);
+      }
+
+      let data: any;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        console.error('회원가입 응답 파싱 실패:', jsonError);
+        throw new Error('서버 응답을 처리할 수 없습니다');
+      }
+
+      if (!data || !data.success) {
+        throw new Error(data?.error || '회원가입 실패');
+      }
+
+      // 응답 형식 변환 (백엔드 응답에 맞춤)
+      // 백엔드 응답: { success: true, data: { email } }
+      // 실무: 인증 코드는 이메일로만 전송되므로 응답에 포함되지 않음
+      const responseData = data.data || {};
+
+      return {
+        user: {
+          id: 0, // 이메일 인증 완료 전까지는 user_id가 없음
+          username: email.split('@')[0],
+          email: responseData.email || email,
+          is_active: false, // 이메일 인증 전까지 비활성화
+        },
+        token: '', // 이제 토큰 대신 코드 사용
+        verification_code: undefined, // 실무: 코드는 응답에 포함하지 않음
+      };
+    } catch (error: any) {
+      // 네트워크 에러 등 기타 에러 처리
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('네트워크 오류가 발생했습니다. 인터넷 연결을 확인하세요.');
+      }
+      throw error;
     }
-
-    return response.data.data;
   },
 
   /**
    * 현재 사용자 정보 조회
    */
-  async getCurrentUser() {
-    const response = await api.get('/api/v1/user/auth/me');
+  async getCurrentUser(): Promise<UserResponse> {
+    const response = await api.get('/api/v1/user/me');
 
     if (!response.data?.success) {
       throw new Error(response.data?.error || '사용자 정보 조회 실패');
     }
 
-    return response.data.data.user;
+    // 백엔드 응답 형식: { success: true, data: { ...user data... } }
+    const userData = response.data.data;
+    
+    // userData가 이미 UserResponse 형식인 경우
+    if (userData.email) {
+      return userData;
+    }
+    
+    // userData가 객체이고 내부에 user 필드가 있는 경우
+    if (userData.user) {
+      return userData.user;
+    }
+    
+    // 그 외 경우 userData를 그대로 반환
+    return userData;
+  },
+
+  /**
+   * 로그아웃
+   */
+  async logout(): Promise<void> {
+    try {
+      await api.post('/api/v1/auth/logout');
+    } catch (error) {
+      // 로그아웃 API 호출 실패해도 토큰은 제거
+      console.error('로그아웃 API 호출 실패:', error);
+    } finally {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user_email');
+      localStorage.removeItem('user_access_token');
+      localStorage.removeItem('csrf_token');
+      localStorage.removeItem('session_id');
+    }
   },
 
   /**
@@ -194,5 +293,43 @@ export const userApi = {
 
     return response.data.data.record;
   },
+};
+
+/**
+ * 이메일 인증 (FastAPI 백엔드 사용)
+ */
+export const verifyEmail = async (data: {
+  email: string;
+  verification_code: string;
+}): Promise<void> => {
+  // FastAPI 백엔드 URL (환경 변수 또는 기본값)
+  const fastApiUrl = import.meta.env.VITE_FASTAPI_BASE_URL || 'http://localhost:8000';
+  
+  try {
+    const response = await axios.post(
+      `${fastApiUrl}/api/v1/verify-email`,
+      {
+        email: data.email,
+        verification_code: data.verification_code,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: 30000,
+      }
+    );
+
+    // FastAPI는 성공 시 200 상태 코드 반환
+    if (response.status !== 200) {
+      throw new Error(response.data?.detail || '이메일 인증 실패');
+    }
+  } catch (error: any) {
+    // FastAPI 에러 응답 형식 처리
+    if (error.response?.data?.detail) {
+      throw new Error(error.response.data.detail);
+    }
+    throw error;
+  }
 };
 

@@ -67,7 +67,7 @@ def load_session_tracker(base_dir: str) -> None:
                 for file_path in files:
                     _file_sessions[file_path] = session_id
         
-        logger.info(f"세션 추적 파일 로드 완료: {len(_session_files)}개 세션")
+        # 세션 추적 파일 로드 완료 (로그 제거)
     except Exception as e:
         logger.error(f"세션 추적 파일 로드 실패: {e}")
 
@@ -145,7 +145,7 @@ def delete_file_safe(file_path: str) -> bool:
     try:
         if os.path.exists(file_path):
             os.remove(file_path)
-            logger.info(f"파일 삭제 완료: {file_path}")
+            # 파일 삭제 완료 (로그 제거)
             return True
     except Exception as e:
         logger.error(f"파일 삭제 실패: {file_path}, 오류: {e}")
@@ -173,7 +173,7 @@ def cleanup_session_files(session_id: str, base_dir: str) -> int:
             deleted_count += 1
     
     save_session_tracker(base_dir)
-    logger.info(f"세션 파일 정리 완료: {session_id}, 삭제된 파일: {deleted_count}개")
+    # 세션 파일 정리 완료 (로그 제거)
     return deleted_count
 
 
@@ -222,15 +222,13 @@ def start_cleanup_thread(base_dir: str) -> None:
         while True:
             try:
                 time.sleep(CLEANUP_INTERVAL_SECONDS)
-                deleted = cleanup_old_files(base_dir)
-                if deleted > 0:
-                    logger.info(f"자동 정리 완료: {deleted}개 파일 삭제")
+                cleanup_old_files(base_dir)
             except Exception as e:
                 logger.error(f"자동 정리 오류: {e}")
     
     thread = threading.Thread(target=cleanup_loop, daemon=True)
     thread.start()
-    logger.info("파일 자동 정리 스레드 시작")
+    # 파일 자동 정리 스레드 시작 (로그 제거)
 
 
 def get_session_files(session_id: str) -> List[str]:

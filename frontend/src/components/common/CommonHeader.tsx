@@ -3,11 +3,13 @@
  * 모든 페이지에서 사용되는 통일된 헤더
  */
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useUserAuth } from '../../contexts/UserAuthContext';
 import './CommonHeader.css';
 
 export default function CommonHeader() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { isAuthenticated, user, logout } = useUserAuth();
 
   const handleHome = () => {
     navigate('/');
@@ -22,24 +24,27 @@ export default function CommonHeader() {
   };
 
   const handleLogin = () => {
-    // 로그인 페이지로 이동 (추후 구현)
-    console.log('로그인 클릭');
+    navigate('/auth/login');
   };
 
   const handleSignup = () => {
-    // 회원가입 페이지로 이동 (추후 구현)
-    console.log('회원가입 클릭');
+    navigate('/auth/signup');
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/');
+    } catch (error) {
+      console.error('로그아웃 오류:', error);
+    }
   };
 
   return (
     <header className="common-header">
-      <div className="header-left">
-        <div className="logo" onClick={handleHome} style={{ cursor: 'pointer' }}>
-          <span className="logo-icon">🔔</span>
-          <span className="logo-text">PrivAlert</span>
-        </div>
+      <div className="header-logo">
+        <span className="logo-text">PrivAlert</span>
       </div>
-      
       <nav className="header-nav">
         <button 
           className={`nav-link primary ${location.pathname === '/' ? 'active' : ''}`}
@@ -62,12 +67,23 @@ export default function CommonHeader() {
       </nav>
 
       <div className="header-right">
-        <button className="login-button" onClick={handleLogin}>
-          로그인
-        </button>
-        <button className="signup-button" onClick={handleSignup}>
-          회원가입
-        </button>
+        {isAuthenticated ? (
+          <>
+            <span className="user-greeting">안녕하세요, {user?.nickname || user?.email || '사용자'}님</span>
+            <button className="logout-button" onClick={handleLogout}>
+              로그아웃
+            </button>
+          </>
+        ) : (
+          <>
+            <button className="login-button" onClick={handleLogin}>
+              로그인
+            </button>
+            <button className="signup-button" onClick={handleSignup}>
+              회원가입
+            </button>
+          </>
+        )}
       </div>
     </header>
   );

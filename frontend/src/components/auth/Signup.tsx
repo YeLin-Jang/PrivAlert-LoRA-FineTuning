@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { register } from '../../services/userApi';
+import { userApi } from '../../services/userApi';
+import CommonHeader from '../common/CommonHeader';
 import './Auth.css';
 
 const Signup: React.FC = () => {
   const [email, setEmail] = useState('');
+  const [nickname, setNickname] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [verificationCode, setVerificationCode] = useState('');
   const navigate = useNavigate();
 
   const validatePassword = (pwd: string): string | null => {
@@ -49,20 +50,33 @@ const Signup: React.FC = () => {
       return;
     }
 
+    // 별명 검증
+    if (!nickname || nickname.trim().length < 2) {
+      setError('별명은 최소 2자 이상이어야 합니다');
+      return;
+    }
+
+    if (nickname.trim().length > 20) {
+      setError('별명은 최대 20자까지 가능합니다');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const response = await register({ email, password });
+      // 이메일에서 username 생성 (이메일 주소의 @ 앞 부분)
+      const username = email.split('@')[0];
+      
+      const response = await userApi.register(username, email, password, nickname.trim());
       setSuccess(true);
       
-      // 개발 모드에서 인증번호가 응답에 포함된 경우
-      if (response.verification_code) {
-        setVerificationCode(response.verification_code);
-      }
-      
-      // 이메일 인증 페이지로 이동
+      // 이메일 인증 페이지로 이동 (실무: 코드는 이메일로만 전송)
       setTimeout(() => {
-        navigate('/auth/verify', { state: { email } });
+        navigate('/auth/verify', { 
+          state: { 
+            email
+          } 
+        });
       }, 2000);
     } catch (err: any) {
       setError(err.message || '회원가입에 실패했습니다');
@@ -73,16 +87,19 @@ const Signup: React.FC = () => {
 
   return (
     <div className="auth-container">
-      <div className="auth-box">
-        <h1>회원가입</h1>
+      <CommonHeader />
+      <div className="auth-content">
+        <div className="auth-box">
+          <div className="auth-logo-section">
+            <div className="auth-logo-icon">🔒</div>
+            <div className="auth-logo-text">PrivAlert</div>
+            <div className="auth-slogan">당신의 개인정보 보호 분석 시스템</div>
+          </div>
+          <h1>회원가입</h1>
         {success && (
           <div className="success-message">
-            회원가입이 완료되었습니다. 이메일을 확인하여 인증번호를 입력하세요.
-            {verificationCode && (
-              <div className="debug-info">
-                <strong>개발 모드:</strong> 인증번호: {verificationCode}
-              </div>
-            )}
+            회원가입 요청이 접수되었습니다.<br />
+            이메일로 전송된 인증 코드를 확인하여 인증을 완료해주세요.
           </div>
         )}
         {error && <div className="error-message">{error}</div>}
@@ -97,6 +114,19 @@ const Signup: React.FC = () => {
               required
               disabled={loading || success}
               placeholder="example@email.com"
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="nickname">별명</label>
+            <input
+              id="nickname"
+              type="text"
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              required
+              disabled={loading || success}
+              placeholder="사용할 별명을 입력하세요 (2-20자)"
+              maxLength={20}
             />
           </div>
           <div className="form-group">
@@ -132,6 +162,7 @@ const Signup: React.FC = () => {
         </form>
         <div className="auth-link">
           이미 계정이 있으신가요? <Link to="/auth/login">로그인</Link>
+        </div>
         </div>
       </div>
     </div>

@@ -1,0 +1,187 @@
+/**
+ * 메인페이지 스타일
+ * PrivAlert 파란색 컨셉에 맞는 깔끔하고 모던한 디자인
+ */
+.homepage {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #1e3a8a 100%);
+  display: flex;
+  flex-direction: column;
+}
+
+/* 메인 콘텐츠 */
+.homepage-main {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 40px;
+  overflow: hidden;
+}
+
+.main-content-card {
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 64px 48px;
+  max-width: 600px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  z-index: 2;
+  position: relative;
+}
+
+.brand-section {
+  margin-bottom: 32px;
+}
+
+.brand-icon {
+  font-size: 4rem;
+  margin-bottom: 16px;
+}
+
+.brand-name {
+  font-size: 3rem;
+  font-weight: 700;
+  margin-bottom: 12px;
+  color: #1e3a8a;
+  letter-spacing: -1px;
+  line-height: 1.1;
+}
+
+.concept-slogan {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: #3b82f6;
+  margin: 0;
+  letter-spacing: -0.2px;
+}
+
+.service-description {
+  font-size: 1rem;
+  font-weight: 400;
+  color: #4b5563;
+  line-height: 1.8;
+  letter-spacing: -0.2px;
+  margin: 0;
+}
+
+.background-decoration {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.decoration-box {
+  position: absolute;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+}
+
+.decoration-1 {
+  width: 120px;
+  height: 120px;
+  top: 15%;
+  left: 8%;
+  animation: float 20s infinite ease-in-out;
+}
+
+.decoration-2 {
+  width: 80px;
+  height: 80px;
+  top: 60%;
+  right: 12%;
+  animation: float 25s infinite ease-in-out;
+  animation-delay: -5s;
+}
+
+.decoration-3 {
+  width: 100px;
+  height: 100px;
+  bottom: 20%;
+  left: 15%;
+  animation: float 30s infinite ease-in-out;
+  animation-delay: -10s;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px) translateX(0px);
+    opacity: 0.6;
+  }
+  33% {
+    transform: translateY(-20px) translateX(10px);
+    opacity: 0.8;
+  }
+  66% {
+    transform: translateY(10px) translateX(-10px);
+    opacity: 0.4;
+  }
+}
+
+/* 반응형 */
+@media (max-width: 768px) {
+  .homepage-main {
+    padding: 60px 20px;
+  }
+
+  .main-content-card {
+    padding: 48px 32px;
+  }
+
+  .brand-icon {
+    font-size: 3rem;
+  }
+
+  .brand-name {
+    font-size: 2.5rem;
+  }
+
+  .concept-slogan {
+    font-size: 1rem;
+  }
+
+  .service-description {
+    font-size: 0.95rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .homepage-main {
+    padding: 40px 16px;
+  }
+
+  .main-content-card {
+    padding: 40px 24px;
+  }
+
+  .brand-icon {
+    font-size: 2.5rem;
+    margin-bottom: 12px;
+  }
+
+  .brand-name {
+    font-size: 2rem;
+  }
+
+  .concept-slogan {
+    font-size: 0.95rem;
+  }
+
+  .service-description {
+    font-size: 0.9rem;
+  }
+
+  .decoration-box {
+    display: none;
+  }
+}
+

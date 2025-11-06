@@ -14,15 +14,15 @@ logger = get_logger(__name__)
 
 dummy_user_bp = Blueprint('dummy_user', __name__)
 
-# 더미 사용자명 (하드코딩, 보안을 위해)
-DUMMY_USERNAME = 'demo_user'
+# 더미 사용자 이메일 (하드코딩, 보안을 위해)
+DUMMY_EMAIL = 'demo@privalert.com'
 
 
 def get_dummy_user():
     """더미 사용자 조회"""
-    user = User.find_by_username(DUMMY_USERNAME)
+    user = User.find_by_email(DUMMY_EMAIL)
     if not user:
-        logger.error(f"더미 사용자를 찾을 수 없습니다: {DUMMY_USERNAME}")
+        logger.error(f"더미 사용자를 찾을 수 없습니다: {DUMMY_EMAIL}")
         return None
     return user
 
