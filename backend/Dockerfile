@@ -27,7 +27,9 @@ COPY . .
 
 # 보안: 필요한 디렉토리 생성 및 권한 설정
 RUN mkdir -p /app/data/results && \
-    chown -R appuser:appuser /app
+    mkdir -p /home/appuser/.cache && \
+    chown -R appuser:appuser /app && \
+    chown -R appuser:appuser /home/appuser
 
 # 보안: 비root 사용자로 전환
 USER appuser
@@ -36,6 +38,10 @@ USER appuser
 ENV FLASK_APP=wsgi.py
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+# Hugging Face 캐시 디렉토리 설정 (appuser 홈 디렉토리 사용, 쓰기 가능)
+ENV HF_HOME=/home/appuser/.cache/huggingface
+ENV TRANSFORMERS_CACHE=/home/appuser/.cache/huggingface
+ENV HF_DATASETS_CACHE=/home/appuser/.cache/huggingface/datasets
 
 # 포트 노출
 EXPOSE 5000

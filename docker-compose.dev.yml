@@ -2,8 +2,6 @@
 # 보안: 개발 환경에서만 사용, 프로덕션에서는 사용하지 마세요
 # 사용법: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
 
-version: '3.8'
-
 services:
   mysql:
     ports:

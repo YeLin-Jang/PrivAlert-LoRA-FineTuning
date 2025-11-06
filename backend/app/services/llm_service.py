@@ -64,6 +64,9 @@ class LLMService:
     """LLM 기반 교육/수정 제안 서비스 (Claude API 사용, 키 없으면 폴백)"""
 
     def __init__(self) -> None:
+        import logging
+        self.logger = logging.getLogger(__name__)
+        
         # 환경변수가 로드되지 않았을 수 있으므로 다시 로드 시도
         try:
             from dotenv import load_dotenv
@@ -73,6 +76,7 @@ class LLMService:
             env_path = root_dir / '.env'
             if env_path.exists():
                 load_dotenv(dotenv_path=env_path, override=False)
+                self.logger.info(f".env 파일 로드 완료: {env_path}")
             else:
                 # 루트 디렉토리에서 찾기 시도
                 backend_dir = Path(__file__).parent.parent  # backend/app/services/llm_service.py -> backend
@@ -80,26 +84,29 @@ class LLMService:
                 env_path2 = root_dir2 / '.env'
                 if env_path2.exists():
                     load_dotenv(dotenv_path=env_path2, override=False)
+                    self.logger.info(f".env 파일 로드 완료: {env_path2}")
+                else:
+                    self.logger.warning(f".env 파일을 찾을 수 없습니다. 경로: {env_path}, {env_path2}")
         except Exception as e:
-            print(f"[WARNING] .env 파일 로드 중 오류 (무시됨): {e}")
+            self.logger.warning(f".env 파일 로드 중 오류 (무시됨): {e}")
         
         self.api_key = os.getenv("ANTHROPIC_API_KEY")
         self.model = CLAUDE_MODEL
         
         # 디버깅: 환경변수 확인
         if self.api_key:
-            print(f"[DEBUG] ANTHROPIC_API_KEY 발견됨 (길이: {len(self.api_key)}자)")
-            print(f"[DEBUG] API 키 앞 10자: {self.api_key[:10]}...")
+            self.logger.info(f"ANTHROPIC_API_KEY 발견됨 (길이: {len(self.api_key)}자)")
+            self.logger.debug(f"API 키 앞 10자: {self.api_key[:10]}...")
         else:
-            print("[WARNING] ANTHROPIC_API_KEY 환경변수를 찾을 수 없습니다.")
-            print("[DEBUG] 환경변수 확인:")
-            print(f"  - os.getenv('ANTHROPIC_API_KEY'): {os.getenv('ANTHROPIC_API_KEY')}")
+            self.logger.error("ANTHROPIC_API_KEY 환경변수를 찾을 수 없습니다.")
+            self.logger.debug("환경변수 확인:")
+            self.logger.debug(f"  - os.getenv('ANTHROPIC_API_KEY'): {os.getenv('ANTHROPIC_API_KEY')}")
             # 다른 환경변수로 확인
             test_env = os.getenv("FLASK_SECRET_KEY")
             if test_env:
-                print(f"  - FLASK_SECRET_KEY는 로드됨 (길이: {len(test_env)}자)")
+                self.logger.debug(f"  - FLASK_SECRET_KEY는 로드됨 (길이: {len(test_env)}자)")
             else:
-                print("  - FLASK_SECRET_KEY도 로드되지 않음 (환경변수 로드 문제 가능성)")
+                self.logger.warning("  - FLASK_SECRET_KEY도 로드되지 않음 (환경변수 로드 문제 가능성)")
         
         # Anthropic Claude 클라이언트 초기화 (키가 있을 때만)
         if self.api_key:
@@ -107,19 +114,17 @@ class LLMService:
                 from anthropic import Anthropic
                 # Anthropic 클라이언트 초기화 (proxies 파라미터 제외)
                 self.client = Anthropic(api_key=self.api_key)
-                print(f"[DEBUG] Claude 클라이언트 초기화 완료: 모델={self.model}")
+                self.logger.info(f"Claude 클라이언트 초기화 완료: 모델={self.model}")
             except ImportError:
-                print("Warning: anthropic package not installed. Install with: pip install anthropic")
+                self.logger.error("anthropic package가 설치되지 않았습니다. pip install anthropic 실행 필요")
                 self.client = None
             except Exception as e:
-                print(f"Warning: Claude 클라이언트 초기화 실패: {e}")
-                import traceback
-                traceback.print_exc()
+                self.logger.error(f"Claude 클라이언트 초기화 실패: {e}", exc_info=True)
                 self.client = None
         else:
-            print("[WARNING] ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다.")
-            print("[WARNING] Claude API를 사용할 수 없어 폴백 모드를 사용합니다.")
-            print("[WARNING] 프롬프팅이 작동하지 않습니다. LLM 기능을 사용하려면 .env 파일에 ANTHROPIC_API_KEY를 설정하세요.")
+            self.logger.error("ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다.")
+            self.logger.error("Claude API를 사용할 수 없어 폴백 모드를 사용합니다.")
+            self.logger.error("프롬프팅이 작동하지 않습니다. LLM 기능을 사용하려면 .env 파일에 ANTHROPIC_API_KEY를 설정하세요.")
             self.client = None
 
     def _cache_key(self, masked_text: str, categories: dict, language: str, style_name: str) -> str:
@@ -171,23 +176,23 @@ class LLMService:
                 }
 
             # 교육파트: LLM 사용 (Claude API)
-            print(f"[DEBUG] 교육파트 로딩 시작: categories={list(categories.keys()) if categories else []}")
+            self.logger.info(f"교육파트 로딩 시작: categories={list(categories.keys()) if categories else []}")
             items = []
             revised_from_llm = None  # LLM에서 가져온 revised_sentence 저장
             
             if self.client:
-                print(f"[DEBUG] Claude 클라이언트 사용 가능, LLM 호출 시작")
+                self.logger.info("Claude 클라이언트 사용 가능, LLM 호출 시작")
                 try:
                     # LLM을 사용해서 교육 항목 생성
                     prompt = self._build_prompt(masked_text, categories, language, tone)
-                    print(f"[DEBUG] 프롬프트 생성 완료, 프롬프트 길이: {len(prompt)}자")
-                    print(f"[DEBUG] 프롬프트 마스킹된 텍스트: {masked_text}")
-                    print(f"[DEBUG] 프롬프트 카테고리: {list(categories.keys())}")
-                    print(f"[DEBUG] Claude API 호출 시작...")
+                    self.logger.debug(f"프롬프트 생성 완료, 프롬프트 길이: {len(prompt)}자")
+                    self.logger.debug(f"프롬프트 마스킹된 텍스트: {masked_text}")
+                    self.logger.debug(f"프롬프트 카테고리: {list(categories.keys())}")
+                    self.logger.info("Claude API 호출 시작...")
                     
                     result = self._call_claude(prompt)
-                    print(f"[DEBUG] Claude API 응답 받음, result 타입: {type(result)}")
-                    print(f"[DEBUG] Claude API 응답 키: {list(result.keys()) if isinstance(result, dict) else 'None'}")
+                    self.logger.debug(f"Claude API 응답 받음, result 타입: {type(result)}")
+                    self.logger.debug(f"Claude API 응답 키: {list(result.keys()) if isinstance(result, dict) else 'None'}")
                     
                     if result and "items" in result and len(result["items"]) > 0:
                         items = result["items"]
@@ -202,36 +207,34 @@ class LLMService:
                                     "예시 문장을 복사하지 마세요"
                                 ]
                             ):
-                                print(f"[DEBUG] LLM으로 revised_sentence도 함께 생성됨: {revised_from_llm[:100]}...")
+                                self.logger.info(f"LLM으로 revised_sentence도 함께 생성됨: {revised_from_llm[:100]}...")
                             else:
-                                print(f"[WARNING] revised_sentence가 예시 문장으로 보임, 무시하고 2-pass 사용: {revised_from_llm[:100]}...")
+                                self.logger.warning(f"revised_sentence가 예시 문장으로 보임, 무시하고 2-pass 사용: {revised_from_llm[:100]}...")
                                 revised_from_llm = None
                         else:
-                            print(f"[WARNING] LLM 응답에 revised_sentence가 없음. result 키: {list(result.keys())}")
-                            print(f"[DEBUG] LLM 응답 전체: {json.dumps(result, ensure_ascii=False, indent=2)[:500]}...")
-                        print(f"[DEBUG] LLM으로 교육파트 생성 완료: {len(items)}개 항목")
+                            self.logger.warning(f"LLM 응답에 revised_sentence가 없음. result 키: {list(result.keys())}")
+                            self.logger.debug(f"LLM 응답 전체: {json.dumps(result, ensure_ascii=False, indent=2)[:500]}...")
+                        self.logger.info(f"LLM으로 교육파트 생성 완료: {len(items)}개 항목")
                     else:
-                        print("[WARNING] LLM 응답에 items가 없음, 폴백 사용")
-                        print(f"[DEBUG] LLM 응답 내용: {json.dumps(result, ensure_ascii=False, indent=2)[:500] if isinstance(result, dict) else str(result)[:500]}")
+                        self.logger.warning("LLM 응답에 items가 없음, 폴백 사용")
+                        self.logger.debug(f"LLM 응답 내용: {json.dumps(result, ensure_ascii=False, indent=2)[:500] if isinstance(result, dict) else str(result)[:500]}")
                         items = self._fallback_items(categories)
                 except Exception as e:
-                    print(f"[ERROR] LLM 교육파트 생성 실패, 폴백 사용: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    self.logger.error(f"LLM 교육파트 생성 실패, 폴백 사용: {e}", exc_info=True)
                     items = self._fallback_items(categories)
             else:
                 # 클라이언트가 없으면 레퍼런스 또는 폴백 사용
-                print(f"[WARNING] Claude 클라이언트가 없습니다! ANTHROPIC_API_KEY 환경변수를 확인하세요.")
-                print(f"[WARNING] 폴백 아이템을 사용합니다.")
+                self.logger.warning("Claude 클라이언트가 없습니다! ANTHROPIC_API_KEY 환경변수를 확인하세요.")
+                self.logger.warning("폴백 아이템을 사용합니다.")
                 try:
                     items = self._educ_reference(categories)
                     if not items:
                         items = self._fallback_items(categories)
-                        print(f"[DEBUG] 폴백 아이템 사용: {len(items)}개 항목")
+                        self.logger.debug(f"폴백 아이템 사용: {len(items)}개 항목")
                 except Exception as e:
-                    print(f"[ERROR] 레퍼런스 로딩 실패, 폴백 사용: {e}")
+                    self.logger.error(f"레퍼런스 로딩 실패, 폴백 사용: {e}", exc_info=True)
                     items = self._fallback_items(categories)
-                    print(f"[DEBUG] 폴백 아이템 사용: {len(items)}개 항목")
+                    self.logger.debug(f"폴백 아이템 사용: {len(items)}개 항목")
             
             if not items:
                 # 최종 폴백: general 항목 하나
@@ -242,43 +245,41 @@ class LLMService:
                     "tips": ["목적 적합성 재검토", "필요 최소한만 공유"]
                 }]
             
-            print(f"[DEBUG] 교육파트 로딩 완료: {len(items)}개 항목")
+            self.logger.info(f"교육파트 로딩 완료: {len(items)}개 항목")
 
             # revised_sentence 생성 (LLM에서 가져온 것이 있으면 사용, 없으면 2패스로 생성)
-            print(f"[DEBUG] revised_sentence 생성 시작. revised_from_llm: {revised_from_llm}")
+            self.logger.debug(f"revised_sentence 생성 시작. revised_from_llm: {revised_from_llm}")
             if revised_from_llm:
                 revised = revised_from_llm
-                print(f"[DEBUG] LLM 응답에서 revised_sentence 사용: {revised[:100]}...")
+                self.logger.debug(f"LLM 응답에서 revised_sentence 사용: {revised[:100]}...")
             elif self.client:
-                print(f"[DEBUG] revised_from_llm이 없으므로 2-pass pipeline 사용")
+                self.logger.debug("revised_from_llm이 없으므로 2-pass pipeline 사용")
                 try:
                     revised = self._rewrite_then_critique(masked_text, style)
-                    print(f"[DEBUG] 2-pass pipeline 완료: {revised[:100] if revised else 'None'}...")
+                    self.logger.debug(f"2-pass pipeline 완료: {revised[:100] if revised else 'None'}...")
                     if not revised or revised == masked_text:
-                        print("[WARNING] 2-pass pipeline이 원문과 동일, 폴백 사용")
+                        self.logger.warning("2-pass pipeline이 원문과 동일, 폴백 사용")
                         revised = self._generate_revised_sentence(masked_text)
-                        print(f"[DEBUG] 폴백 revised_sentence 생성: {revised[:100]}...")
+                        self.logger.debug(f"폴백 revised_sentence 생성: {revised[:100]}...")
                 except Exception as e:
-                    print(f"[ERROR] 2-pass pipeline failed, using fallback: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    self.logger.error(f"2-pass pipeline failed, using fallback: {e}", exc_info=True)
                     try:
                         revised = self._generate_revised_sentence(masked_text)
-                        print(f"[DEBUG] 예외 후 폴백 revised_sentence 생성: {revised[:100]}...")
+                        self.logger.debug(f"예외 후 폴백 revised_sentence 생성: {revised[:100]}...")
                     except Exception as e2:
-                        print(f"[ERROR] 폴백 생성도 실패: {e2}")
+                        self.logger.error(f"폴백 생성도 실패: {e2}", exc_info=True)
                         revised = masked_text
             else:
                 # 클라이언트 없으면 폴백
-                print(f"[DEBUG] Claude 클라이언트 없음, 폴백 사용")
+                self.logger.debug("Claude 클라이언트 없음, 폴백 사용")
                 try:
                     revised = self._generate_revised_sentence(masked_text)
-                    print(f"[DEBUG] 폴백 revised_sentence 생성: {revised[:100]}...")
+                    self.logger.debug(f"폴백 revised_sentence 생성: {revised[:100]}...")
                 except Exception as e:
-                    print(f"[ERROR] 폴백 생성 실패: {e}")
+                    self.logger.error(f"폴백 생성 실패: {e}", exc_info=True)
                     revised = masked_text
             
-            print(f"[DEBUG] 최종 revised_sentence: {revised[:100]}...")
+            self.logger.debug(f"최종 revised_sentence: {revised[:100]}...")
 
             # 모든 item에 revised_sentence 채우기
             for it in items:
@@ -288,7 +289,7 @@ class LLMService:
             try:
                 self._cache_set(key, {"items": items, "revised_sentence": revised})
             except Exception as e:
-                print(f"[WARNING] 캐시 저장 실패: {e}")
+                self.logger.warning(f"캐시 저장 실패: {e}")
             
             return {
                 "items": items,
@@ -299,9 +300,7 @@ class LLMService:
             }
         except Exception as e:
             # 최종 안전망: 모든 것이 실패해도 기본 응답 반환
-            print(f"[CRITICAL] suggest() 전체 실패: {e}")
-            import traceback
-            traceback.print_exc()
+            self.logger.error(f"suggest() 전체 실패: {e}", exc_info=True)
             return {
                 "items": [{
                     "category": "general",
@@ -335,21 +334,19 @@ class LLMService:
 """.strip()
         
         try:
-            print(f"[DEBUG] Rewrite pass 시작: {masked_text[:50]}...")
+            self.logger.debug(f"Rewrite pass 시작: {masked_text[:50]}...")
             data = self._call_claude_json_raw(prompt, max_tokens=400, use_high=True)
             if not isinstance(data, dict):
-                print(f"[WARNING] Rewrite pass에서 dict가 아닌 응답: {type(data)}")
+                self.logger.warning(f"Rewrite pass에서 dict가 아닌 응답: {type(data)}")
                 return masked_text
             draft = data.get("draft", "").strip()
             if not draft:
-                print("[WARNING] Rewrite pass에서 빈 draft 반환")
+                self.logger.warning("Rewrite pass에서 빈 draft 반환")
                 return masked_text
-            print(f"[DEBUG] Rewrite pass 완료: {draft[:50]}...")
+            self.logger.debug(f"Rewrite pass 완료: {draft[:50]}...")
             return draft
         except Exception as e:
-            print(f"[ERROR] Rewrite pass failed: {e}")
-            import traceback
-            traceback.print_exc()
+            self.logger.error(f"Rewrite pass failed: {e}", exc_info=True)
             return masked_text
 
     def _critique_pass(self, original: str, draft: str, style: dict) -> dict:
@@ -382,34 +379,32 @@ class LLMService:
 """.strip()
         
         try:
-            print(f"[DEBUG] Critique pass 시작: draft={draft[:50]}...")
+            self.logger.debug(f"Critique pass 시작: draft={draft[:50]}...")
             data = self._call_claude_json_raw(prompt, max_tokens=500, use_high=True)
             if not isinstance(data, dict):
-                print(f"[WARNING] Critique pass에서 dict가 아닌 응답: {type(data)}")
+                self.logger.warning(f"Critique pass에서 dict가 아닌 응답: {type(data)}")
                 return {"final": draft, "violations": []}
             final = data.get("final", "").strip()
             violations = data.get("violations", [])
             if not isinstance(violations, list):
                 violations = []
             if not final:
-                print("[WARNING] Critique pass에서 빈 final 반환, draft 사용")
+                self.logger.warning("Critique pass에서 빈 final 반환, draft 사용")
                 final = draft
-            print(f"[DEBUG] Critique pass 완료: final={final[:50]}..., violations={len(violations)}")
+            self.logger.debug(f"Critique pass 완료: final={final[:50]}..., violations={len(violations)}")
             return {"final": final, "violations": violations}
         except Exception as e:
-            print(f"[ERROR] Critique pass failed: {e}")
-            import traceback
-            traceback.print_exc()
+            self.logger.error(f"Critique pass failed: {e}", exc_info=True)
             return {"final": draft, "violations": []}
 
     def _rewrite_then_critique(self, masked_text: str, style: dict) -> str:
         """2단계 파이프라인: Rewrite → Critique"""
-        print(f"[DEBUG] 2-pass pipeline 시작: {masked_text[:50]}...")
+        self.logger.debug(f"2-pass pipeline 시작: {masked_text[:50]}...")
         
         draft = self._rewrite_pass(masked_text, style)
         # draft가 비면 초안으로 원문을 그대로 넣고 시도
         if not draft or draft == masked_text:
-            print("[WARNING] Rewrite pass가 원문과 동일하거나 비어있음")
+            self.logger.warning("Rewrite pass가 원문과 동일하거나 비어있음")
             draft = masked_text
         
         res = self._critique_pass(masked_text, draft, style)
@@ -417,13 +412,13 @@ class LLMService:
         
         # 위배사항이 있으면 한 번 더 수정 루프(최대 1회)
         if res.get("violations"):
-            print(f"[DEBUG] 위배사항 발견, 재수정 시도: {res.get('violations')}")
+            self.logger.debug(f"위배사항 발견, 재수정 시도: {res.get('violations')}")
             res2 = self._critique_pass(masked_text, final, style)
             if res2.get("final"):
                 final = res2["final"]
         
         result = final if final else masked_text
-        print(f"[DEBUG] 2-pass pipeline 완료: {result[:50]}...")
+        self.logger.debug(f"2-pass pipeline 완료: {result[:50]}...")
         return result
 
     def _generate_revised_sentence(self, masked_text: str) -> str:

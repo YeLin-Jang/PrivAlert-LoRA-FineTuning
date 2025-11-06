@@ -1,16 +1,20 @@
 """
 일반 사용자 모델 (HTTP 전용 환경)
-보안: Argon2id 비밀번호 해싱, MFA 지원, 세션 추적
+보안: Argon2id 비밀번호 해싱, MFA 지원, 세션 추적, 필터링 설정 및 수정 기록 관리
 """
 from datetime import datetime, timedelta
 from app.extensions.database import db
 from typing import Optional
 import secrets
 import hashlib
+import logging
 import pyotp
 import qrcode
 import io
 import base64
+import json
+
+logger = logging.getLogger(__name__)
 
 # Argon2id는 requirements.txt에 추가 필요
 try:
@@ -22,7 +26,6 @@ except ImportError:
     # Fallback to werkzeug (bcrypt) if argon2 not available
     from werkzeug.security import generate_password_hash, check_password_hash
 
-
 class User(db.Model):
     """
     일반 사용자 모델
@@ -31,12 +34,14 @@ class User(db.Model):
     - MFA 지원 (TOTP)
     - 세션 추적 및 관리
     - 이메일 검증 필수
+    - SQLAlchemy ORM 사용으로 SQL 인젝션 방지
     """
     __tablename__ = 'users'
     
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
+    nickname = db.Column(db.String(50), nullable=True)  # 별명 (이메일 대신 표시용)
     
     # 이메일 검증
     email_verified = db.Column(db.Boolean, default=False, nullable=False)
@@ -62,6 +67,23 @@ class User(db.Model):
     last_login = db.Column(db.DateTime, nullable=True)
     last_login_ip = db.Column(db.String(45), nullable=True)  # IPv6 지원
     last_password_change = db.Column(db.DateTime, nullable=True)
+    
+    # 관계: 필터링 설정 (1:1)
+    filtering_settings = db.relationship(
+        'UserFilteringSettings', 
+        backref='user', 
+        uselist=False, 
+        cascade='all, delete-orphan'
+    )
+    
+    # 관계: 수정 기록 (1:N)
+    revision_histories = db.relationship(
+        'RevisionHistory',
+        backref='user',
+        lazy='dynamic',
+        cascade='all, delete-orphan',
+        order_by='desc(RevisionHistory.created_at)'
+    )
     
     # 보안: 인덱스 추가
     __table_args__ = (
@@ -310,6 +332,7 @@ class User(db.Model):
         data = {
             'id': self.id,
             'email': self.email,
+            'nickname': self.nickname,  # 별명 추가
             'email_verified': self.email_verified,
             'email_verified_at': self.email_verified_at.isoformat() if self.email_verified_at else None,
             'mfa_enabled': self.mfa_enabled,
@@ -339,9 +362,19 @@ class User(db.Model):
         return User.query.filter_by(email=email.lower().strip(), is_deleted=False).first()
     
     @staticmethod
+    def find_by_username(username: str) -> Optional['User']:
+        """
+        사용자명으로 사용자 검색 (더미 사용자용, email과 동일하게 처리)
+        보안: SQLAlchemy ORM 사용으로 SQL 인젝션 방지
+        """
+        # 더미 사용자는 email과 동일하게 처리 (username 필드가 없으므로)
+        return User.query.filter_by(email=username.lower().strip(), is_deleted=False).first()
+    
+    @staticmethod
     def create_user(email: str, password: str) -> 'User':
         """
         새 사용자 생성
+        보안: 이메일 인증 완료 전까지는 is_active=False로 설정
         """
         if User.find_by_email(email):
             raise ValueError("이미 등록된 이메일입니다")
@@ -350,7 +383,7 @@ class User(db.Model):
             email=email.lower().strip(),
             email_verified=False,
             mfa_enabled=False,
-            is_active=True,
+            is_active=False,  # 이메일 인증 완료 전까지 비활성화
             is_deleted=False
         )
         user.set_password(password)
@@ -358,4 +391,122 @@ class User(db.Model):
     
     def __repr__(self):
         return f'<User {self.email}>'
+
+
+class UserFilteringSettings(db.Model):
+    """
+    사용자 필터링 설정 모델
+    보안: 민감 정보는 저장하지 않음
+    """
+    __tablename__ = 'user_filtering_settings'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, unique=True, index=True)
+    
+    # 필터링 옵션 (JSON으로 저장)
+    # 보안: 민감 정보가 아닌 설정만 저장
+    detection_options = db.Column(db.Text, nullable=False, default='{}')
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    def set_detection_options(self, options: dict) -> None:
+        """
+        탐지 옵션 설정
+        보안: JSON 직렬화 전 검증
+        """
+        # 허용된 옵션 키만 저장
+        allowed_keys = {
+            'face', 'fingerprint', 'phone', 'rrn', 'passport', 'ip_address',
+            'email', 'account', 'school', 'workplace', 'name', 'address',
+            'driverLicense', 'postalCode'
+        }
+        
+        # 필터링: 허용된 키만 저장
+        filtered_options = {k: bool(v) for k, v in options.items() if k in allowed_keys}
+        self.detection_options = json.dumps(filtered_options, ensure_ascii=False)
+    
+    def get_detection_options(self) -> dict:
+        """
+        탐지 옵션 가져오기
+        """
+        try:
+            return json.loads(self.detection_options)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+    
+    def to_dict(self) -> dict:
+        """
+        설정을 딕셔너리로 변환
+        """
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'detection_options': self.get_detection_options(),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+    
+    def __repr__(self):
+        return f'<UserFilteringSettings user_id={self.user_id}>'
+
+
+class RevisionHistory(db.Model):
+    """
+    LLM 수정 문장 기록 모델
+    보안: 민감 데이터는 저장하지 않고 수정된 문장만 저장
+    """
+    __tablename__ = 'revision_histories'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    
+    # 보안: 원본 텍스트는 저장하지 않음, 수정된 문장만 저장
+    revised_sentence = db.Column(db.Text, nullable=False)
+    
+    # 카테고리 정보 (어떤 종류의 민감 정보가 수정되었는지)
+    categories = db.Column(db.Text, nullable=True)  # JSON 형식
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    
+    # 보안: 인덱스 추가 (조회 성능 향상)
+    __table_args__ = (
+        db.Index('idx_user_created', 'user_id', 'created_at'),
+    )
+    
+    def set_categories(self, categories: list) -> None:
+        """
+        카테고리 설정
+        """
+        if categories:
+            self.categories = json.dumps(categories, ensure_ascii=False)
+        else:
+            self.categories = None
+    
+    def get_categories(self) -> list:
+        """
+        카테고리 가져오기
+        """
+        if not self.categories:
+            return []
+        try:
+            return json.loads(self.categories)
+        except (json.JSONDecodeError, TypeError):
+            return []
+    
+    def to_dict(self) -> dict:
+        """
+        기록을 딕셔너리로 변환
+        보안: 민감 정보 제외
+        """
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'revised_sentence': self.revised_sentence,
+            'categories': self.get_categories(),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+    
+    def __repr__(self):
+        return f'<RevisionHistory id={self.id} user_id={self.user_id}>'
 

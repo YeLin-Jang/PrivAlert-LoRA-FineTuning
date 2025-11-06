@@ -5,6 +5,5 @@
 """
 
 from .schools import school_list
-from .addresses import address_list
 
-__all__ = ['school_list', 'address_list']
+__all__ = ['school_list']

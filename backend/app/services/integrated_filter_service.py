@@ -18,7 +18,7 @@ class IntegratedFilterService:
         # 정형 데이터 마스킹 서비스 사용
         self.mask_service = mask_regex_service
         
-        logger.info("통합 필터링 서비스 초기화 완료")
+        # 초기화 완료 (로그 제거)
     
     def filter_text(self, text: str, use_replacements: bool = True, filters: List[str] = None) -> Dict:
         """

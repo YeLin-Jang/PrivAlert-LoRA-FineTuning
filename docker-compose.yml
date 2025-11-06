@@ -48,7 +48,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: ${DOCKER_USERNAME:-honghhj66}/privalert:1.0
+    image: ${DOCKER_USERNAME:-honghhj66}/privalert-backend:1.0
     container_name: privalert-backend
     restart: unless-stopped
     env_file:
@@ -68,7 +68,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       
       # API 키 (보안: 환경 변수로 관리)
-      GOOGLE_CLOUD_CREDENTIALS_JSON: ${GOOGLE_CLOUD_CREDENTIALS_JSON}
+      # GOOGLE_CLOUD_CREDENTIALS_JSON은 더 이상 사용하지 않음 (EasyOCR 사용)
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       
       # JWT 설정
@@ -100,7 +100,7 @@ services:
       mysql:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health", "||", "exit", "1"]
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
       timeout: 10s
       retries: 3

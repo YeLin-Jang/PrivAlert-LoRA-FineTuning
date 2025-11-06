@@ -4,8 +4,8 @@ import logging
 from typing import Dict, List
 
 from ..data.schools import school_list
-from ..data.addresses import address_list
 from .workplace_detection_service import workplace_detection_service
+from .address_detection_service import address_detection_service
 
 logger = logging.getLogger(__name__)
 
@@ -61,14 +61,20 @@ class MaskRegexService:
                     r"|[가-힣]{2,}(?:고교|대학|여대))"
                 )),
             ],
-            "address": [
-                ("ADDRESS", re.compile(
-                    r"(?:[가-힣]{2,}(?:특별시|광역시|특별자치도|특별자치시|읍)"
-                    r"|\d{1,4}(?:-\d{1,4})?번지"
-                    r"|[가-힣]+(?:로|길)\s?\d{1,4}(?:-\d{1,4})?"
-                    r"|\d+(?:-\d+)?길"
-                    r"|[가-힣]+역)"
-                )),
+            "address": None,  # Postcodify 서비스 사용
+            "driverLicense": [
+                # 운전면허번호: 구 형식 (예: 12-34-567890-12)
+                ("DRIVER_LICENSE_OLD", re.compile(r"\d{2}-\d{2}-\d{6}-\d{2}")),
+                # 운전면허번호: 신 형식 (예: 123456-123456)
+                ("DRIVER_LICENSE", re.compile(r"\b\d{6}-\d{6}\b")),
+                # 운전면허번호: 12자리 연속 숫자
+                ("DRIVER_LICENSE_CONTINUOUS", re.compile(r"\b\d{12}\b")),
+            ],
+            "postalCode": [
+                # 우편번호: 5자리 숫자 (예: 12345)
+                ("POSTAL_CODE", re.compile(r"\b\d{5}\b")),
+                # 우편번호: 6자리 숫자 (예: 123-456)
+                ("POSTAL_CODE_HYPHEN", re.compile(r"\b\d{3}-\d{3}\b")),
             ],
             "workplace": None  # AI 모델 사용
         }
@@ -155,31 +161,13 @@ class MaskRegexService:
                 category_count += len(list_schools)
 
             elif category == "address":
-                for pattern_name, pattern in self.patterns[category]:
-                    for match in pattern.finditer(text):
-                        category_results.append({
-                            "type": pattern_name,
-                            "value": match.group(),
-                            "category": category
-                        })
-                        category_count += 1
-
-                for addr in address_list:
-                    start_pos = 0
-                    while True:
-                        pos = text.find(addr, start_pos)
-                        if pos == -1:
-                            break
-                        category_results.append({
-                            "type": "ADDRESS_LIST",
-                            "value": addr,
-                            "category": category,
-                            "start": pos,
-                            "end": pos + len(addr)
-                        })
-                        category_count += 1
-                        start_pos = pos + 1
-
+                # Postcodify 서비스를 사용한 주소 탐지
+                try:
+                    detected_addresses = address_detection_service.detect_addresses_in_text(text)
+                    category_results.extend(detected_addresses)
+                    category_count += len(detected_addresses)
+                except Exception as e:
+                    logger.error(f"주소 탐지 중 오류: {e}")
             elif category == "workplace":
                 try:
                     workplace_result = workplace_detection_service.detect_workplaces(text)
@@ -305,23 +293,13 @@ class MaskRegexService:
                         start_pos = pos + 1
 
             elif category == "address":
-                for pattern_name, pattern in self.patterns[category]:
-                    for match in pattern.finditer(text):
-                        start, end = match.span()
-                        if category not in masking_positions:
-                            masking_positions[category] = []
-                        masking_positions[category].append((start, end, "[주소]"))
-                for addr in address_list:
-                    start_pos = 0
-                    while True:
-                        pos = text.find(addr, start_pos)
-                        if pos == -1:
-                            break
-                        if category not in masking_positions:
-                            masking_positions[category] = []
-                        masking_positions[category].append((pos, pos + len(addr), "[주소]"))
-                        start_pos = pos + 1
-
+                # Postcodify 서비스를 사용한 주소 마스킹
+                try:
+                    masked_text = address_detection_service.mask_addresses(masked_text)
+                except Exception as e:
+                    logger.error(f"주소 마스킹 중 오류: {e}")
+                # 마스킹된 텍스트에서 주소 위치를 찾을 수 없으므로 이 카테고리는 스킵
+                continue
             elif category == "workplace":
                 try:
                     workplace_result = workplace_detection_service.detect_workplaces(text)

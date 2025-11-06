@@ -46,7 +46,6 @@ def cleanup_old_sessions():
             # 보안: 경로 검증
             is_valid, error = validate_path(session_path, STORAGE_ROOT)
             if not is_valid:
-                logger.warning(f"안전하지 않은 세션 경로 발견: {session_dir}")
                 continue
             
             if not os.path.isdir(session_path):
@@ -74,7 +73,6 @@ def cleanup_old_sessions():
                     if file_count >= 0:
                         deleted_sessions += 1
                         deleted_files += file_count
-                        logger.info(f"오래된 세션 삭제: session_id={session_dir[:8]}..., files={file_count}")
                     else:
                         # 삭제 실패 시 재시도 큐에 추가
                         failed_sessions.append({
@@ -95,13 +93,9 @@ def cleanup_old_sessions():
         # 재시도 큐에 추가
         _retry_queue.extend(failed_sessions)
         
-        if deleted_sessions > 0:
-            logger.info(f"세션 정리 완료: sessions={deleted_sessions}, files={deleted_files}")
-        
         return deleted_sessions, deleted_files
         
-    except Exception as e:
-        logger.error(f"세션 정리 작업 오류: {e}", exc_info=True)
+    except Exception:
         return 0, 0
 
 
@@ -121,7 +115,6 @@ def retry_failed_deletions():
     
     for item in _retry_queue[:]:
         if item["attempts"] > MAX_RETRY_ATTEMPTS:
-            logger.error(f"최대 재시도 횟수 초과, 포기: session_id={item['session_id'][:8]}...")
             _retry_queue.remove(item)
             continue
         
@@ -130,16 +123,13 @@ def retry_failed_deletions():
             try:
                 file_count = delete_session(session_id)
                 if file_count >= 0:
-                    logger.info(f"재시도 성공: session_id={session_id[:8]}..., files={file_count}")
                     _retry_queue.remove(item)
                 else:
                     item["attempts"] += 1
                     item["last_attempt"] = datetime.now()
-                    logger.warning(f"재시도 실패 (재시도 횟수: {item['attempts']}): session_id={session_id[:8]}...")
-            except Exception as e:
+            except Exception:
                 item["attempts"] += 1
                 item["last_attempt"] = datetime.now()
-                logger.error(f"재시도 중 오류: session_id={session_id[:8]}..., error={e}")
 
 
 def start_cleanup_scheduler():
@@ -165,7 +155,6 @@ def start_cleanup_scheduler():
     )
     
     scheduler.start()
-    logger.info(f"백그라운드 정리 스케줄러 시작 (주기: {CLEANUP_INTERVAL_MINUTES}분)")
     
     return scheduler
 
