@@ -155,8 +155,8 @@ export default function UploadForm() {
     });
   };
 
-  // 비디오 분석 핸들러
-  const handleVideoAnalyze = async () => {
+  // 비디오 분석 핸들러 (현재 미사용)
+  const _handleVideoAnalyze = async () => {
     if (!videoFile) {
       setError('비디오 파일을 선택해주세요.');
       return;
@@ -480,7 +480,7 @@ export default function UploadForm() {
           onClose={() => setShowResultModal(false)}
           detectionOptions={detectionOptions}
           blurFingers={blurFingers}
-          onShowEducation={(maskedText, categories) => {
+          onShowEducation={(_maskedText, _categories) => {
             setShowEduPanel(true);
             // 교육 패널 표시 로직
           }}

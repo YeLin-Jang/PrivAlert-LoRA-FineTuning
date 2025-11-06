@@ -13,7 +13,7 @@ interface ResultModalProps {
 export const ResultModal: React.FC<ResultModalProps> = ({
   result,
   onClose,
-  detectionOptions,
+  detectionOptions: _detectionOptions,
   onShowEducation,
 }) => {
   const [showOriginal, setShowOriginal] = useState(false);
@@ -169,8 +169,8 @@ export const ResultModal: React.FC<ResultModalProps> = ({
                   const handImg = handImages.find(h => h.image_index === (idx + 1));
                   const detections = [];
                   
-                  if (faceImg?.count > 0) detections.push('얼굴');
-                  if (handImg?.count > 0) detections.push('지문정보');
+                  if (faceImg && faceImg.count && faceImg.count > 0) detections.push('얼굴');
+                  if (handImg && handImg.count && handImg.count > 0) detections.push('지문정보');
                   if (structuredData?.detected) detections.push('주민등록');
 
                   return (

@@ -67,7 +67,7 @@ const Signup: React.FC = () => {
       // 이메일에서 username 생성 (이메일 주소의 @ 앞 부분)
       const username = email.split('@')[0];
       
-      const response = await userApi.register(username, email, password, nickname.trim());
+      await userApi.register(username, email, password, nickname.trim());
       setSuccess(true);
       
       // 이메일 인증 페이지로 이동 (실무: 코드는 이메일로만 전송)
