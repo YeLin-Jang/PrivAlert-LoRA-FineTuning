@@ -2,41 +2,47 @@
  * 메인페이지 컴포넌트
  * PrivAlert 팀의 파란색 컨셉에 맞는 깔끔한 디자인
  */
+import { useNavigate } from 'react-router-dom';
 import CommonHeader from '../common/CommonHeader';
 import './HomePage.css';
 
 export default function HomePage() {
+  const navigate = useNavigate();
+
+  const handleCheckNow = () => {
+    navigate('/analyze');
+  };
+
   return (
     <div className="homepage">
       {/* 공통 헤더 */}
       <CommonHeader />
 
-      {/* 히어로 섹션 */}
-      <section className="hero-section">
-        <div className="main-content-card">
-          <div className="brand-section">
-            <div className="brand-icon-wrapper">
-              <div className="brand-icon">
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 1L3 5V11C3 16.55 6.84 21.74 12 23C17.16 21.74 21 16.55 21 11V5L12 1Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M12 11V17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <circle cx="12" cy="8" r="1" fill="currentColor"/>
-                </svg>
-              </div>
+      {/* 히어로 섹션 - 수정된 버전 */}
+      <section className="hero-section new-hero">
+        <div className="hero-content-wrapper">
+          <div className="hero-left">
+            <div className="lock-icon-large">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 1L3 5V11C3 16.55 6.84 21.74 12 23C17.16 21.74 21 16.55 21 11V5L12 1Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M12 11V17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <circle cx="12" cy="8" r="1" fill="currentColor"/>
+              </svg>
             </div>
-            <h1 className="brand-name">PrivAlert</h1>
-            <p className="concept-slogan">Enterprise-Grade Privacy Protection Platform</p>
-            <p className="concept-slogan-kr">엔터프라이즈급 개인정보 보호 분석 시스템</p>
           </div>
-          <p className="service-description">
-            AI 기반 최첨단 보안 기술로<br />
-            민감 정보를 사전에 탐지하고 보호합니다
-          </p>
-        </div>
-        <div className="background-decoration">
-          <div className="decoration-box decoration-1"></div>
-          <div className="decoration-box decoration-2"></div>
-          <div className="decoration-box decoration-3"></div>
+          <div className="hero-right">
+            <h1 className="hero-main-title">
+              올리기 전 10초,<br />
+              <span className="title-highlight">AI가 내 개인정보를 지켜줍니다.</span>
+            </h1>
+            <p className="hero-subtitle">
+              SNS·블로그·커뮤니티 속 개인정보 유출을<br />
+              한 번의 분석으로 안전하게 예방하세요.
+            </p>
+            <button className="check-now-button" onClick={handleCheckNow}>
+              지금 바로 점검하기
+            </button>
+          </div>
         </div>
       </section>
 
@@ -155,6 +161,44 @@ export default function HomePage() {
                 개인정보 보호 모범 사례를 학습하고 실천할 수 있습니다.
               </p>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 누구에게 필요할까요 섹션 */}
+      <section className="target-audience-section">
+        <div className="target-audience-container">
+          <h2 className="target-audience-title">누구에게 필요할까요?</h2>
+          <div className="target-cards-scroll">
+            <div className="target-cards-wrapper">
+              <div className="target-card">
+                <div className="target-icon">🧑‍💻</div>
+                <p className="target-text">콘텐츠를 자주 올리는 사람들</p>
+              </div>
+              <div className="target-card">
+                <div className="target-icon">📱</div>
+                <p className="target-text">
+                  SNS에서 위치나 연락처를<br />
+                  공유하는 사용자
+                </p>
+              </div>
+              <div className="target-card">
+                <div className="target-icon">🎓</div>
+                <p className="target-text">
+                  보안 교육용 체험 도구가 필요한<br />
+                  학교 기관
+                </p>
+              </div>
+              <div className="target-card">
+                <div className="target-icon">👨‍👩‍👧</div>
+                <p className="target-text">자녀의 온라인 안전을 지키고 싶은 부모</p>
+              </div>
+            </div>
+          </div>
+          <div className="security-features">
+            <span className="security-feature-item">💡 100% 로컬 분석</span>
+            <span className="security-feature-item">외부 전송 0%</span>
+            <span className="security-feature-item">무료 사용 가능</span>
           </div>
         </div>
       </section>

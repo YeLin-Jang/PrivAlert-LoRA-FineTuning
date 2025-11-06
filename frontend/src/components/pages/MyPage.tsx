@@ -4,14 +4,12 @@
  * 로그인 없이도 접근 가능 (데이터는 로그인 상태에서만 표시)
  */
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useUserAuth } from '../../contexts/UserAuthContext';
 import { userApi, type FilteringSettings, type RevisionHistory } from '../../services/userApi';
 import CommonHeader from '../common/CommonHeader';
 import './MyPage.css';
 
 export default function MyPage() {
-  const navigate = useNavigate();
   const { isAuthenticated, loading: authLoading } = useUserAuth();
   const [filteringSettings, setFilteringSettings] = useState<FilteringSettings | null>(null);
   const [revisionHistory, setRevisionHistory] = useState<RevisionHistory[]>([]);
@@ -137,20 +135,6 @@ export default function MyPage() {
     <div className="mypage">
       {/* 공통 헤더 */}
       <CommonHeader />
-
-      {/* 페이지 헤더 - 이미지 참조 디자인 */}
-      <header className="mypage-header">
-        <div className="page-header-content">
-          <div className="header-left">
-            <button className="back-button" onClick={() => navigate('/')}>
-              ←
-            </button>
-            <span className="nav-breadcrumb">홈</span>
-            <span className="nav-separator">/</span>
-            <span className="nav-breadcrumb active">마이페이지</span>
-          </div>
-        </div>
-      </header>
 
       <main className="mypage-main">
         {loading && isAuthenticated ? (
