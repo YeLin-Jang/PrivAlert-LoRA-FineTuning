@@ -32,6 +32,7 @@ export default function UploadForm() {
   const [showEduPanel, setShowEduPanel] = useState(false);
   const [eduItems, setEduItems] = useState<any[] | null>(null);
   const [revisedSentence, setRevisedSentence] = useState<string | null>(null);
+  const [revisedSentenceRationale, setRevisedSentenceRationale] = useState<string | null>(null);
   const [eduLoading, setEduLoading] = useState(false);
 
   // 민감 정보 탐지 옵션 (초기 상태: 모두 비활성화)
@@ -93,10 +94,18 @@ export default function UploadForm() {
               newOptions[option as keyof DetectionOptions] = settings.detection_options[option] || false;
             });
             setDetectionOptions(newOptions);
+            
+            // 얼굴/손가락 탐지 옵션이 활성화되면 showFaces/blurFingers도 자동 활성화
+            if (newOptions.face) {
+              setShowFaces(true);
+            }
+            if (newOptions.fingerprint) {
+              setBlurFingers(true);
+            }
           }
         } catch (err) {
           // 설정 로드 실패 시 기본값 유지
-          console.debug('필터링 설정 로드 실패:', err);
+          // 보안: 콘솔 로그 제거
         }
       };
       loadUserSettings();
@@ -227,6 +236,60 @@ export default function UploadForm() {
       
       setResult(analysisResult);
       setShowResultModal(true);
+      
+      // 보안: LLM 수정 문장 저장 (로그인한 사용자만, 민감 정보가 탐지되고 수정 문장이 있을 때만)
+      // 보안: 로그인하지 않은 사용자는 수정 기록을 저장하지 않음
+      if (isAuthenticated && !authLoading) {
+        try {
+          const revisedText = analysisResult?.text_analysis?.revised_text;
+          const structuredData = analysisResult?.text_analysis?.structured_data;
+          const detected = structuredData?.detected;
+          const categories = structuredData?.categories || {};
+          
+          // 민감 정보가 탐지되고 수정 문장이 있고, 원본과 다른 경우에만 저장
+          if (detected && revisedText && revisedText.trim() && 
+              revisedText !== analysisResult?.text_analysis?.original_text) {
+            // 카테고리 키 추출 (민감 정보 종류)
+            const categoryKeys = Object.keys(categories).filter(key => 
+              categories[key]?.count > 0
+            );
+            
+            // 수정 기록 저장 (백그라운드에서 실행, 실패해도 사용자 경험에 영향 없음)
+            // 보안: 민감 정보는 저장하지 않고 수정 문장만 저장
+            // CSRF 토큰 갱신 후 저장 시도
+            const saveRevisionHistory = async () => {
+              try {
+                // 먼저 CSRF 토큰 갱신 시도 (없거나 만료된 경우 대비)
+                await userApi.getCurrentUser();
+                // CSRF 토큰 갱신 후 저장
+                await userApi.createRevisionHistory(revisedText, categoryKeys);
+              } catch (error: any) {
+                // 저장 실패는 조용히 처리 (사용자에게 알리지 않음)
+                // 보안: 콘솔 로그 제거
+                
+                // 403 에러인 경우 한 번 더 CSRF 토큰 갱신 후 재시도
+                if (error?.response?.status === 403) {
+                  try {
+                    // CSRF 토큰 갱신
+                    await userApi.getCurrentUser();
+                    // 재시도
+                    await userApi.createRevisionHistory(revisedText, categoryKeys);
+                  } catch {
+                    // 재시도 실패해도 조용히 처리
+                  }
+                }
+              }
+            };
+            
+            // 백그라운드에서 실행 (await 하지 않음)
+            saveRevisionHistory();
+          }
+        } catch (saveError) {
+          // 저장 중 오류는 조용히 처리
+          // 보안: 콘솔 로그 제거
+        }
+      }
+      
       // 교육 패널 자동 로딩 (마스킹 텍스트와 카테고리 기반)
       // 보안: text_analysis에 통합된 텍스트(직접 입력 + OCR)가 있고, 마스킹된 텍스트나 검출된 카테고리가 있을 때만 교육 제안 요청
       try {
@@ -245,13 +308,16 @@ export default function UploadForm() {
             if (edu && (edu.items || edu.revised_sentence)) {
               setEduItems(edu.items || []);
               setRevisedSentence(edu.revised_sentence || null);
-              setShowEduPanel(true);
+              setRevisedSentenceRationale(edu.revised_sentence_rationale || null);
+              // 자동으로 패널을 열지 않음 (사용자가 직접 열도록 함)
+              // setShowEduPanel(true);
             } else {
               // 응답은 받았지만 데이터가 없음
               secureLog('교육 제안 데이터 없음', { edu });
               setShowEduPanel(false);
               setEduItems([]);
               setRevisedSentence(null);
+              setRevisedSentenceRationale(null);
             }
           } catch (eduError: any) {
             // 에러 상세 정보 로깅
@@ -279,7 +345,9 @@ export default function UploadForm() {
       }
     } catch (err) {
       secureLog('분석 오류:', err);
-      setError(err instanceof Error ? err.message : '분석 중 오류가 발생했습니다.');
+      // 보안: 상세한 에러 정보는 사용자에게 노출하지 않음
+      // 일반화된 사용자 친화적 메시지만 표시
+      setError('분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
       
       // 오류 발생 시에도 민감 데이터 정리
       secureFilesCleanup([...limitedFiles]);
@@ -541,9 +609,11 @@ export default function UploadForm() {
           detectionOptions={detectionOptions}
           blurFingers={blurFingers}
           onShowEducation={(_maskedText, _categories) => {
+            // 교육 패널 표시 로직 (사용자가 직접 버튼을 클릭할 때만 열림)
             setShowEduPanel(true);
-            // 교육 패널 표시 로직
           }}
+          eduItems={eduItems}
+          revisedSentenceRationale={revisedSentenceRationale}
         />
       )}
       
@@ -810,7 +880,7 @@ export default function UploadForm() {
                                   // 보안: URL 즉시 해제
                                   secureURLCleanup(objectURL);
                                 } catch (e) {
-                                  console.error(e);
+                                  // 보안: 콘솔 로그 제거
                                   alert('다운로드 중 오류가 발생했습니다.');
                                 }
                               }}
@@ -1024,11 +1094,11 @@ export default function UploadForm() {
                                 alt={`얼굴 감지 결과 ${index + 1}`}
                                 className="result-image"
                                 onError={(e) => {
-                                  console.error('이미지 로딩 실패:', img.result_image_url);
+                                  // 보안: 이미지 URL은 민감 정보일 수 있으므로 로그 제거
                                   e.currentTarget.style.display = 'none';
                                 }}
                                 onLoad={() => {
-                                  console.log('이미지 로딩 성공:', img.result_image_url);
+                                  // 보안: 이미지 URL은 민감 정보일 수 있으므로 로그 제거
                                 }}
                               />
                             </div>
@@ -1054,11 +1124,11 @@ export default function UploadForm() {
                                 alt={`손가락 감지 결과 ${index + 1}`}
                                 className="result-image"
                                 onError={(e) => {
-                                  console.error('이미지 로딩 실패:', img.result_image_url);
+                                  // 보안: 이미지 URL은 민감 정보일 수 있으므로 로그 제거
                                   e.currentTarget.style.display = 'none';
                                 }}
                                 onLoad={() => {
-                                  console.log('이미지 로딩 성공:', img.result_image_url);
+                                  // 보안: 이미지 URL은 민감 정보일 수 있으므로 로그 제거
                                 }}
                               />
                             </div>

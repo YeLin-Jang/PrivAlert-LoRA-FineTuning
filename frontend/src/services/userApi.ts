@@ -43,6 +43,11 @@ const createApiInstance = (): AxiosInstance => {
   instance.interceptors.response.use(
     (response) => response,
     (error) => {
+      // 타임아웃 에러 처리
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        return Promise.reject(new Error('요청 시간이 초과되었습니다. 서버 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.'));
+      }
+      
       if (error.response?.status === 401) {
         // 인증 실패 시 토큰 제거
         localStorage.removeItem('auth_token');
@@ -100,7 +105,8 @@ export const userApi = {
     });
 
     if (!response.data?.success) {
-      throw new Error(response.data?.error || '로그인 실패');
+      // 보안: 상세한 서버 에러 정보는 사용자에게 노출하지 않음
+      throw new Error('로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.');
     }
 
     return response.data.data;
@@ -134,21 +140,18 @@ export const userApi = {
       if (!response.ok) {
         let errorMessage = '회원가입에 실패했습니다';
         
-        try {
-          const errorText = await response.text();
-          if (errorText) {
-            const errorData = JSON.parse(errorText);
-            errorMessage = errorData.error || errorMessage;
-          }
-        } catch (parseError) {
-          // JSON 파싱 실패 시 상태 코드로 메시지 생성
-          if (response.status === 404) {
-            errorMessage = '서버를 찾을 수 없습니다. 백엔드 서버가 실행 중인지 확인하세요.';
-          } else if (response.status === 500) {
-            errorMessage = '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
-          } else if (response.status === 409) {
-            errorMessage = '이미 등록된 이메일입니다';
-          }
+        // 보안: 상세한 서버 에러 정보는 사용자에게 노출하지 않음
+        // HTTP 상태 코드에 따라 일반화된 메시지만 반환
+        if (response.status === 400) {
+          errorMessage = '입력 정보를 확인해주세요.';
+        } else if (response.status === 404) {
+          errorMessage = '서버를 찾을 수 없습니다. 잠시 후 다시 시도해주세요.';
+        } else if (response.status === 409) {
+          errorMessage = '이미 등록된 이메일입니다.';
+        } else if (response.status === 500) {
+          errorMessage = '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+        } else {
+          errorMessage = '회원가입에 실패했습니다. 잠시 후 다시 시도해주세요.';
         }
         
         throw new Error(errorMessage);
@@ -158,12 +161,13 @@ export const userApi = {
       try {
         data = await response.json();
       } catch (jsonError) {
-        console.error('회원가입 응답 파싱 실패:', jsonError);
+        // 보안: 콘솔 로그 제거
         throw new Error('서버 응답을 처리할 수 없습니다');
       }
 
       if (!data || !data.success) {
-        throw new Error(data?.error || '회원가입 실패');
+        // 보안: 상세한 서버 에러 정보는 사용자에게 노출하지 않음
+        throw new Error('회원가입에 실패했습니다. 잠시 후 다시 시도해주세요.');
       }
 
       // 응답 형식 변환 (백엔드 응답에 맞춤)
@@ -197,24 +201,33 @@ export const userApi = {
     const response = await api.get('/api/v1/user/me');
 
     if (!response.data?.success) {
-      throw new Error(response.data?.error || '사용자 정보 조회 실패');
+      // 보안: 상세한 서버 에러 정보는 사용자에게 노출하지 않음
+      throw new Error('사용자 정보를 불러올 수 없습니다.');
     }
 
-    // 백엔드 응답 형식: { success: true, data: { ...user data... } }
+    // 백엔드 응답 형식: { success: true, data: { ...user data..., csrf_token: "..." } }
     const userData = response.data.data;
     
-    // userData가 이미 UserResponse 형식인 경우
-    if (userData.email) {
-      return userData;
+    // CSRF 토큰 저장 (백엔드에서 제공하는 경우)
+    if (userData.csrf_token) {
+      localStorage.setItem('csrf_token', userData.csrf_token);
     }
     
-    // userData가 객체이고 내부에 user 필드가 있는 경우
-    if (userData.user) {
-      return userData.user;
+    // userData에서 csrf_token 제거 (UserResponse에는 포함되지 않음)
+    const { csrf_token, ...userInfo } = userData;
+    
+    // userInfo가 이미 UserResponse 형식인 경우
+    if (userInfo.email) {
+      return userInfo;
     }
     
-    // 그 외 경우 userData를 그대로 반환
-    return userData;
+    // userInfo가 객체이고 내부에 user 필드가 있는 경우
+    if (userInfo.user) {
+      return userInfo.user;
+    }
+    
+    // 그 외 경우 userInfo를 그대로 반환
+    return userInfo;
   },
 
   /**
@@ -225,7 +238,7 @@ export const userApi = {
       await api.post('/api/v1/auth/logout');
     } catch (error) {
       // 로그아웃 API 호출 실패해도 토큰은 제거
-      console.error('로그아웃 API 호출 실패:', error);
+      // 보안: 콘솔 로그 제거
     } finally {
       localStorage.removeItem('auth_token');
       localStorage.removeItem('user_email');
@@ -242,7 +255,8 @@ export const userApi = {
     const response = await api.get('/api/v1/user/filtering-settings');
 
     if (!response.data?.success) {
-      throw new Error(response.data?.error || '필터링 설정 조회 실패');
+      // 보안: 상세한 서버 에러 정보는 사용자에게 노출하지 않음
+      throw new Error('필터링 설정을 불러올 수 없습니다.');
     }
 
     return response.data.data.settings;
@@ -259,7 +273,8 @@ export const userApi = {
     });
 
     if (!response.data?.success) {
-      throw new Error(response.data?.error || '필터링 설정 업데이트 실패');
+      // 보안: 상세한 서버 에러 정보는 사용자에게 노출하지 않음
+      throw new Error('필터링 설정을 저장할 수 없습니다.');
     }
 
     return response.data.data.settings;
@@ -274,7 +289,8 @@ export const userApi = {
     });
 
     if (!response.data?.success) {
-      throw new Error(response.data?.error || '수정 기록 조회 실패');
+      // 보안: 상세한 서버 에러 정보는 사용자에게 노출하지 않음
+      throw new Error('수정 기록을 불러올 수 없습니다.');
     }
 
     return response.data.data;
@@ -293,7 +309,8 @@ export const userApi = {
     });
 
     if (!response.data?.success) {
-      throw new Error(response.data?.error || '수정 기록 생성 실패');
+      // 보안: 상세한 서버 에러 정보는 사용자에게 노출하지 않음
+      throw new Error('수정 기록을 저장할 수 없습니다.');
     }
 
     return response.data.data.record;
@@ -327,14 +344,21 @@ export const verifyEmail = async (data: {
 
     // FastAPI는 성공 시 200 상태 코드 반환
     if (response.status !== 200) {
-      throw new Error(response.data?.detail || '이메일 인증 실패');
+      // 보안: 상세한 서버 에러 정보는 사용자에게 노출하지 않음
+      throw new Error('이메일 인증에 실패했습니다. 인증 코드를 확인해주세요.');
     }
   } catch (error: any) {
+    // 보안: 상세한 서버 에러 정보는 사용자에게 노출하지 않음
     // FastAPI 에러 응답 형식 처리
-    if (error.response?.data?.detail) {
-      throw new Error(error.response.data.detail);
+    if (error.response?.status === 400) {
+      throw new Error('인증 코드가 올바르지 않습니다. 다시 확인해주세요.');
+    } else if (error.response?.status === 404) {
+      throw new Error('인증 요청을 찾을 수 없습니다. 다시 시도해주세요.');
+    } else if (error.response?.status === 410) {
+      throw new Error('인증 코드가 만료되었습니다. 다시 요청해주세요.');
+    } else {
+      throw new Error('이메일 인증에 실패했습니다. 잠시 후 다시 시도해주세요.');
     }
-    throw error;
   }
 };
 

@@ -75,9 +75,19 @@ export default function MyPage() {
       setLoading(true);
       setError(null);
 
+      // CSRF 토큰 확인 및 갱신 (보안: 403 에러 방지)
+      // 사용자 정보 조회 시 CSRF 토큰도 함께 갱신될 수 있음
+      try {
+        await userApi.getCurrentUser();
+        // 사용자 정보가 있으면 인증 상태 유지
+      } catch (userErr) {
+        // 사용자 정보 조회 실패 시에도 계속 진행 (필터링 설정은 별도로 조회)
+        // 보안: 콘솔 로그 제거
+      }
+
       // 실제 사용자 필터링 설정 조회
+      // 보안: 민감 정보(user_id, id 등)가 포함된 로그는 제거
       const settings = await userApi.getFilteringSettings();
-      console.log('필터링 설정 로드:', settings);
       setFilteringSettings(settings);
 
       // 수정 기록 조회
@@ -102,6 +112,15 @@ export default function MyPage() {
       setError(null);
       setSuccessMessage(null);
 
+      // CSRF 토큰 항상 갱신 (세션 ID 기반 토큰으로 업데이트)
+      try {
+        await userApi.getCurrentUser();
+      } catch (tokenErr) {
+        setError('인증 토큰이 만료되었습니다. 페이지를 새로고침하거나 다시 로그인해주세요.');
+        setSaving(false);
+        return;
+      }
+
       // detection_options 추출
       const detectionOptions = filteringSettings.detection_options || {};
       
@@ -112,8 +131,25 @@ export default function MyPage() {
       
       // 3초 후 성공 메시지 제거
       setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '설정 저장 중 오류가 발생했습니다');
+    } catch (err: any) {
+      // 403 에러인 경우 CSRF 토큰 갱신 후 재시도
+      if (err?.response?.status === 403) {
+        try {
+          // CSRF 토큰 갱신 시도
+          await userApi.getCurrentUser();
+          // 재시도
+          const detectionOptions = filteringSettings.detection_options || {};
+          const updatedSettings = await userApi.updateFilteringSettings(detectionOptions);
+          setFilteringSettings(updatedSettings);
+          setEditingSettings(false);
+          setSuccessMessage('필터링 설정이 성공적으로 저장되었습니다');
+          setTimeout(() => setSuccessMessage(null), 3000);
+        } catch (retryErr) {
+          setError('인증 토큰이 만료되었거나 유효하지 않습니다. 페이지를 새로고침하거나 다시 로그인해주세요.');
+        }
+      } else {
+        setError(err instanceof Error ? err.message : '설정 저장 중 오류가 발생했습니다');
+      }
     } finally {
       setSaving(false);
     }
@@ -167,20 +203,6 @@ export default function MyPage() {
     <div className="mypage">
       {/* 공통 헤더 */}
       <CommonHeader />
-
-      {/* 페이지 헤더 - 이미지 참조 디자인 */}
-      <header className="mypage-header">
-        <div className="page-header-content">
-          <div className="header-left">
-            <button className="back-button" onClick={() => navigate('/')}>
-              ←
-            </button>
-            <span className="nav-breadcrumb">홈</span>
-            <span className="nav-separator">/</span>
-            <span className="nav-breadcrumb active">마이페이지</span>
-          </div>
-        </div>
-      </header>
 
       <main className="mypage-main">
         {loading ? (
@@ -284,7 +306,7 @@ export default function MyPage() {
                               <div className="history-categories">
                                 {record.categories.map((cat, idx) => (
                                   <button key={idx} className="category-badge">
-                                    {cat}
+                                    {getCategoryLabel(cat)}
                                   </button>
                                 ))}
                               </div>
@@ -293,12 +315,6 @@ export default function MyPage() {
                           <div className="history-sentence">
                             {record.revised_sentence}
                           </div>
-                          <input
-                            type="text"
-                            className="history-text-input"
-                            placeholder="수정된 텍스트를 확인하세요"
-                            readOnly
-                          />
                         </div>
                       ))}
                     </div>
@@ -353,4 +369,9 @@ function getOptionLabel(key: string): string {
     address: '주소',
   };
   return labels[key] || key;
+}
+
+// 카테고리 라벨 매핑 (옵션 라벨과 동일)
+function getCategoryLabel(key: string): string {
+  return getOptionLabel(key);
 }

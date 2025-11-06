@@ -17,8 +17,10 @@ function securityHeadersPlugin(): Plugin {
       // 보안: 프로덕션에서는 unsafe-inline 제거, 개발 환경에서는 Vite 작동을 위해 필요
       const isDev = process.env.NODE_ENV !== 'production';
       const htmlCSP = isDev
-        ? "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http://localhost:5000 http://localhost:8000 ws://localhost:3000 ws://localhost:5173; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'none'; manifest-src 'self'"
-        : "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http://localhost:5000 http://localhost:8000 ws://localhost:3000 ws://localhost:5173; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'none'; manifest-src 'self'";
+        // 개발 환경: Vite HMR 및 개발 도구를 위해 일부 완화
+        ? "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https: http://localhost:5000 http://localhost:8000; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http://localhost:5000 http://localhost:8000 ws://localhost:3000 ws://localhost:5173; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'"
+        // 프로덕션: 보안 강화 (blob 제거, localhost 제거, https: 제한)
+        : "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'";
       
       // 관리자 페이지용 - 더 엄격한 CSP (unsafe-inline 완전 제거)
       const adminCSP = "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'none'; manifest-src 'self'; upgrade-insecure-requests";
@@ -147,8 +149,8 @@ function securityHeadersPlugin(): Plugin {
       const robotsCSP = "default-src 'none'; script-src 'none'; style-src 'none'; connect-src 'none'; frame-ancestors 'none'";
       
       // HTML 페이지용 - unsafe-inline, unsafe-eval 완전 제거
-      // 보안: blob: URL 허용 (로컬 파일 미리보기용)
-      const htmlCSP = "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'none'; manifest-src 'self'";
+      // 보안: blob: URL 허용 (로컬 파일 미리보기용), worker-src는 'self'만 허용
+      const htmlCSP = "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'";
       
       // 관리자 페이지용
       const adminCSP = "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'none'; manifest-src 'self'; upgrade-insecure-requests";

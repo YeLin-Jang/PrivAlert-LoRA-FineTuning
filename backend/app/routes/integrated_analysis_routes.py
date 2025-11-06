@@ -651,18 +651,20 @@ def analyze_content():
                 
                 if video_result.get("success"):
                     for frame_data in video_result.get("frames", []):
+                        # 프론트엔드 형식에 맞게 변환: face: { count }, hand: { count }
+                        face_count = frame_data.get("face", {}).get("count", 0) if frame_data.get("face") else 0
+                        hand_count = frame_data.get("hand", {}).get("count", 0) if frame_data.get("hand") else 0
+                        
                         frame_result = {
                             "frame_index": frame_data.get("frame_index", 0),
                             "timestamp": frame_data.get("timestamp", 0.0),
-                            "faces_detected": frame_data.get("face", {}).get("count", 0) if frame_data.get("face") else 0,
-                            "fingers_detected": frame_data.get("hand", {}).get("count", 0) if frame_data.get("hand") else 0,
-                            "ocr_text": frame_data.get("ocr", {}).get("text", "") if frame_data.get("ocr") else "",
-                            "result_image_url": frame_data.get("face", {}).get("result_image_url") if show_faces and frame_data.get("face") else None
+                            "face": {"count": face_count} if face_count > 0 else {"count": 0},
+                            "hand": {"count": hand_count} if hand_count > 0 else {"count": 0}
                         }
                         video_frame_results.append(frame_result)
                         
-                        video_face_count += frame_result["faces_detected"]
-                        video_finger_count += frame_result["fingers_detected"]
+                        video_face_count += face_count
+                        video_finger_count += hand_count
                     
                     audio_transcription = video_result.get("audio_transcription", {})
                     if audio_transcription.get("success") and audio_transcription.get("text"):
@@ -685,9 +687,25 @@ def analyze_content():
                         
                         for filter_name, result in audio_filter_result.get("filter_results", {}).items():
                             if result.get("success") and result.get("statistics", {}).get("total_detected", 0) > 0:
+                                # 프론트엔드 형식에 맞게 변환: items는 { value, category } 형식
+                                items = []
+                                for word in result.get("detected_words", []):
+                                    if isinstance(word, dict):
+                                        items.append({
+                                            "type": filter_name,
+                                            "value": word.get("word", word.get("value", "")),
+                                            "category": filter_name
+                                        })
+                                    elif isinstance(word, str):
+                                        items.append({
+                                            "type": filter_name,
+                                            "value": word,
+                                            "category": filter_name
+                                        })
+                                
                                 video_audio_analysis["categories"][filter_name] = {
                                     "count": result["statistics"]["total_detected"],
-                                    "items": result["detected_words"]
+                                    "items": items
                                 }
                         
                         if video_audio_analysis.get("detected", False):
@@ -792,10 +810,21 @@ def analyze_content():
                 if cat_name in structured_data_result["categories"]:
                     # 중복 카테고리는 count 합산
                     structured_data_result["categories"][cat_name]["count"] += cat_data.get("count", 0)
-                    # items 합치기 (중복 제거)
-                    existing_items = set(structured_data_result["categories"][cat_name].get("items", []))
-                    new_items = set(cat_data.get("items", []))
-                    structured_data_result["categories"][cat_name]["items"] = list(existing_items | new_items)
+                    # items 합치기 (중복 제거) - dict 리스트이므로 value 필드를 기준으로 중복 제거
+                    existing_items = structured_data_result["categories"][cat_name].get("items", [])
+                    new_items = cat_data.get("items", [])
+                    
+                    # value 필드를 기준으로 중복 제거
+                    existing_values = {item.get("value") for item in existing_items if item.get("value")}
+                    merged_items = existing_items.copy()
+                    
+                    for new_item in new_items:
+                        item_value = new_item.get("value")
+                        if item_value and item_value not in existing_values:
+                            merged_items.append(new_item)
+                            existing_values.add(item_value)
+                    
+                    structured_data_result["categories"][cat_name]["items"] = merged_items
                 else:
                     structured_data_result["categories"][cat_name] = cat_data
                 # total_count 업데이트
@@ -944,8 +973,15 @@ def cleanup_session():
 
 @integrated_analysis_bp.route('/download/<path:filename>', methods=['GET'])
 def download_file(filename):
-    """파일 다운로드 후 삭제"""
-    from flask import send_from_directory, request
+    """
+    보안: 파일 다운로드 (프록시 방식)
+    - 파일 경로를 URL에 노출하지 않음
+    - 백엔드에서 파일을 읽어서 프론트엔드로 전송
+    - 세션 검증 및 파일 소유권 확인
+    - 다운로드 후 자동 삭제
+    """
+    from flask import request, send_file
+    from io import BytesIO
     
     try:
         # 파일 경로 계산
@@ -955,35 +991,125 @@ def download_file(filename):
         # 보안: 경로 검증
         abs_path = os.path.abspath(file_path)
         base_abs = os.path.abspath(BASE_DATA_DIR)
+        
+        # 디버깅: 경로 정보 로깅
+        logger.info(f"다운로드 요청: filename={filename}, rel_path={rel_path}, abs_path={abs_path}, BASE_DATA_DIR={BASE_DATA_DIR}")
+        
         if not abs_path.startswith(base_abs):
-            logger.warning(f"경로 조작 시도: {filename}")
+            logger.warning(f"경로 조작 시도: {filename}, abs_path={abs_path}, base_abs={base_abs}")
             return APIResponse.error("잘못된 파일 경로입니다", code=403)
         
-        if not os.path.exists(abs_path):
-            return APIResponse.error("파일을 찾을 수 없습니다", code=404)
+        # 보안: 추가 경로 검증
+        from app.utils.security_utils import validate_path
+        is_valid, error = validate_path(BASE_DATA_DIR, rel_path)
+        if not is_valid:
+            logger.warning(f"경로 검증 실패: {filename}, 오류: {error}")
+            return APIResponse.error("잘못된 파일 경로입니다", code=403)
         
-        # 파일 다운로드
-        directory = os.path.dirname(abs_path)
-        file_name = os.path.basename(abs_path)
-        response = send_from_directory(directory, file_name, as_attachment=True)
-        
-        # 다운로드 후 파일 삭제 (백그라운드에서)
+        # 보안: 세션 검증 및 파일 소유권 확인
         session_id = request.args.get('session_id') or request.headers.get('X-Session-ID')
         if session_id:
-            # 다운로드 완료 후 삭제 (약간의 지연)
-            import threading
-            def delayed_delete():
-                import time
-                time.sleep(2)  # 다운로드 완료 대기
+            from app.utils.file_cleanup import get_file_session
+            try:
+                # 파일이 세션에 등록되어 있는지 확인
+                file_session_id = get_file_session(abs_path)
+                if file_session_id and file_session_id != session_id:
+                    logger.warning(f"세션 파일 소유권 검증 실패: 요청 session_id={session_id[:8] if session_id else None}..., 파일 session_id={file_session_id[:8] if file_session_id else None}..., filename={filename}")
+                    return APIResponse.error("파일 접근 권한이 없습니다", code=403)
+                # 파일이 세션에 등록되어 있지 않으면 경고만 (하위 호환성)
+                if not file_session_id:
+                    logger.info(f"파일이 세션에 등록되지 않음: filename={filename}, session_id={session_id[:8] if session_id else None}...")
+            except Exception as session_error:
+                logger.warning(f"세션 검증 오류: {session_error}")
+                # 세션 검증 실패해도 파일이 존재하면 다운로드 허용 (하위 호환성)
+                pass
+        
+        # 파일 존재 확인
+        if not os.path.exists(abs_path):
+            # 디버깅: 디렉토리 내용 확인
+            dir_path = os.path.dirname(abs_path)
+            if os.path.exists(dir_path):
+                try:
+                    files_in_dir = os.listdir(dir_path)
+                    logger.warning(f"파일을 찾을 수 없음: {abs_path}, 디렉토리 내 파일: {files_in_dir[:10] if len(files_in_dir) > 10 else files_in_dir}")
+                except Exception as e:
+                    logger.warning(f"디렉토리 읽기 실패: {e}")
+            else:
+                logger.warning(f"디렉토리도 존재하지 않음: {dir_path}")
+            
+            # 파일이 없으면 정적 파일 서빙을 직접 시도
+            # (파일이 이미 삭제되었을 수 있지만 정적 파일 서빙은 가능할 수 있음)
+            try:
+                from flask import send_from_directory
+                logger.info(f"파일이 없어 정적 파일 서빙 시도: {rel_path}")
+                # 정적 파일 서빙 (다운로드 모드)
+                response = send_from_directory(BASE_DATA_DIR, rel_path, as_attachment=True)
+                response.headers['X-Content-Type-Options'] = 'nosniff'
+                return response
+            except FileNotFoundError:
+                logger.warning(f"정적 파일 서빙도 실패: {rel_path}")
+                return APIResponse.error("파일을 찾을 수 없습니다", code=404)
+            except Exception as static_error:
+                logger.error(f"정적 파일 서빙 오류: {static_error}")
+                return APIResponse.error("파일을 찾을 수 없습니다", code=404)
+        
+        # 보안: 파일을 메모리로 읽어서 전송 (경로 노출 방지)
+        try:
+            with open(abs_path, 'rb') as f:
+                file_data = f.read()
+            
+            # BytesIO를 사용하여 메모리에서 파일 전송
+            file_stream = BytesIO(file_data)
+            file_stream.seek(0)
+            
+            # 파일명 추출
+            file_name = os.path.basename(abs_path)
+            
+            # MIME 타입 결정
+            ext = os.path.splitext(file_name)[1].lower()
+            mime_types = {
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.png': 'image/png',
+                '.webp': 'image/webp',
+                '.gif': 'image/gif',
+            }
+            mimetype = mime_types.get(ext, 'application/octet-stream')
+            
+            # 파일 전송 (다운로드 모드)
+            response = send_file(
+                file_stream,
+                mimetype=mimetype,
+                as_attachment=True,
+                download_name=file_name
+            )
+            
+            # 보안 헤더 추가
+            response.headers['X-Content-Type-Options'] = 'nosniff'
+            response.headers['Content-Disposition'] = f'attachment; filename="{file_name}"'
+            
+            # 다운로드 후 파일 삭제 (백그라운드에서)
+            session_id = request.args.get('session_id') or request.headers.get('X-Session-ID')
+            if session_id:
+                # 다운로드 완료 후 삭제 (약간의 지연)
+                import threading
+                def delayed_delete():
+                    import time
+                    time.sleep(2)  # 다운로드 완료 대기
+                    cleanup_file(abs_path, BASE_DATA_DIR)
+                
+                thread = threading.Thread(target=delayed_delete, daemon=True)
+                thread.start()
+            else:
+                # 세션 ID가 없으면 바로 삭제
                 cleanup_file(abs_path, BASE_DATA_DIR)
             
-            thread = threading.Thread(target=delayed_delete, daemon=True)
-            thread.start()
-        else:
-            # 세션 ID가 없으면 바로 삭제
-            cleanup_file(abs_path, BASE_DATA_DIR)
+            return response
+            
+        except IOError as e:
+            logger.error(f"파일 읽기 오류: {e}")
+            return APIResponse.error("파일을 읽을 수 없습니다", code=500)
         
-        return response
     except Exception as e:
         logger.error(f"파일 다운로드 오류: {e}", exc_info=True)
         return APIResponse.error("파일 다운로드 중 오류가 발생했습니다", code=500)

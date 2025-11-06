@@ -9,7 +9,7 @@ try {
   cleanCurrentUrl();
 } catch (error) {
   // URL 정리 실패해도 앱은 계속 실행
-  console.warn('URL 정리 실패:', error);
+  // 보안: 콘솔 로그 제거
 }
 
 // root 요소 확인

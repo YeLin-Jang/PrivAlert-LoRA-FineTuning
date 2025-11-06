@@ -53,7 +53,7 @@ export const secureFormDataCleanup = (formData: FormData): void => {
     });
   } catch (e) {
     // FormData 정리 실패 시 무시
-    console.warn('FormData 정리 실패:', e);
+    // 보안: 콘솔 로그 제거
   }
 };
 
@@ -66,7 +66,7 @@ export const secureURLCleanup = (url: string): void => {
       URL.revokeObjectURL(url);
     }
   } catch (e) {
-    console.warn('URL 정리 실패:', e);
+    // 보안: 콘솔 로그 제거
   }
 };
 
@@ -90,7 +90,7 @@ export const secureObjectCleanup = <T extends Record<string, any>>(obj: T): void
       delete obj[key];
     });
   } catch (e) {
-    console.warn('객체 정리 실패:', e);
+    // 보안: 콘솔 로그 제거
   }
 };
 
@@ -117,19 +117,9 @@ export const maskSensitiveData = (data: any): any => {
 
 /**
  * 안전한 로깅 (민감 정보 마스킹)
+ * 보안: 콘솔 로그 제거
  */
-export const secureLog = (message: string, data?: any): void => {
-  if (process.env.NODE_ENV === 'production') {
-    // 프로덕션 환경에서는 민감 정보를 로깅하지 않음
-    console.log(message);
-    return;
-  }
-  
-  // 개발 환경에서만 제한적으로 로깅 (민감 정보 마스킹)
-  if (data) {
-    const maskedData = maskSensitiveData(data);
-    console.log(message, maskedData);
-  } else {
-    console.log(message);
-  }
+export const secureLog = (_message: string, _data?: any): void => {
+  // 보안: 모든 콘솔 로그 제거
+  // 프로덕션 및 개발 환경 모두에서 로깅 비활성화
 };

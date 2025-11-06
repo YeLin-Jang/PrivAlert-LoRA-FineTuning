@@ -6,12 +6,13 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 40px;
+  padding: 20px 40px;
   background: #ffffff;
   border-bottom: 1px solid #e5e7eb;
   position: sticky;
   top: 0;
   z-index: 100;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
 .header-logo {
@@ -20,6 +21,8 @@
   gap: 12px;
   cursor: pointer;
   transition: opacity 0.2s ease;
+  padding: 0;
+  border-radius: 0;
 }
 
 .header-logo:hover {
@@ -42,40 +45,62 @@
 
 .header-nav {
   display: flex;
-  gap: 24px;
+  gap: 32px;
   align-items: center;
   flex: 1;
   justify-content: center;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  border: none;
 }
 
 .nav-link {
   background: transparent;
   border: none;
-  color: #111827;
-  font-size: 0.95rem;
+  color: #64748b;
+  font-size: 1rem;
   font-weight: 500;
   cursor: pointer;
   padding: 8px 0;
-  transition: color 0.2s ease;
+  border-radius: 0;
+  transition: all 0.2s ease;
   text-decoration: none;
+  position: relative;
 }
 
 .nav-link.primary {
-  color: #111827;
+  color: #64748b;
 }
 
 .nav-link:hover {
   color: #3b82f6;
+  background: transparent;
 }
 
 .nav-link.primary.active {
   color: #3b82f6;
+  background: transparent;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.nav-link.primary.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #3b82f6;
+  border-radius: 1px;
 }
 
 .header-right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 .login-link,
@@ -83,7 +108,6 @@
 .logout-link {
   font-size: 0.95rem;
   font-weight: 500;
-  color: #3b82f6;
   cursor: pointer;
   text-decoration: none;
   transition: all 0.2s ease;
@@ -94,30 +118,52 @@
   padding: 0;
   background: none;
   border: none;
+  position: relative;
 }
 
-.login-link:hover,
-.signup-link:hover,
-.logout-link:hover {
-  text-decoration: underline;
+.login-link {
+  color: #3b82f6;
+}
+
+.login-link:hover {
   color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.signup-link {
+  color: #3b82f6;
+}
+
+.signup-link:hover {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
 .logout-link {
-  color: #dc2626;
+  color: #ef4444;
 }
 
 .logout-link:hover {
-  color: #b91c1c;
+  color: #dc2626;
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
 .user-greeting {
-  font-size: 0.95rem;
-  color: #666666;
-  margin-right: 16px;
+  font-size: 0.9rem;
+  color: #64748b;
   line-height: 1;
   display: inline-flex;
   align-items: center;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  font-weight: 400;
+  border: none;
+  box-shadow: none;
+  white-space: nowrap;
 }
 
 /* 인증 로딩 상태 */
@@ -153,24 +199,45 @@
 @media (max-width: 768px) {
   .common-header {
     padding: 12px 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .header-logo {
+    order: 1;
   }
 
   .header-nav {
-    gap: 16px;
+    order: 3;
+    width: 100%;
+    margin-top: 12px;
+    justify-content: center;
+    gap: 20px;
   }
 
   .nav-link {
     font-size: 0.9rem;
+    padding: 6px 0;
+  }
+
+  .header-right {
+    order: 2;
+    margin-left: auto;
+    gap: 8px;
   }
 
   .login-link,
   .signup-link,
   .logout-link {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
+    padding: 0;
   }
 
   .user-greeting {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
+    padding: 6px 12px;
+    margin-right: 8px;
+    display: none; /* 모바일에서는 숨김 */
   }
 }
 

@@ -94,9 +94,17 @@ def update_filtering_settings():
             }), 403
         
         user = request.current_user
-        user_id_str = str(user.id)
         
-        is_valid, error_msg = validate_csrf_token(user_id_str, csrf_token)
+        # 세션 ID 가져오기 (CSRF 토큰 검증에 사용)
+        session_id = request.cookies.get('session_id')
+        if not session_id:
+            return jsonify({
+                "success": False,
+                "error": "세션이 없습니다. 다시 로그인해주세요.",
+                "code": 401
+            }), 401
+        
+        is_valid, error_msg = validate_csrf_token(session_id, csrf_token)
         if not is_valid:
             return jsonify({
                 "success": False,
@@ -285,9 +293,17 @@ def create_revision_history():
             }), 403
         
         user = request.current_user
-        user_id_str = str(user.id)
         
-        is_valid, error_msg = validate_csrf_token(user_id_str, csrf_token)
+        # 세션 ID 가져오기 (CSRF 토큰 검증에 사용)
+        session_id = request.cookies.get('session_id')
+        if not session_id:
+            return jsonify({
+                "success": False,
+                "error": "세션이 없습니다. 다시 로그인해주세요.",
+                "code": 401
+            }), 401
+        
+        is_valid, error_msg = validate_csrf_token(session_id, csrf_token)
         if not is_valid:
             return jsonify({
                 "success": False,
@@ -434,13 +450,30 @@ def get_profile():
     """
     현재 사용자 정보 조회
     GET /api/v1/user/me
+    보안: CSRF 토큰도 함께 반환하여 프론트엔드에서 토큰 갱신 가능
     """
     try:
         user = request.current_user
         
+        # 세션 ID 가져오기 (CSRF 토큰 생성에 사용)
+        session_id = request.cookies.get('session_id')
+        if not session_id:
+            return jsonify({
+                "success": False,
+                "error": "세션이 없습니다. 다시 로그인해주세요.",
+                "code": 401
+            }), 401
+        
+        # CSRF 토큰 생성 (세션 ID 사용)
+        from app.utils.csrf_protection import generate_csrf_token
+        csrf_token = generate_csrf_token(session_id)
+        
         return jsonify({
             "success": True,
-            "data": user.to_dict()
+            "data": {
+                **user.to_dict(),
+                "csrf_token": csrf_token
+            }
         }), 200
         
     except Exception as e:

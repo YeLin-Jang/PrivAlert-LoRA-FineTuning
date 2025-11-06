@@ -91,13 +91,7 @@ const Signup: React.FC = () => {
       <div className="auth-content">
         <div className="auth-box">
           <div className="auth-logo-section">
-          <div className="auth-logo-icon">
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 1L3 5V11C3 16.55 6.84 21.74 12 23C17.16 21.74 21 16.55 21 11V5L12 1Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M12 11V17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <circle cx="12" cy="8" r="1" fill="currentColor"/>
-              </svg>
-            </div>
+            <img src="/Privalert.png" alt="PrivAlert" className="auth-logo-image" />
             <div className="auth-logo-text">PrivAlert</div>
             <div className="auth-slogan">당신의 개인정보 보호 분석 시스템</div>
           </div>

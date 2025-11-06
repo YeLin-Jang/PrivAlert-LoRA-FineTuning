@@ -6,20 +6,61 @@ import './Auth.css';
 
 const EmailVerification: React.FC = () => {
   const [email, setEmail] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
+  const [otp, setOtp] = useState<string[]>(['', '', '', '', '', '']);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const inputRefs = React.useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
     // 회원가입 페이지에서 전달된 이메일 사용
     if (location.state?.email) {
       setEmail(location.state.email);
     }
-    // 실무: 코드는 이메일로만 전송되므로 자동 입력하지 않음
+    // 첫 번째 입력 필드에 포커스
+    inputRefs.current[0]?.focus();
   }, [location]);
+
+  const handleOtpChange = (index: number, value: string) => {
+    // 숫자만 허용
+    if (value && !/^\d$/.test(value)) {
+      return;
+    }
+
+    const newOtp = [...otp];
+    newOtp[index] = value;
+    setOtp(newOtp);
+
+    // 다음 입력 필드로 자동 이동
+    if (value && index < 5) {
+      inputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Backspace 처리
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
+    // Paste 처리
+    if (e.key === 'v' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      navigator.clipboard.readText().then((text) => {
+        const digits = text.replace(/\D/g, '').slice(0, 6).split('');
+        const newOtp = [...otp];
+        digits.forEach((digit, i) => {
+          if (index + i < 6) {
+            newOtp[index + i] = digit;
+          }
+        });
+        setOtp(newOtp);
+        const nextIndex = Math.min(index + digits.length, 5);
+        inputRefs.current[nextIndex]?.focus();
+      });
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,8 +72,10 @@ const EmailVerification: React.FC = () => {
       return;
     }
 
-    if (!verificationCode) {
-      setError('인증 코드를 입력하세요');
+    const verificationCode = otp.join('');
+    
+    if (!verificationCode || verificationCode.length !== 6) {
+      setError('인증 코드 6자리를 모두 입력하세요');
       return;
     }
 
@@ -86,7 +129,7 @@ const EmailVerification: React.FC = () => {
       <div className="auth-content">
         <div className="auth-box">
           <div className="auth-logo-section">
-            <div className="auth-logo-icon">🔒</div>
+            <img src="/Privalert.png" alt="PrivAlert" className="auth-logo-image" />
             <div className="auth-logo-text">PrivAlert</div>
             <div className="auth-slogan">당신의 개인정보 보호 분석 시스템</div>
           </div>
@@ -112,25 +155,28 @@ const EmailVerification: React.FC = () => {
           </div>
           <div className="form-group">
             <label htmlFor="verificationCode">인증 코드</label>
-            <input
-              id="verificationCode"
-              type="text"
-              value={verificationCode}
-              onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              required
-              disabled={loading || success}
-              placeholder="6자리 숫자 코드"
-              maxLength={6}
-              style={{ 
-                textAlign: 'center', 
-                fontSize: '24px', 
-                letterSpacing: '8px',
-                fontFamily: 'monospace',
-                fontWeight: 'bold'
-              }}
-            />
+            <div className="otp-input-container">
+              {otp.map((digit, index) => (
+                <input
+                  key={index}
+                  ref={(el) => {
+                    inputRefs.current[index] = el;
+                  }}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={(e) => handleOtpChange(index, e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(index, e)}
+                  disabled={loading || success}
+                  className="otp-input"
+                  autoComplete="off"
+                />
+              ))}
+            </div>
             <small className="form-hint">
-              이메일로 전송된 6자리 인증 코드를 입력하세요. 코드는 10분 동안 유효합니다.
+              이메일로 전송된 6자리 인증 코드를 입력하세요.<br />
+              코드는 10분 동안 유효합니다.
             </small>
           </div>
           <button type="submit" disabled={loading || success} className="auth-button">

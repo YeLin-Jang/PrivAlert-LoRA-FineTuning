@@ -1,6 +1,7 @@
 import os
 import logging
 import warnings
+from datetime import timedelta
 from flask import Flask, jsonify, request
 
 # TensorFlow/MediaPipe 경고 억제
@@ -86,6 +87,8 @@ def create_app(config_name=None):
         "SESSION_COOKIE_SECURE": False,  # HTTP 환경이므로 Secure 미설정
         "SESSION_COOKIE_HTTPONLY": True,  # JavaScript에서 쿠키 접근 방지
         "SESSION_COOKIE_SAMESITE": "Strict",  # CSRF 공격 방지 (HTTP 환경에서는 Strict 권장)
+        # 세션 만료 시간 설정 (보안: 최소화)
+        "PERMANENT_SESSION_LIFETIME": timedelta(hours=24),  # 24시간 (보안: 짧은 만료 시간)
         # 기타 보안 설정
         "PREFERRED_URL_SCHEME": "https" if flask_env == "production" else "http",
         "TRAP_HTTP_EXCEPTIONS": True,  # HTTP 예외 처리
@@ -183,16 +186,6 @@ def create_app(config_name=None):
         storage_uri="memory://"  # 개발 환경 (프로덕션에서는 Redis 사용 권장)
     )
     
-    # 관리자 경로 접근 보호 (일반 사용자 차단)
-    @app.before_request
-    def protect_admin_routes():
-        """관리자 경로 접근 보호 - 일반 사용자 차단"""
-        from app.utils.admin_route_protection import check_admin_route_access
-        
-        is_blocked, error_response, status_code = check_admin_route_access()
-        if is_blocked:
-            return error_response, status_code
-    
     # 보안 헤더 설정
     @app.after_request
     def set_security_headers(response):
@@ -222,45 +215,20 @@ def create_app(config_name=None):
             'magnetometer=(), gyroscope=(), speaker=()'
         )
         
-        # 요청 경로 확인
-        request_path = request.path if request else ''
-        is_admin_path = request_path.startswith('/admin') or request_path.startswith('/api/v1/admin')
-        
         # Content Security Policy
-        # 관리자 페이지에 대해 더 엄격한 CSP 적용
-        if is_admin_path:
-            # 관리자 페이지용 엄격한 CSP 정책 (Google Fonts 허용)
-            csp = (
-                "default-src 'self'; "
-                "script-src 'self'; "
-                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-                "img-src 'self' data: blob:; "
-                "font-src 'self' data: https://fonts.gstatic.com; "
-                "connect-src 'self'; "
-                "frame-ancestors 'none'; "
-                "base-uri 'self'; "
-                "form-action 'self'; "
-                "object-src 'none'; "
-                "media-src 'self' blob:; "
-                "worker-src 'none'; "
-                "manifest-src 'self'; "
-                "upgrade-insecure-requests"
-            )
-        else:
-            # 일반 페이지용 CSP 정책
-            # 보안: blob: URL 허용 (로컬 파일 미리보기용)
-            csp = (
-                "default-src 'self'; "
-                "script-src 'self'; "
-                "style-src 'self' 'unsafe-inline'; "
-                "img-src 'self' data: blob:; "
-                "font-src 'self' data:; "
-                "connect-src 'self'; "
-                "frame-ancestors 'none'; "
-                "base-uri 'self'; "
-                "form-action 'self'; "
-                "media-src 'self' blob:"
-            )
+        # 보안: blob: URL 허용 (로컬 파일 미리보기용)
+        csp = (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob:; "
+            "font-src 'self' data:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'; "
+            "media-src 'self' blob:"
+        )
         
         response.headers['Content-Security-Policy'] = csp
         
@@ -315,17 +283,46 @@ def create_app(config_name=None):
     @app.route('/data/results/<path:filename>')
     def serve_data(filename):
         """보안이 적용된 정적 파일 서빙"""
+        from flask import request
+        from app.utils.file_cleanup import cleanup_file
+        
         # 경로 조작 방지
-        # filename은 results/ 하위의 상대 경로 (예: face/face_xxx.jpg)
+        # filename은 results/ 하위의 상대 경로 (예: image/sanitized_xxx.png)
         is_valid, error = validate_path(BASE_DATA_DIR, filename)
         if not is_valid:
             app.logger.warning(f"경로 조작 시도 감지: {filename}")
             abort(403)
         
         try:
-            response = send_from_directory(BASE_DATA_DIR, filename)
+            # 다운로드 모드 확인 (download 파라미터가 있으면 다운로드 후 삭제)
+            is_download = request.args.get('download', '').lower() == 'true'
+            
+            response = send_from_directory(
+                BASE_DATA_DIR, 
+                filename,
+                as_attachment=is_download  # 다운로드 모드면 attachment로 설정
+            )
             # 보안: 정적 파일에도 X-Content-Type-Options 헤더 명시적 설정 (이중 보장)
             response.headers['X-Content-Type-Options'] = 'nosniff'
+            
+            # 다운로드 모드이고 삭제 플래그가 있으면 다운로드 후 삭제
+            if is_download and request.args.get('delete', '').lower() == 'true':
+                file_path = os.path.join(BASE_DATA_DIR, filename)
+                abs_path = os.path.abspath(file_path)
+                
+                # 보안: 경로 재검증
+                base_abs = os.path.abspath(BASE_DATA_DIR)
+                if abs_path.startswith(base_abs) and os.path.exists(abs_path):
+                    # 다운로드 완료 후 파일 삭제 (백그라운드에서)
+                    import threading
+                    def delayed_delete():
+                        import time
+                        time.sleep(2)  # 다운로드 완료 대기
+                        cleanup_file(abs_path, BASE_DATA_DIR)
+                    
+                    thread = threading.Thread(target=delayed_delete, daemon=True)
+                    thread.start()
+            
             return response
         except FileNotFoundError:
             abort(404)
@@ -438,8 +435,6 @@ def create_app(config_name=None):
     from app.routes.education_routes import education_bp
     from app.routes.workplace_detection_routes import workplace_bp
     from app.routes.name_detection_routes import name_detection_bp
-    from app.routes.admin_auth_routes import admin_auth_bp
-    from app.routes.admin_routes import admin_bp
     from app.routes.secure_upload_routes import secure_upload_bp
     from app.routes.auth_routes import auth_bp
     from app.routes.user_routes import user_bp
@@ -470,8 +465,6 @@ def create_app(config_name=None):
     app.register_blueprint(education_bp, url_prefix="/api/v1/education")
     app.register_blueprint(workplace_bp, url_prefix="/api/v1/workplace")
     app.register_blueprint(name_detection_bp, url_prefix="/api/v1/name")
-    app.register_blueprint(admin_auth_bp, url_prefix="/api/v1/admin/auth")
-    app.register_blueprint(admin_bp, url_prefix="/api/v1/admin")
     app.register_blueprint(secure_upload_bp, url_prefix="/api/v1")  
     app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")
     app.register_blueprint(user_bp, url_prefix="/api/v1/user")
@@ -606,9 +599,7 @@ def create_app(config_name=None):
                 "integrated_filter": "/api/v1/filter",
                 "education": "/api/v1/education",
                 "workplace": "/api/v1/workplace",
-                "name_detection": "/api/v1/name",
-                "admin_auth": "/api/v1/admin/auth",
-                "admin": "/api/v1/admin"
+                "name_detection": "/api/v1/name"
             }
         })
     

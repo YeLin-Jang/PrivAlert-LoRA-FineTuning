@@ -17,14 +17,7 @@ const createApiInstance = (): AxiosInstance => {
   // 요청 인터셉터 (보안: 민감 정보 로깅 방지)
   instance.interceptors.request.use(
     (config) => {
-      // 개발 환경에서만 로깅
-      if (import.meta.env.DEV) {
-        console.log('API 요청:', {
-          method: config.method,
-          url: config.url,
-          // 파일 데이터는 로깅하지 않음
-        });
-      }
+      // 보안: 콘솔 로그 제거
       return config;
     },
     (error) => {
@@ -36,11 +29,32 @@ const createApiInstance = (): AxiosInstance => {
   instance.interceptors.response.use(
     (response) => response,
     (error: AxiosError) => {
+      // 타임아웃 에러 처리
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        return Promise.reject(new Error('요청 시간이 초과되었습니다. 서버 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.'));
+      }
+      
       if (error.response) {
-        const data = error.response.data as any;
+        // 보안: 상세한 서버 에러 정보는 사용자에게 노출하지 않음
+        // HTTP 상태 코드에 따라 일반화된 메시지만 반환
+        const status = error.response.status;
+        let errorMessage = '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
         
-        // 일반적인 에러 메시지만 반환 (보안: 상세한 서버 정보 노출 방지)
-        const errorMessage = data?.error || data?.message || '서버 오류가 발생했습니다';
+        if (status === 400) {
+          errorMessage = '잘못된 요청입니다. 입력 내용을 확인해주세요.';
+        } else if (status === 401) {
+          errorMessage = '인증이 필요합니다. 다시 로그인해주세요.';
+        } else if (status === 403) {
+          errorMessage = '접근 권한이 없습니다.';
+        } else if (status === 404) {
+          errorMessage = '요청한 리소스를 찾을 수 없습니다.';
+        } else if (status === 413) {
+          errorMessage = '파일 크기가 너무 큽니다.';
+        } else if (status === 429) {
+          errorMessage = '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.';
+        } else if (status >= 500) {
+          errorMessage = '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+        }
         
         return Promise.reject(new Error(errorMessage));
       } else if (error.request) {
@@ -49,7 +63,7 @@ const createApiInstance = (): AxiosInstance => {
         return Promise.reject(new Error('네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.'));
       } else {
         // 요청 설정 오류
-        return Promise.reject(new Error('요청 처리 중 오류가 발생했습니다'));
+        return Promise.reject(new Error('요청 처리 중 오류가 발생했습니다.'));
       }
     }
   );
@@ -62,12 +76,52 @@ const api = createApiInstance();
 // 파일 업로드용 Axios 인스턴스
 const fileApi = axios.create({
   baseURL: API_CONFIG.BASE_URL,
-  timeout: API_CONFIG.TIMEOUT * 2, // 파일 업로드는 더 긴 타임아웃
+  timeout: API_CONFIG.TIMEOUT * 2, // 파일 업로드는 더 긴 타임아웃 (4분)
   withCredentials: true, // 쿠키 전송을 위해 필요 (세션 인증)
   headers: {
     'Content-Type': 'multipart/form-data',
   },
 });
+
+// 파일 업로드용 응답 인터셉터 (타임아웃 에러 처리)
+fileApi.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError) => {
+    // 타임아웃 에러 처리
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      return Promise.reject(new Error('요청 시간이 초과되었습니다. 서버 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.'));
+    }
+    
+    if (error.response) {
+      // 보안: 상세한 서버 에러 정보는 사용자에게 노출하지 않음
+      // HTTP 상태 코드에 따라 일반화된 메시지만 반환
+      const status = error.response.status;
+      let errorMessage = '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+      
+      if (status === 400) {
+        errorMessage = '잘못된 요청입니다. 입력 내용을 확인해주세요.';
+      } else if (status === 401) {
+        errorMessage = '인증이 필요합니다. 다시 로그인해주세요.';
+      } else if (status === 403) {
+        errorMessage = '접근 권한이 없습니다.';
+      } else if (status === 404) {
+        errorMessage = '요청한 리소스를 찾을 수 없습니다.';
+      } else if (status === 413) {
+        errorMessage = '파일 크기가 너무 큽니다.';
+      } else if (status === 429) {
+        errorMessage = '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.';
+      } else if (status >= 500) {
+        errorMessage = '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+      }
+      
+      return Promise.reject(new Error(errorMessage));
+    } else if (error.request) {
+      return Promise.reject(new Error('네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.'));
+    } else {
+      return Promise.reject(new Error('요청 처리 중 오류가 발생했습니다.'));
+    }
+  }
+);
 
 /**
  * 통합 분석 API
@@ -160,15 +214,7 @@ export const suggestEducation = async (
       tone,
     });
     
-    // 디버깅: 응답 구조 확인 (개발 환경에서만)
-    if (import.meta.env.DEV) {
-      console.log('교육 제안 응답:', {
-        success: response.data?.success,
-        hasData: !!response.data?.data,
-        dataKeys: response.data?.data ? Object.keys(response.data.data) : [],
-        fullResponse: response.data,
-      });
-    }
+    // 보안: 콘솔 로그 제거
     
     // 응답 데이터 구조 확인
     if (!response || !response.data) {
@@ -187,18 +233,7 @@ export const suggestEducation = async (
     
     return response.data.data;
   } catch (error: any) {
-    // 디버깅: 에러 상세 정보 (개발 환경에서만)
-    if (import.meta.env.DEV) {
-      console.error('교육 제안 API 에러 상세:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        request: error.request,
-        isNetworkError: !error.response && error.request,
-        isTimeout: error.code === 'ECONNABORTED',
-      });
-    }
+    // 보안: 콘솔 로그 제거
     
     // 네트워크 오류인 경우 더 명확한 메시지
     if (!error.response && error.request) {
