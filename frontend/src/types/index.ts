@@ -64,6 +64,7 @@ export interface AnalysisResult {
   text_analysis?: {
     original_text: string;
     masked_text: string;
+    revised_text?: string;
     statistics: FilterStats;
     structured_data?: {
       detected: boolean;
@@ -78,6 +79,12 @@ export interface AnalysisResult {
           }>;
         };
       };
+    };
+    message?: string;
+    source?: {
+      direct_input: boolean;
+      ocr: boolean;
+      ocr_count: number;
     };
   };
   summary: {

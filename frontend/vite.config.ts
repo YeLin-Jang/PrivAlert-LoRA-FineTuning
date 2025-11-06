@@ -17,11 +17,11 @@ function securityHeadersPlugin(): Plugin {
       // 보안: 프로덕션에서는 unsafe-inline 제거, 개발 환경에서는 Vite 작동을 위해 필요
       const isDev = process.env.NODE_ENV !== 'production';
       const htmlCSP = isDev
-        ? "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http://localhost:5000 http://localhost:8000 ws://localhost:3000 ws://localhost:5173; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; worker-src 'none'; manifest-src 'self'"
-        : "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http://localhost:5000 http://localhost:8000 ws://localhost:3000 ws://localhost:5173; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; worker-src 'none'; manifest-src 'self'";
+        ? "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http://localhost:5000 http://localhost:8000 ws://localhost:3000 ws://localhost:5173; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'none'; manifest-src 'self'"
+        : "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http://localhost:5000 http://localhost:8000 ws://localhost:3000 ws://localhost:5173; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'none'; manifest-src 'self'";
       
       // 관리자 페이지용 - 더 엄격한 CSP (unsafe-inline 완전 제거)
-      const adminCSP = "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'none'; worker-src 'none'; manifest-src 'self'; upgrade-insecure-requests";
+      const adminCSP = "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'none'; manifest-src 'self'; upgrade-insecure-requests";
       
       // 보안 헤더 설정 함수
       const setSecurityHeaders = (req: any, res: any) => {
@@ -147,11 +147,11 @@ function securityHeadersPlugin(): Plugin {
       const robotsCSP = "default-src 'none'; script-src 'none'; style-src 'none'; connect-src 'none'; frame-ancestors 'none'";
       
       // HTML 페이지용 - unsafe-inline, unsafe-eval 완전 제거
-      // 보안: 와일드카드 제거, 'self'와 data:만 허용 (외부 이미지가 필요하면 특정 도메인 명시)
-      const htmlCSP = "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'none'; worker-src 'none'; manifest-src 'self'";
+      // 보안: blob: URL 허용 (로컬 파일 미리보기용)
+      const htmlCSP = "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'none'; manifest-src 'self'";
       
       // 관리자 페이지용
-      const adminCSP = "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'none'; worker-src 'none'; manifest-src 'self'; upgrade-insecure-requests";
+      const adminCSP = "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'none'; manifest-src 'self'; upgrade-insecure-requests";
       
       // 보안 헤더 설정 함수
       const setSecurityHeaders = (req: any, res: any) => {

@@ -364,10 +364,10 @@ class User(db.Model):
     @staticmethod
     def find_by_username(username: str) -> Optional['User']:
         """
-        사용자명으로 사용자 검색 (더미 사용자용, email과 동일하게 처리)
+        사용자명으로 사용자 검색 (email과 동일하게 처리)
         보안: SQLAlchemy ORM 사용으로 SQL 인젝션 방지
         """
-        # 더미 사용자는 email과 동일하게 처리 (username 필드가 없으므로)
+        # username 필드가 없으므로 email과 동일하게 처리
         return User.query.filter_by(email=username.lower().strip(), is_deleted=False).first()
     
     @staticmethod

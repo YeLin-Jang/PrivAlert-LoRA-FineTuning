@@ -9,7 +9,7 @@ import './CommonHeader.css';
 export default function CommonHeader() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, user, logout } = useUserAuth();
+  const { isAuthenticated, user, logout, loading } = useUserAuth();
 
   const handleHome = () => {
     navigate('/');
@@ -42,7 +42,8 @@ export default function CommonHeader() {
 
   return (
     <header className="common-header">
-      <div className="header-logo">
+      <div className="header-logo" onClick={handleHome}>
+        <img src="/Privalert.png" alt="PrivAlert" className="logo-image" />
         <span className="logo-text">PrivAlert</span>
       </div>
       <nav className="header-nav">
@@ -67,21 +68,26 @@ export default function CommonHeader() {
       </nav>
 
       <div className="header-right">
-        {isAuthenticated ? (
+        {loading ? (
+          <div className="auth-loading">
+            <div className="loading-spinner"></div>
+            <span className="loading-text">로딩 중...</span>
+          </div>
+        ) : isAuthenticated ? (
           <>
             <span className="user-greeting">안녕하세요, {user?.nickname || user?.email || '사용자'}님</span>
-            <button className="logout-button" onClick={handleLogout}>
+            <span className="logout-link" onClick={handleLogout}>
               로그아웃
-            </button>
+            </span>
           </>
         ) : (
           <>
-            <button className="login-button" onClick={handleLogin}>
+            <span className="login-link" onClick={handleLogin}>
               로그인
-            </button>
-            <button className="signup-button" onClick={handleSignup}>
+            </span>
+            <span className="signup-link" onClick={handleSignup}>
               회원가입
-            </button>
+            </span>
           </>
         )}
       </div>
