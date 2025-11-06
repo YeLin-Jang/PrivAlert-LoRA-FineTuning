@@ -23,6 +23,11 @@ const createApiInstance = (): AxiosInstance => {
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
+      // CSRF 토큰 추가 (세션 기반 인증)
+      const csrfToken = localStorage.getItem('csrf_token');
+      if (csrfToken) {
+        config.headers['X-CSRF-Token'] = csrfToken;
+      }
       // 보안: Content-Type 설정
       if (!config.headers['Content-Type']) {
         config.headers['Content-Type'] = 'application/json';

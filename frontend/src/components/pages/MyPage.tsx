@@ -10,6 +10,12 @@ import { userApi, type FilteringSettings, type RevisionHistory } from '../../ser
 import CommonHeader from '../common/CommonHeader';
 import './MyPage.css';
 
+// 보안: 허용된 옵션만 허용
+const ALLOWED_OPTIONS: string[] = [
+  'face', 'fingerprint', 'phone', 'rrn', 'passport', 'ip_address',
+  'email', 'account', 'school', 'workplace', 'name', 'address'
+];
+
 export default function MyPage() {
   const navigate = useNavigate();
   const { isAuthenticated, loading: authLoading } = useUserAuth();
@@ -29,9 +35,14 @@ export default function MyPage() {
       return; // 로딩 중이면 대기
     }
     
-    if (!isAuthenticated) {
+    // localStorage에 user_email이 있으면 로그인 상태로 간주 (세션 쿠키 확인 중일 수 있음)
+    const storedEmail = localStorage.getItem('user_email');
+    const isLoggedIn = isAuthenticated || !!storedEmail;
+    
+    if (!isLoggedIn) {
       // 로그인 안된 상태면 로그인 페이지로 리다이렉트
       navigate('/auth/login', { 
+        replace: true,
         state: { 
           redirectTo: '/mypage',
           message: '마이페이지는 로그인이 필요합니다.'
@@ -42,13 +53,22 @@ export default function MyPage() {
 
   // 초기 로드 (로그인 상태일 때만)
   useEffect(() => {
-    if (isAuthenticated) {
+    // localStorage에 user_email이 있으면 로그인 상태로 간주
+    const storedEmail = localStorage.getItem('user_email');
+    const isLoggedIn = isAuthenticated || !!storedEmail;
+    
+    if (isLoggedIn) {
       loadData();
+    } else {
+      setLoading(false);
     }
   }, [currentPage, isAuthenticated]);
 
   const loadData = async () => {
-    if (!isAuthenticated) return;
+    // localStorage에 user_email이 있으면 로그인 상태로 간주
+    const storedEmail = localStorage.getItem('user_email');
+    const isLoggedIn = isAuthenticated || !!storedEmail;
+    if (!isLoggedIn) return;
     
     try {
       setLoading(true);
@@ -56,6 +76,7 @@ export default function MyPage() {
 
       // 실제 사용자 필터링 설정 조회
       const settings = await userApi.getFilteringSettings();
+      console.log('필터링 설정 로드:', settings);
       setFilteringSettings(settings);
 
       // 수정 기록 조회
@@ -70,15 +91,16 @@ export default function MyPage() {
   };
 
   const handleSaveSettings = async () => {
-    if (!filteringSettings || !isAuthenticated) return;
+    if (!isAuthenticated) return;
 
     try {
       setSaving(true);
       setError(null);
 
-      const updatedSettings = await userApi.updateFilteringSettings(
-        filteringSettings.detection_options
-      );
+      // filteringSettings가 없으면 빈 객체로 초기화
+      const detectionOptions = filteringSettings?.detection_options || {};
+      
+      const updatedSettings = await userApi.updateFilteringSettings(detectionOptions);
       setFilteringSettings(updatedSettings);
       setEditingSettings(false);
     } catch (err) {
@@ -89,25 +111,27 @@ export default function MyPage() {
   };
 
   const handleToggleOption = (option: string) => {
-    if (!filteringSettings || !editingSettings) return;
-
-    // 보안: 허용된 옵션만 허용
-    const allowedOptions: string[] = [
-      'face', 'fingerprint', 'phone', 'rrn', 'passport', 'ip_address',
-      'email', 'account', 'school', 'workplace', 'name', 'address',
-      'driverLicense', 'postalCode'
-    ];
+    if (!editingSettings) return;
     
-    if (!allowedOptions.includes(option)) {
+    if (!ALLOWED_OPTIONS.includes(option)) {
       setError('허용되지 않은 옵션입니다');
       return;
     }
 
+    // filteringSettings가 없으면 초기화
+    const currentSettings = filteringSettings || {
+      id: 0,
+      user_id: 0,
+      detection_options: {},
+      created_at: null,
+      updated_at: null,
+    };
+
     setFilteringSettings({
-      ...filteringSettings,
+      ...currentSettings,
       detection_options: {
-        ...filteringSettings.detection_options,
-        [option]: !filteringSettings.detection_options[option],
+        ...currentSettings.detection_options,
+        [option]: !(currentSettings.detection_options?.[option] || false),
       },
     });
   };
@@ -190,14 +214,14 @@ export default function MyPage() {
               </div>
 
               <div className="settings-content">
-                {filteringSettings && (
+                {ALLOWED_OPTIONS && ALLOWED_OPTIONS.length > 0 ? (
                   <div className="detection-options">
                     <div className="options-grid">
-                      {Object.keys(filteringSettings.detection_options).map((key) => (
+                      {ALLOWED_OPTIONS.map((key) => (
                         <label key={key} className="option-item">
                           <input
                             type="checkbox"
-                            checked={filteringSettings.detection_options[key] || false}
+                            checked={filteringSettings?.detection_options?.[key] || false}
                             onChange={() => handleToggleOption(key)}
                             disabled={!editingSettings}
                           />
@@ -205,6 +229,10 @@ export default function MyPage() {
                         </label>
                       ))}
                     </div>
+                  </div>
+                ) : (
+                  <div className="empty-state">
+                    <p>탐지 옵션을 불러올 수 없습니다.</p>
                   </div>
                 )}
               </div>
@@ -302,8 +330,6 @@ function getOptionLabel(key: string): string {
     workplace: '직장명',
     name: '이름',
     address: '주소',
-    driverLicense: '운전면허번호',
-    postalCode: '우편번호',
   };
   return labels[key] || key;
 }
