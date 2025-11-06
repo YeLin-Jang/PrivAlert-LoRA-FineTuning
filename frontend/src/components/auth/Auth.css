@@ -28,8 +28,39 @@
 }
 
 .auth-logo-icon {
-  font-size: 4rem;
-  margin-bottom: 12px;
+  width: 70px;
+  height: 70px;
+  margin: 0 auto 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 25%, #2563eb 25%, #1d4ed8 50%, #60a5fa 50%, #3b82f6 75%, #2563eb 75%, #1d4ed8 100%);
+  border-radius: 16px;
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.25),
+              inset 0 1px 3px rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  position: relative;
+}
+
+.auth-logo-icon::before {
+  content: '';
+  position: absolute;
+  top: 15%;
+  left: 15%;
+  width: 50%;
+  height: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.4) 0%, transparent 70%);
+  border-radius: 50%;
+  filter: blur(8px);
+  opacity: 0.8;
+}
+
+.auth-logo-icon svg {
+  width: 40px;
+  height: 40px;
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
 }
 
 .auth-logo-text {
@@ -181,5 +212,3 @@
   color: #2563eb;
   text-decoration: none;
 }
-
-
