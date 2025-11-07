@@ -109,8 +109,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
-          cpus: '1.0'
+          memory: 4G  # EasyOCR 및 이미지 처리로 인해 메모리 사용량 증가
+          cpus: '2.0'  # CPU도 증가
 
   # ========== FastAPI Backend 서버 ==========
   fastapi-backend:
