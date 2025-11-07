@@ -8,10 +8,6 @@ Flask 기반 **위험정보(개인정보 등) 탐지 웹서비스** 프로젝트
 
 ---
 
-📖 **상세 서비스 개요서**: [SERVICE_OVERVIEW.md](./SERVICE_OVERVIEW.md) 참고
-
----
-
 ## 📌 프로젝트 개요
 
 - 업로드된 텍스트/이미지/비디오에서 개인정보 가능성이 있는 패턴 탐지  
@@ -108,6 +104,23 @@ docker-compose up -d --build
 - `--build`: 이미지가 없거나 변경사항이 있으면 자동으로 빌드
 - `-d`: 백그라운드 실행
 - Backend, Frontend 이미지가 자동으로 빌드됨
+
+**코드 변경 시:**
+- **Backend 코드 변경**: 볼륨 마운트로 자동 반영 (재시작만 필요)
+  ```bash
+  docker-compose restart backend
+  ```
+- **Frontend 코드 변경**: 재빌드 필요
+  ```bash
+  docker-compose down
+  docker-compose build frontend
+  docker-compose up -d
+  ```
+- **Dockerfile 변경**: 해당 서비스 재빌드 필요
+  ```bash
+  docker-compose build --no-cache <service-name>
+  docker-compose up -d
+  ```
 
 ### 4단계: 확인
 
@@ -388,6 +401,19 @@ docker-compose restart backend
 
 # 특정 서비스만 실행
 docker-compose up -d mysql backend
+
+# 코드 변경 후 재빌드 및 재시작
+# Backend 코드 변경 시 (볼륨 마운트로 자동 반영)
+docker-compose restart backend
+
+# Frontend 코드 변경 시 (재빌드 필요)
+docker-compose down
+docker-compose build frontend
+docker-compose up -d
+
+# Dockerfile 변경 시 (캐시 없이 재빌드)
+docker-compose build --no-cache <service-name>
+docker-compose up -d
 
 # MySQL 접속
 docker-compose exec mysql mysql -u privalert_user -p privalert
