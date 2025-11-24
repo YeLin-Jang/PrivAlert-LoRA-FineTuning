@@ -438,7 +438,14 @@ export default function UploadForm() {
       <main className="analyze-main-content">
         {/* 브랜딩 섹션 */}
         <div className="branding-section">
-          <h1 className="brand-name">PrivAlert</h1>
+          <img
+            src="/Privalert.png"
+            alt="PrivAlert"
+            className="brand-logo"
+            onError={(e) => {
+              e.currentTarget.src = '/Privalert.png';
+            }}
+          />
           <p className="brand-subtitle">당신의 개인정보 보호 분석 시스템</p>
         </div>
 
