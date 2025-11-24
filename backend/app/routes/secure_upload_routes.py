@@ -23,8 +23,11 @@ logger = get_logger(__name__)
 secure_upload_bp = Blueprint('secure_upload', __name__)
 
 
-# 세션 소유자 매핑 (실제로는 DB에 저장해야 함)
-# {session_id: user_id}
+# 세션 소유자 매핑 (메모리 기반)
+# ⚠️ 프로덕션 주의: 메모리 기반 저장소는 서버 재시작 시 데이터 손실 및 멀티 인스턴스 환경에서 문제 발생
+# 프로덕션에서는 DB(UserSession 모델) 또는 Redis 사용 필수
+# DB 전환: UserSession 모델의 session_id와 user_id 관계 활용
+# Redis 전환 예시: redis_client.setex(f"session_owner:{session_id}", ttl, user_id)
 _session_owners: dict = {}
 
 

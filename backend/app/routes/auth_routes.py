@@ -16,6 +16,7 @@ from app.utils.auth_utils import (
     validate_email, validate_password_strength, get_client_ip, get_user_agent
 )
 from app.utils.csrf_protection import generate_csrf_token, validate_csrf_token
+from app.utils.api_utils import APIResponse
 import os
 import json
 
@@ -44,11 +45,7 @@ def signup():
     try:
         data = request.get_json()
         if not data:
-            return jsonify({
-                "success": False,
-                "error": "요청 데이터가 필요합니다",
-                "code": 400
-            }), 400
+            return APIResponse.error("요청 데이터가 필요합니다", code=400)
         
         email = data.get('email', '').strip().lower()
         password = data.get('password', '')
@@ -56,52 +53,28 @@ def signup():
         
         # 입력 검증
         if not email or not password:
-            return jsonify({
-                "success": False,
-                "error": "이메일과 비밀번호를 입력하세요",
-                "code": 400
-            }), 400
+            return APIResponse.error("이메일과 비밀번호를 입력하세요", code=400)
         
         # 별명 검증
         if not nickname or len(nickname.strip()) < 2:
-            return jsonify({
-                "success": False,
-                "error": "별명은 최소 2자 이상이어야 합니다",
-                "code": 400
-            }), 400
+            return APIResponse.error("별명은 최소 2자 이상이어야 합니다", code=400)
         
         if len(nickname.strip()) > 20:
-            return jsonify({
-                "success": False,
-                "error": "별명은 최대 20자까지 가능합니다",
-                "code": 400
-            }), 400
+            return APIResponse.error("별명은 최대 20자까지 가능합니다", code=400)
         
         # 이메일 형식 검증
         if not validate_email(email):
-            return jsonify({
-                "success": False,
-                "error": "올바른 이메일 형식이 아닙니다",
-                "code": 400
-            }), 400
+            return APIResponse.error("올바른 이메일 형식이 아닙니다", code=400)
         
         # 비밀번호 강도 검증
         is_valid, error_msg = validate_password_strength(password)
         if not is_valid:
-            return jsonify({
-                "success": False,
-                "error": error_msg,
-                "code": 400
-            }), 400
+            return APIResponse.error(error_msg, code=400)
         
         # 중복 이메일 확인 (인증 완료된 사용자만 확인)
         existing_user = User.find_by_email(email)
         if existing_user and existing_user.email_verified:
-            return jsonify({
-                "success": False,
-                "error": "이미 등록된 이메일입니다",
-                "code": 409
-            }), 409
+            return APIResponse.error("이미 등록된 이메일입니다", code=409)
         
         # 비밀번호 해시 생성 (나중에 사용자 생성 시 사용)
         user = User.create_user(email, password)
@@ -127,7 +100,7 @@ def signup():
         from app.services.verification_service import VerificationService
         verification_code = VerificationService.generate_code(email, token.id)
         
-        # SMTP 이메일 전송 (실무: 실제 이메일로만 전송, 코드는 절대 응답에 포함하지 않음)
+        # SMTP 이메일 전송 (실제 이메일로만 전송, 코드는 절대 응답에 포함하지 않음)
         try:
             from app.services.email_service import EmailService
             email_sent = EmailService.send_verification_code(email, verification_code)
@@ -154,7 +127,7 @@ def signup():
         # 보안: 회원가입 요청 로그 기록 (아직 계정 생성 안됨)
         logger.info(f"회원가입 요청: email={email[:3]}..., ip={ip}, 인증 코드 생성 및 이메일 전송 완료")
         
-        # 실무: 인증 코드는 절대 응답에 포함하지 않음 (보안)
+        # 인증 코드는 절대 응답에 포함하지 않음 (보안)
         return jsonify({
             "success": True,
             "message": "회원가입 요청이 접수되었습니다. 이메일을 확인하여 인증 코드를 입력해주세요.",
@@ -687,7 +660,6 @@ def request_password_reset():
                 expiry_hours=1  # 1시간만 유효
             )
             
-            # TODO: 이메일 전송
             # 비밀번호 재설정 이메일 전송
             reset_url = f"{request.host_url.rstrip('/')}/api/v1/auth/reset-password?token={token_plaintext}"
             try:

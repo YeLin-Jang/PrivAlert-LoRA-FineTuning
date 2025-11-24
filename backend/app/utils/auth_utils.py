@@ -107,10 +107,10 @@ def sanitize_input(text: str, max_length: int = 1000) -> str:
 
 def is_rate_limited(identifier: str, limit: int, window_seconds: int) -> bool:
     """
-    Rate limiting 체크 (간단한 인메모리 구현)
-    실제로는 Redis 사용 권장
+    Rate limiting 체크
+    주의: 이 함수는 현재 사용되지 않습니다. Flask-Limiter가 직접 처리합니다.
+    Flask-Limiter는 __init__.py에서 설정되며, REDIS_URL이 설정되어 있으면 Redis를 사용합니다.
     """
-    # TODO: Redis 기반 rate limiting 구현
-    # 현재는 Flask-Limiter 사용
+    # Flask-Limiter가 직접 처리하므로 이 함수는 사용되지 않음
     return False
 

@@ -2,18 +2,20 @@ import os
 import logging
 from flask import Blueprint, request, jsonify, send_file
 from io import BytesIO
+
+logger = logging.getLogger(__name__)
+
 try:
     import cv2
     CV2_AVAILABLE = True
 except ImportError:
     CV2_AVAILABLE = False
-    print("Warning: OpenCV not available. Face detection will be limited.")
+    logger.warning("OpenCV not available. Face detection will be limited.")
+
 from flasgger.utils import swag_from
 from app.services.face_detection_service import FaceDetectionService
 from app.utils.security_utils import validate_image_file, mask_sensitive_data_in_log
 from config import DOCS_DIR
-
-logger = logging.getLogger(__name__)
 
 face_bp = Blueprint("face", __name__)
 face_service = FaceDetectionService()
