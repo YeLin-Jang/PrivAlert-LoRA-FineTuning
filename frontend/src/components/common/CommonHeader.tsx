@@ -43,8 +43,14 @@ export default function CommonHeader() {
   return (
     <header className="common-header">
       <div className="header-logo" onClick={handleHome}>
-        <img src="/Privalert.png" alt="PrivAlert" className="logo-image" />
-        <span className="logo-text">PrivAlert</span>
+        <img
+          src="/Privalert.png"
+          alt="PrivAlert"
+          className="logo-image"
+          onError={(e) => {
+            e.currentTarget.src = '/Privalert.png';
+          }}
+        />
       </div>
       <nav className="header-nav">
         <button 
@@ -75,7 +81,7 @@ export default function CommonHeader() {
           </div>
         ) : isAuthenticated ? (
           <>
-            <span className="user-greeting">안녕하세요, {user?.nickname || user?.email || '사용자'}님</span>
+            <span className="user-greeting">안녕하세요, {user?.nickname || '사용자'}님</span>
             <span className="logout-link" onClick={handleLogout}>
               로그아웃
             </span>

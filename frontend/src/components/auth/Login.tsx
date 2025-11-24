@@ -55,8 +55,14 @@ const Login: React.FC = () => {
       <div className="auth-content">
         <div className="auth-box">
           <div className="auth-logo-section">
-            <img src="/Privalert.png" alt="PrivAlert" className="auth-logo-image" />
-            <div className="auth-logo-text">PrivAlert</div>
+            <img
+              src="/Privalert.png"
+              alt="PrivAlert"
+              className="auth-logo-image auth-logo-image-large"
+              onError={(e) => {
+                e.currentTarget.src = '/Privalert.png';
+              }}
+            />
             <div className="auth-slogan">당신의 개인정보 보호 분석 시스템</div>
           </div>
           <h1>로그인</h1>
