@@ -2,7 +2,7 @@ import os
 import logging
 import warnings
 from datetime import timedelta
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify
 
 # TensorFlow/MediaPipe 경고 억제
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # ERROR만 출력
@@ -87,8 +87,8 @@ def create_app(config_name=None):
         "SESSION_COOKIE_SECURE": False,  # HTTP 환경이므로 Secure 미설정
         "SESSION_COOKIE_HTTPONLY": True,  # JavaScript에서 쿠키 접근 방지
         "SESSION_COOKIE_SAMESITE": "Strict",  # CSRF 공격 방지 (HTTP 환경에서는 Strict 권장)
-        # 세션 만료 시간 설정 (보안: 최소화)
-        "PERMANENT_SESSION_LIFETIME": timedelta(hours=24),  # 24시간 (보안: 짧은 만료 시간)
+        # 세션 만료 시간 설정 (보안: 최소화, 환경 변수로 제어 가능)
+        "PERMANENT_SESSION_LIFETIME": timedelta(hours=int(os.getenv("SESSION_LIFETIME_HOURS", "24"))),  # 기본 24시간
         # 기타 보안 설정
         "PREFERRED_URL_SCHEME": "https" if flask_env == "production" else "http",
         "TRAP_HTTP_EXCEPTIONS": True,  # HTTP 예외 처리
@@ -179,72 +179,29 @@ def create_app(config_name=None):
             app.logger.warning("개발 환경: 데이터베이스 연결 실패했지만 계속 진행합니다")
     
     # Rate Limiter 설정
+    # Redis 사용 여부는 환경 변수로 제어 (REDIS_URL이 설정되어 있으면 Redis 사용)
+    redis_url = os.getenv("REDIS_URL", "")
+    if redis_url:
+        storage_uri = redis_url
+        app.logger.info(f"Rate Limiter: Redis 사용 ({redis_url})")
+    else:
+        storage_uri = "memory://"
+        app.logger.warning("Rate Limiter: 메모리 기반 사용 (프로덕션에서는 REDIS_URL 설정 권장)")
+    
+    # Rate Limiter 제한값 설정 (환경 변수로 제어 가능)
+    rate_limit_per_hour = os.getenv("RATE_LIMIT_PER_HOUR", "1000")
+    rate_limit_per_minute = os.getenv("RATE_LIMIT_PER_MINUTE", "100")
+    
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,
-        default_limits=["1000 per hour", "100 per minute"],  # 완화: 시간당 1000회, 분당 100회
-        storage_uri="memory://"  # 개발 환경 (프로덕션에서는 Redis 사용 권장)
+        default_limits=[f"{rate_limit_per_hour} per hour", f"{rate_limit_per_minute} per minute"],
+        storage_uri=storage_uri
     )
     
     # 보안 헤더 설정
-    @app.after_request
-    def set_security_headers(response):
-        """보안 헤더를 설정하고 버전 정보 유출을 방지합니다.
-        모든 응답(정상 응답, 에러 응답, 정적 파일 포함)에 적용됩니다.
-        """
-        # Server 헤더 제거 후 브랜드명으로 교체
-        response.headers.pop('Server', None)
-        response.headers['Server'] = 'PrivAlert'
-        response.headers.pop('X-Powered-By', None)
-        
-        # MIME-sniffing 방지
-        response.headers['X-Content-Type-Options'] = 'nosniff'
-        
-        # 클릭재킹 방지
-        response.headers['X-Frame-Options'] = 'DENY'
-        
-        # XSS 방지
-        response.headers['X-XSS-Protection'] = '1; mode=block'
-        
-        # Referrer 정책
-        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
-        
-        # 브라우저 기능 제한
-        response.headers['Permissions-Policy'] = (
-            'geolocation=(), microphone=(), camera=(), payment=(), usb=(), '
-            'magnetometer=(), gyroscope=(), speaker=()'
-        )
-        
-        # Content Security Policy
-        # 보안: blob: URL 허용 (로컬 파일 미리보기용)
-        csp = (
-            "default-src 'self'; "
-            "script-src 'self'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data: blob:; "
-            "font-src 'self' data:; "
-            "connect-src 'self'; "
-            "frame-ancestors 'none'; "
-            "base-uri 'self'; "
-            "form-action 'self'; "
-            "media-src 'self' blob:"
-        )
-        
-        response.headers['Content-Security-Policy'] = csp
-        
-        # 중요: HTTP 전용 환경이므로 HSTS 미설정
-        # HSTS는 HTTPS 환경에서만 사용하며, HTTP 환경에서는 설정하지 않음
-        # 자세한 내용은 security.md 참조
-        
-        # Content-Type 설정 보정
-        content_type = response.headers.get('Content-Type', '')
-        if not content_type:
-            response.headers['Content-Type'] = 'application/json; charset=utf-8'
-        elif 'charset' not in content_type.lower():
-            if 'text/' in content_type or 'application/json' in content_type:
-                response.headers['Content-Type'] = f'{content_type}; charset=utf-8'
-        
-        return response
+    from app.utils.security_headers import setup_security_headers
+    setup_security_headers(app)
     
     # 헬스체크 엔드포인트 (Docker healthcheck용)
     @app.route('/health', methods=['GET'])
@@ -253,6 +210,7 @@ def create_app(config_name=None):
         헬스체크 엔드포인트
         보안: 민감 정보 노출 방지
         """
+        from app.utils.api_utils import APIResponse
         try:
             # 데이터베이스 연결 확인
             db_status = "healthy"
@@ -263,17 +221,18 @@ def create_app(config_name=None):
                 app.logger.warning(f"데이터베이스 연결 확인 실패: {e}")
                 db_status = "unhealthy"
             
-            return jsonify({
-                "status": "healthy" if db_status == "healthy" else "degraded",
-                "database": db_status,
-                "service": "PrivAlert Backend"
-            }), 200 if db_status == "healthy" else 503
+            status_code = 200 if db_status == "healthy" else 503
+            return APIResponse.success(
+                data={
+                    "status": "healthy" if db_status == "healthy" else "degraded",
+                    "database": db_status,
+                    "service": "PrivAlert Backend"
+                },
+                status_code=status_code
+            )
         except Exception as e:
             app.logger.error(f"헬스체크 오류: {e}")
-            return jsonify({
-                "status": "unhealthy",
-                "error": "Internal error"
-            }), 503
+            return APIResponse.error("Internal error", code=503)
     
     # data 디렉토리도 정적 파일로 서빙 (원본 파일용)
     # 보안: 경로 조작 방지
@@ -302,8 +261,7 @@ def create_app(config_name=None):
                 filename,
                 as_attachment=is_download  # 다운로드 모드면 attachment로 설정
             )
-            # 보안: 정적 파일에도 X-Content-Type-Options 헤더 명시적 설정 (이중 보장)
-            response.headers['X-Content-Type-Options'] = 'nosniff'
+            # 보안 헤더는 @app.after_request에서 자동 적용됨
             
             # 다운로드 모드이고 삭제 플래그가 있으면 다운로드 후 삭제
             if is_download and request.args.get('delete', '').lower() == 'true':
@@ -437,7 +395,11 @@ def create_app(config_name=None):
     from app.routes.name_detection_routes import name_detection_bp
     from app.routes.secure_upload_routes import secure_upload_bp
     from app.routes.auth_routes import auth_bp
-    from app.routes.user_routes import user_bp
+    # 사용자 관련 라우트 (기능별로 분리)
+    from app.routes.user_profile_routes import user_profile_bp
+    from app.routes.user_session_routes import user_session_bp
+    from app.routes.user_settings_routes import user_settings_bp
+    from app.routes.user_history_routes import user_history_bp
     
     # NER 라우트 등록 (선택적 - 모델이 없는 경우에도 앱이 실행되도록)
     try:
@@ -467,7 +429,11 @@ def create_app(config_name=None):
     app.register_blueprint(name_detection_bp, url_prefix="/api/v1/name")
     app.register_blueprint(secure_upload_bp, url_prefix="/api/v1")  
     app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")
-    app.register_blueprint(user_bp, url_prefix="/api/v1/user")
+    # 사용자 관련 라우트 등록
+    app.register_blueprint(user_profile_bp, url_prefix="/api/v1/user")
+    app.register_blueprint(user_session_bp, url_prefix="/api/v1/user")
+    app.register_blueprint(user_settings_bp, url_prefix="/api/v1/user")
+    app.register_blueprint(user_history_bp, url_prefix="/api/v1/user")
     
     # 보안: 인증 관련 엔드포인트에 더 엄격한 Rate Limiting 적용 (라우트 등록 후)
     try:
@@ -482,103 +448,25 @@ def create_app(config_name=None):
     # 보안: 인증된 사용자 API 엔드포인트에 대해 더 관대한 Rate Limiting 적용
     # 인증된 사용자는 브루트포스 공격 위험이 낮고, 정상적인 사용 활동을 방해하지 않도록 설정
     try:
-        # 사용자 필터링 설정 조회/수정: 분당 30회 제한 (정상적인 사용 활동 허용)
-        if 'get_filtering_settings' in user_bp.view_functions:
-            limiter.limit("30 per minute")(user_bp.view_functions['get_filtering_settings'])
-        if 'update_filtering_settings' in user_bp.view_functions:
-            limiter.limit("30 per minute")(user_bp.view_functions['update_filtering_settings'])
+        # 사용자 필터링 설정 조회/수정: 분당 30회 제한
+        if 'get_filtering_settings' in user_settings_bp.view_functions:
+            limiter.limit("30 per minute")(user_settings_bp.view_functions['get_filtering_settings'])
+        if 'update_filtering_settings' in user_settings_bp.view_functions:
+            limiter.limit("30 per minute")(user_settings_bp.view_functions['update_filtering_settings'])
         # 사용자 정보 조회: 분당 60회 제한
-        if 'get_user_info' in user_bp.view_functions:
-            limiter.limit("60 per minute")(user_bp.view_functions['get_user_info'])
+        if 'get_profile' in user_profile_bp.view_functions:
+            limiter.limit("60 per minute")(user_profile_bp.view_functions['get_profile'])
         # 수정 기록 조회: 분당 30회 제한
-        if 'get_revision_history' in user_bp.view_functions:
-            limiter.limit("30 per minute")(user_bp.view_functions['get_revision_history'])
+        if 'get_revision_history' in user_history_bp.view_functions:
+            limiter.limit("30 per minute")(user_history_bp.view_functions['get_revision_history'])
     except (KeyError, AttributeError):
         # 라우트가 아직 등록되지 않은 경우 조용히 무시
         pass
     
-    # 데이터베이스 초기화 (테이블 생성 및 기본 계정 생성)
-    with app.app_context():
-        try:
-            from app.utils.db_init import init_database
-            init_database()
-        except Exception:
-            # db_init.py에서 이미 상세 로그를 출력하므로 여기서는 조용히 처리
-            # 개발 환경에서는 데이터베이스 없이도 실행 가능
-            pass
-        
-        # 파일 자동 정리 시스템 초기화 (조용히)
-        try:
-            from app.utils.file_cleanup import load_session_tracker, start_cleanup_thread
-            load_session_tracker(BASE_DATA_DIR)
-            start_cleanup_thread(BASE_DATA_DIR)
-        except Exception:
-            pass
-        
-        # CSRF 토큰 자동 정리 시스템 초기화 (조용히)
-        try:
-            import threading
-            import time
-            from app.utils.csrf_protection import cleanup_expired_tokens
-            
-            def csrf_cleanup_loop():
-                while True:
-                    try:
-                        time.sleep(3600)  # 1시간마다 정리
-                        cleanup_expired_tokens()
-                    except Exception:
-                        pass
-            
-            thread = threading.Thread(target=csrf_cleanup_loop, daemon=True)
-            thread.start()
-        except Exception:
-            pass
-        
-        # 백그라운드 파일 정리 작업 초기화 (조용히)
-        try:
-            from app.tasks.cleanup_worker import start_cleanup_scheduler
-            scheduler = start_cleanup_scheduler()
-            
-            # 토큰 및 세션 정리 작업 추가
-            from apscheduler.triggers.interval import IntervalTrigger
-            from app.models.token import Token
-            from app.models.session import UserSession
-            
-            def cleanup_tokens():
-                """만료된 토큰 정리"""
-                try:
-                    Token.cleanup_expired_tokens()
-                except Exception:
-                    pass
-            
-            def cleanup_sessions():
-                """만료된 세션 정리"""
-                try:
-                    UserSession.cleanup_expired_sessions()
-                except Exception:
-                    pass
-            
-            # 1시간마다 토큰 정리
-            scheduler.add_job(
-                cleanup_tokens,
-                trigger=IntervalTrigger(hours=1),
-                id='cleanup_expired_tokens',
-                replace_existing=True
-            )
-            
-            # 1시간마다 세션 정리
-            scheduler.add_job(
-                cleanup_sessions,
-                trigger=IntervalTrigger(hours=1),
-                id='cleanup_expired_sessions',
-                replace_existing=True
-            )
-            
-            # 앱 종료 시 스케줄러 종료
-            import atexit
-            atexit.register(lambda: scheduler.shutdown())
-        except Exception:
-            pass  
+    # 데이터베이스 및 백그라운드 작업 초기화
+    from app.utils.app_initialization import initialize_database, initialize_background_tasks
+    initialize_database(app)
+    initialize_background_tasks(app)  
     
     # 루트 경로
     @app.route("/")
@@ -603,83 +491,8 @@ def create_app(config_name=None):
             }
         })
     
-    # 에러 핸들러 (모든 에러 응답에도 보안 헤더가 적용됨 - @app.after_request를 통해)
-    @app.errorhandler(400)
-    def bad_request(error):
-        response = jsonify({"success": False, "error": "잘못된 요청입니다", "code": 400})
-        # 보안: X-Content-Type-Options 헤더 명시적 설정 (이중 보장)
-        response.headers['X-Content-Type-Options'] = 'nosniff'
-        return response, 400
-    
-    @app.errorhandler(401)
-    def unauthorized(error):
-        """인증 필요 핸들러"""
-        response = jsonify({
-            "success": False,
-            "error": "인증이 필요합니다",
-            "code": 401
-        })
-        # 보안: X-Content-Type-Options 헤더 명시적 설정 (이중 보장)
-        response.headers['X-Content-Type-Options'] = 'nosniff'
-        return response, 401
-    
-    @app.errorhandler(403)
-    def forbidden(error):
-        """접근 거부 핸들러"""
-        response = jsonify({"success": False, "error": "접근이 거부되었습니다", "code": 403})
-        # 보안: X-Content-Type-Options 헤더 명시적 설정 (이중 보장)
-        response.headers['X-Content-Type-Options'] = 'nosniff'
-        return response, 403
-    
-    @app.errorhandler(404)
-    def not_found(error):
-        response = jsonify({
-            "success": False, 
-            "error": "요청한 리소스를 찾을 수 없습니다", 
-            "code": 404,
-            "message": "사용 가능한 엔드포인트 목록은 루트 경로(/)를 참조하세요."
-        })
-        # 보안: X-Content-Type-Options 헤더 명시적 설정 (이중 보장)
-        response.headers['X-Content-Type-Options'] = 'nosniff'
-        return response, 404
-    
-    @app.errorhandler(413)
-    def payload_too_large(error):
-        """페이로드 크기 초과 핸들러"""
-        response = jsonify({"success": False, "error": "파일 크기가 너무 큽니다 (최대 10MB)", "code": 413})
-        # 보안: X-Content-Type-Options 헤더 명시적 설정 (이중 보장)
-        response.headers['X-Content-Type-Options'] = 'nosniff'
-        return response, 413
-    
-    @app.errorhandler(429)
-    def rate_limit_exceeded(error):
-        """Rate Limiting 위반 핸들러 (브루트포스 공격 방지)"""
-        # 보안: Rate Limiting 위반 로그 기록
-        ip = request.remote_addr if request else 'unknown'
-        path = request.path if request else 'unknown'
-        app.logger.warning(f"Rate Limiting 위반 (브루트포스 공격 가능성): ip={ip}, path={path}")
-        response = jsonify({"success": False, "error": "요청 횟수가 초과되었습니다. 잠시 후 다시 시도해주세요", "code": 429})
-        response.headers['X-Content-Type-Options'] = 'nosniff'
-        return response, 429
-    
-    @app.errorhandler(500)
-    def internal_server_error(error):
-        """서버 오류 핸들러 (보안: 상세 정보 노출 방지)"""
-        # 상세한 에러 정보는 로그에만 기록
-        app.logger.error(f"서버 오류: {error}", exc_info=True)
-        # 클라이언트에는 일반적인 메시지만 반환
-        response = jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다", "code": 500})
-        # 보안: X-Content-Type-Options 헤더 명시적 설정 (이중 보장)
-        response.headers['X-Content-Type-Options'] = 'nosniff'
-        return response, 500
-    
-    @app.errorhandler(Exception)
-    def handle_exception(error):
-        """모든 예외 처리 (보안: 상세 정보 노출 방지)"""
-        app.logger.error(f"예외 발생: {error}", exc_info=True)
-        response = jsonify({"success": False, "error": "서버 오류가 발생했습니다", "code": 500})
-        # 보안: X-Content-Type-Options 헤더 명시적 설정 (이중 보장)
-        response.headers['X-Content-Type-Options'] = 'nosniff'
-        return response, 500
+    # 에러 핸들러 등록
+    from app.utils.error_handlers import register_error_handlers
+    register_error_handlers(app)
     
     return app
