@@ -102,6 +102,7 @@ export interface AnalysisResult {
     total_count: number;
     message: string;
   };
+  session_id?: string;
 }
 
 export interface SanitizedItem {

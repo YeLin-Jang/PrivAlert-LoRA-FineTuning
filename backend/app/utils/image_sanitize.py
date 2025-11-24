@@ -101,7 +101,28 @@ def sanitize_image(raw: bytes, keep_icc: bool = True, target_format: str | None 
     # 허용 포맷만 처리
     normalized_source = _normalize_format(source_format)
     if normalized_source is None or normalized_source not in ALLOWED_FORMATS:
-        raise ValueError("unsupported format")
+        # 포맷 감지 실패 시 MIME 타입으로 재시도
+        detected_mime = _detect_mime(raw)
+        if detected_mime:
+            mime_to_format = {
+                "image/jpeg": "JPEG",
+                "image/jpg": "JPEG",
+                "image/png": "PNG",
+                "image/webp": "WEBP",
+                "image/heic": "HEIC",
+                "image/heif": "HEIF",
+            }
+            mime_format = mime_to_format.get(detected_mime)
+            if mime_format:
+                normalized_source = mime_format
+                source_format = mime_format
+        
+        # 여전히 실패하면 오류
+        if normalized_source is None or normalized_source not in ALLOWED_FORMATS:
+            raise ValueError(
+                f"unsupported format: detected={source_format}, "
+                f"mime={detected_mime}, allowed={ALLOWED_FORMATS}"
+            )
 
     # EXIF Orientation 반영
     img = ImageOps.exif_transpose(src_img)
