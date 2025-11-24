@@ -31,46 +31,38 @@ export default function MyPage() {
 
   // 로그인 체크
   useEffect(() => {
-    // 인증 확인이 완료된 후에만 체크
     if (authLoading) {
-      return; // 로딩 중이면 대기
+      return;
     }
-    
-    // localStorage에 user_email이 있으면 로그인 상태로 간주 (세션 쿠키 확인 중일 수 있음)
-    const storedEmail = localStorage.getItem('user_email');
-    const isLoggedIn = isAuthenticated || !!storedEmail;
-    
-    if (!isLoggedIn) {
-      // 로그인 안된 상태면 로그인 페이지로 리다이렉트
-      navigate('/auth/login', { 
+    if (!isAuthenticated) {
+      navigate('/auth/login', {
         replace: true,
-        state: { 
+        state: {
           redirectTo: '/mypage',
-          message: '마이페이지는 로그인이 필요합니다.'
-        } 
+          message: '마이페이지는 로그인이 필요합니다.',
+        },
       });
     }
   }, [isAuthenticated, authLoading, navigate]);
 
   // 초기 로드 (로그인 상태일 때만)
   useEffect(() => {
-    // localStorage에 user_email이 있으면 로그인 상태로 간주
-    const storedEmail = localStorage.getItem('user_email');
-    const isLoggedIn = isAuthenticated || !!storedEmail;
-    
-    if (isLoggedIn) {
+    if (authLoading) {
+      return;
+    }
+    if (isAuthenticated) {
       loadData();
     } else {
       setLoading(false);
     }
-  }, [currentPage, isAuthenticated]);
+  }, [currentPage, isAuthenticated, authLoading]);
 
   const loadData = async () => {
-    // localStorage에 user_email이 있으면 로그인 상태로 간주
-    const storedEmail = localStorage.getItem('user_email');
-    const isLoggedIn = isAuthenticated || !!storedEmail;
-    if (!isLoggedIn) return;
-    
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
+  
     try {
       setLoading(true);
       setError(null);

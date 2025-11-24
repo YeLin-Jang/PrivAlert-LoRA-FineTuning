@@ -64,9 +64,9 @@ const api = createApiInstance();
 export interface LoginResponse {
   user: {
     id: number;
-    username: string;
+    username?: string;
     email: string;
-    nickname?: string;  // 별명 추가
+    nickname?: string;
     is_active: boolean;
   };
   token: string;
@@ -92,7 +92,19 @@ export interface RevisionHistory {
   created_at: string;
 }
 
-export type UserResponse = LoginResponse['user'];
+// UserResponse는 백엔드 /api/v1/user/me 응답 구조와 일치
+export interface UserResponse {
+  id: number;
+  email: string;
+  nickname?: string;
+  email_verified: boolean;
+  email_verified_at?: string;
+  mfa_enabled: boolean;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+  last_login?: string;
+}
 
 export const userApi = {
   /**
@@ -205,29 +217,20 @@ export const userApi = {
       throw new Error('사용자 정보를 불러올 수 없습니다.');
     }
 
-    // 백엔드 응답 형식: { success: true, data: { ...user data..., csrf_token: "..." } }
-    const userData = response.data.data;
+    // 백엔드 응답 형식: APIResponse.success(data={**user.to_dict(), "csrf_token": ...})
+    // 최종 응답: {"success": true, "message": "...", "id": ..., "email": ..., "nickname": ..., "csrf_token": ...}
+    // user 정보와 csrf_token이 최상위 레벨에 있음 (APIResponse.success는 response_data.update(data) 사용)
+    const userData = response.data.data || response.data;
     
     // CSRF 토큰 저장 (백엔드에서 제공하는 경우)
-    if (userData.csrf_token) {
+    if (userData?.csrf_token) {
       localStorage.setItem('csrf_token', userData.csrf_token);
     }
     
-    // userData에서 csrf_token 제거 (UserResponse에는 포함되지 않음)
-    const { csrf_token, ...userInfo } = userData;
+    // userData에서 불필요한 필드 제거
+    const { csrf_token, success, message, code, error, ...userInfo } = userData || {};
     
-    // userInfo가 이미 UserResponse 형식인 경우
-    if (userInfo.email) {
-      return userInfo;
-    }
-    
-    // userInfo가 객체이고 내부에 user 필드가 있는 경우
-    if (userInfo.user) {
-      return userInfo.user;
-    }
-    
-    // 그 외 경우 userInfo를 그대로 반환
-    return userInfo;
+    return userInfo as UserResponse;
   },
 
   /**
@@ -259,7 +262,14 @@ export const userApi = {
       throw new Error('필터링 설정을 불러올 수 없습니다.');
     }
 
-    return response.data.data.settings;
+    // APIResponse.success에서 data={'settings': ...}를 update하므로
+    // 최종 응답: {"success": true, "message": "...", "settings": {...}}
+    // 안전하게 접근하기 위해 옵셔널 체이닝 사용
+    const settings = response.data.settings || response.data.data?.settings;
+    if (!settings) {
+      throw new Error('필터링 설정 데이터를 찾을 수 없습니다.');
+    }
+    return settings;
   },
 
   /**
@@ -277,7 +287,14 @@ export const userApi = {
       throw new Error('필터링 설정을 저장할 수 없습니다.');
     }
 
-    return response.data.data.settings;
+    // APIResponse.success에서 data={'settings': ...}를 update하므로
+    // 최종 응답: {"success": true, "message": "...", "settings": {...}}
+    // 안전하게 접근하기 위해 옵셔널 체이닝 사용
+    const settings = response.data.settings || response.data.data?.settings;
+    if (!settings) {
+      throw new Error('필터링 설정 데이터를 찾을 수 없습니다.');
+    }
+    return settings;
   },
 
   /**
@@ -293,7 +310,13 @@ export const userApi = {
       throw new Error('수정 기록을 불러올 수 없습니다.');
     }
 
-    return response.data.data;
+    // APIResponse.success에서 data={'records': ..., 'pagination': ...}를 update하므로
+    // 최종 응답: {"success": true, "message": "...", "records": [...], "pagination": {...}}
+    // records와 pagination이 최상위 레벨에 있음
+    return {
+      records: response.data.records || [],
+      pagination: response.data.pagination || {}
+    };
   },
 
   /**
@@ -313,7 +336,9 @@ export const userApi = {
       throw new Error('수정 기록을 저장할 수 없습니다.');
     }
 
-    return response.data.data.record;
+    // APIResponse.success에서 data={'record': ...}를 update하므로
+    // 최종 응답: {"success": true, "message": "...", "record": {...}}
+    return response.data.record;
   },
 };
 

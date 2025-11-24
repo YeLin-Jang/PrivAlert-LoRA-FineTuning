@@ -28,6 +28,21 @@ export const UserAuthProvider: React.FC<UserAuthProviderProps> = ({ children }) 
   const [user, setUser] = useState<UserResponse | null>(null);
   const [loading, setLoading] = useState(true); // 초기 로딩 상태를 true로 설정 (인증 확인 중)
 
+  const extractUserInfo = (payload: any): { userInfo: UserResponse | null; csrfToken?: string } => {
+    if (!payload) {
+      return { userInfo: null };
+    }
+    const data = payload.data && typeof payload.data === 'object' ? payload.data : payload;
+    if (!data || typeof data !== 'object') {
+      return { userInfo: null };
+    }
+    const { csrf_token, success, message, code, error, ...userInfo } = data;
+    return {
+      userInfo: Object.keys(userInfo).length ? (userInfo as UserResponse) : null,
+      csrfToken: csrf_token,
+    };
+  };
+
   useEffect(() => {
     // 보안: 공개 페이지에서는 불필요한 인증 API 호출을 하지 않음
     // 세션 쿠키나 localStorage에 인증 정보가 있을 때만 사용자 정보 조회
@@ -58,15 +73,21 @@ export const UserAuthProvider: React.FC<UserAuthProviderProps> = ({ children }) 
 
         if (response.ok) {
           const data = await response.json();
-          if (data.success && data.data) {
-            // 백엔드 응답: { success: true, data: { ...user data... } }
-            const userData = data.data;
-            setUser(userData);
-            if (userData.email) {
-              localStorage.setItem('user_email', userData.email);
+          if (data.success) {
+            const { userInfo, csrfToken } = extractUserInfo(data);
+            if (csrfToken) {
+              localStorage.setItem('csrf_token', csrfToken);
+            }
+            if (userInfo) {
+              setUser(userInfo);
+              if (userInfo.email) {
+                localStorage.setItem('user_email', userInfo.email);
+              }
+              setLoading(false);
+              return; // 성공 시 종료
             }
             setLoading(false);
-            return; // 성공 시 종료
+            return;
           }
         }
         
@@ -144,52 +165,32 @@ export const UserAuthProvider: React.FC<UserAuthProviderProps> = ({ children }) 
         throw new Error(data.error || '로그인 실패');
       }
 
-      // 토큰 저장 (세션 쿠키는 자동으로 설정됨)
-      if (data.data?.csrf_token) {
-        localStorage.setItem('csrf_token', data.data.csrf_token);
-      }
+      // 세션 정보 저장
       if (data.data?.session_id) {
         localStorage.setItem('session_id', data.data.session_id);
       }
 
-      // 사용자 정보 즉시 설정 (로그인 응답에 user 정보가 있으면 바로 사용)
-      if (data.data?.user) {
-        setUser(data.data.user);
-        if (data.data.user.email) {
-          localStorage.setItem('user_email', data.data.user.email);
+      // 로그인 직후에도 /me API로 사용자 정보 및 최신 CSRF 토큰을 확보
+      try {
+        const currentUser = await userApi.getCurrentUser();
+        if (currentUser) {
+          setUser(currentUser);
+          if (currentUser.email) {
+            localStorage.setItem('user_email', currentUser.email);
+          }
         }
-        setLoading(false); // 사용자 정보가 있으면 즉시 로딩 종료
+      } catch (userFetchError) {
+        // /me 호출이 실패해도 로그인은 진행되었으므로, 최소한의 사용자 정보만 설정
+        if (data.data?.user) {
+          const fallbackUser = data.data.user;
+          setUser(fallbackUser);
+          if (fallbackUser.email) {
+            localStorage.setItem('user_email', fallbackUser.email);
+          }
+        }
+      } finally {
+        setLoading(false);
       }
-
-      // 사용자 정보 최신화 (백그라운드에서 실행, 실패해도 이미 user가 설정되어 있음)
-      fetch(`${API_CONFIG.BASE_URL}/api/v1/user/me`, {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
-        .then(userResponse => {
-          if (userResponse.ok) {
-            return userResponse.json();
-          }
-          return null;
-        })
-        .then(userData => {
-          if (userData?.success && userData.data) {
-            setUser(userData.data);
-            if (userData.data.email) {
-              localStorage.setItem('user_email', userData.data.email);
-            }
-          }
-        })
-        .catch(() => {
-          // 에러는 무시 (이미 user가 설정되어 있음)
-          // 보안: 콘솔 로그 제거
-        })
-        .finally(() => {
-          setLoading(false); // 최신화 완료 후 로딩 종료
-        });
     } catch (error: any) {
       setLoading(false); // 에러 발생 시에도 로딩 종료
       throw new Error(error.message || '로그인에 실패했습니다');
@@ -213,9 +214,7 @@ export const UserAuthProvider: React.FC<UserAuthProviderProps> = ({ children }) 
     }
   };
 
-  // localStorage에 user_email이 있으면 로그인 상태로 간주 (세션 쿠키 확인 중일 수 있음)
-  const storedEmail = localStorage.getItem('user_email');
-  const isAuthenticated = !!user || !!storedEmail;
+  const isAuthenticated = !!user;
 
   const value: UserAuthContextType = {
     user,

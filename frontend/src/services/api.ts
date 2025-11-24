@@ -310,7 +310,10 @@ export const detectWorkplaces = async (text: string) => {
     throw new Error(response.data?.message || '직장명 탐지 실패');
   }
   
-  return response.data.data;
+  // APIResponse.success(result, ...)는 response_data.update(result)를 하므로
+  // 최종 응답: {"success": true, "message": "...", "detected": ..., "workplaces": ..., ...}
+  // result의 모든 필드가 최상위 레벨에 있음
+  return response.data;
 };
 
 /**
