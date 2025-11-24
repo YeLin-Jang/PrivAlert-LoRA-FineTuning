@@ -7,7 +7,6 @@ interface EducationDetailModalProps {
   category: 'rationale' | 'law' | 'risk' | 'tips' | 'all';
   data: {
     category?: string;
-    revised_sentence_rationale?: string;
     law_summary?: string;
     law_summary_rationale?: string;
     risk_scenarios?: string[];
@@ -24,7 +23,7 @@ export const EducationDetailModal: React.FC<EducationDetailModalProps> = ({
   data,
 }) => {
   // 보안: 콘솔 로그 제거
-  
+
   if (!isOpen) return null;
 
   const getTitle = () => {
@@ -50,18 +49,6 @@ export const EducationDetailModal: React.FC<EducationDetailModalProps> = ({
       // 모든 정보를 한 번에 표시 (수정문장 근거 포함)
       return (
         <div className="education-detail-content">
-          {data.revised_sentence_rationale && (
-            <div className="education-section-item rationale-highlight">
-              <h3 className="rationale-title">
-                <span className="rationale-icon">📋</span>
-                수정 문장 근거
-              </h3>
-              <div className="rationale-content">
-                <p>{data.revised_sentence_rationale}</p>
-              </div>
-            </div>
-          )}
-          
           {data.law_summary && (
             <div className="education-section-item">
               <h3>법령 요약</h3>
@@ -79,7 +66,7 @@ export const EducationDetailModal: React.FC<EducationDetailModalProps> = ({
               )}
             </div>
           )}
-          
+
           {data.risk_scenarios && data.risk_scenarios.length > 0 && (
             <div className="education-section-item">
               <h3>위험 시나리오</h3>
@@ -104,7 +91,7 @@ export const EducationDetailModal: React.FC<EducationDetailModalProps> = ({
               )}
             </div>
           )}
-          
+
           {data.tips && data.tips.length > 0 && (
             <div className="education-section-item">
               <h3>보안 팁</h3>
@@ -129,15 +116,8 @@ export const EducationDetailModal: React.FC<EducationDetailModalProps> = ({
         </div>
       );
     }
-    
+
     switch (category) {
-      case 'rationale':
-        return (
-          <div className="education-detail-content">
-            <h3>수정 문장 근거</h3>
-            <p>{data.revised_sentence_rationale || '근거 정보가 없습니다.'}</p>
-          </div>
-        );
       case 'law':
         return (
           <div className="education-detail-content">
@@ -236,4 +216,5 @@ export const EducationDetailModal: React.FC<EducationDetailModalProps> = ({
     </div>
   );
 };
+
 

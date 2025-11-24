@@ -50,6 +50,7 @@
   font-weight: 600;
   color: #4b5563;
   margin: 0;
+  text-align: left;
 }
 
 .text-input-wrapper {
@@ -183,6 +184,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
+  line-clamp: 2;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
