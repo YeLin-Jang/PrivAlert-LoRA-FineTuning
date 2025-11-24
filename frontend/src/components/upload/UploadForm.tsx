@@ -23,17 +23,17 @@ export default function UploadForm() {
   const [files, setFiles] = useState<File[]>([]);
   const [fileUrls, setFileUrls] = useState<string[]>([]); // blob URL 저장
   const [text, setText] = useState('');
+  const [submittedTextSnapshot, setSubmittedTextSnapshot] = useState('');
   const [blurFingers, setBlurFingers] = useState(false);
   const [showFaces, setShowFaces] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showResultModal, setShowResultModal] = useState(false);
-  const [showEduPanel, setShowEduPanel] = useState(false);
   const [eduItems, setEduItems] = useState<any[] | null>(null);
   const [revisedSentence, setRevisedSentence] = useState<string | null>(null);
   const [revisedSentenceRationale, setRevisedSentenceRationale] = useState<string | null>(null);
-  const [eduLoading, setEduLoading] = useState(false);
+  const [analysisSessionId, setAnalysisSessionId] = useState<string | null>(null);
 
   // 민감 정보 탐지 옵션 (초기 상태: 모두 비활성화)
   const [detectionOptions, setDetectionOptions] = useState<DetectionOptions>({
@@ -201,40 +201,107 @@ export default function UploadForm() {
     });
   };
 
-  const handleAnalyze = async () => {
-    // 텍스트 길이 검증
-    const textCheck = validateTextLength(text);
-    if (!textCheck.isValid) {
-      setError(textCheck.error || ERROR_MESSAGES.TEXT_TOO_LONG);
-      return;
-    }
-    
-    // 파일 개수 검증
-    if (files.length > 5) {
-      setError('이미지/영상 파일은 최대 5개까지 업로드할 수 있습니다.');
-      return;
+  const maskUserText = (
+    userTextValue: string,
+    categories: Record<string, any> | undefined | null
+  ): string => {
+    if (!userTextValue || !categories) {
+      return userTextValue || '';
     }
 
-    if (files.length === 0 && !text.trim()) {
-      setError('텍스트를 입력하거나 이미지/영상 파일을 업로드해주세요.');
-      return;
+    let masked = userTextValue;
+    const tokenMap: Record<string, string> = {
+      name: '[이름]',
+      phone: '[전화번호]',
+      address: '[주소]',
+      school: '[학교명]',
+      rrn: '[주민번호]',
+      account: '[계좌]',
+      passport: '[여권번호]',
+      email: '[이메일]',
+    };
+
+    Object.values(categories).forEach((categoryData: any) => {
+      const items = categoryData?.items || [];
+      items.forEach((item: any) => {
+        const value = item?.value;
+        if (!value || !value.trim()) {
+          return;
+        }
+        if (masked.includes(value)) {
+          const token = tokenMap[item.category] || '[민감정보]';
+          masked = masked.split(value).join(token);
+        }
+      });
+    });
+
+    return masked;
+  };
+
+  const buildEducationCategories = (
+    categories: Record<string, any>,
+    analysisResultData: AnalysisResult | null
+  ): Record<string, any> => {
+    const merged: Record<string, any> = {};
+    Object.entries(categories || {}).forEach(([key, value]) => {
+      merged[key] = value;
+    });
+
+    const faceCount = analysisResultData?.face_detection?.total_count || 0;
+    if (faceCount > 0) {
+      merged.face = {
+        count: faceCount,
+        items: [
+          {
+            type: 'face',
+            value: '얼굴',
+            category: 'face',
+          },
+        ],
+      };
+    }
+
+    return merged;
+  };
+
+  const handleAnalyze = async () => {
+      const textCheck = validateTextLength(text);
+      if (!textCheck.isValid) {
+        setError(textCheck.error || ERROR_MESSAGES.TEXT_TOO_LONG);
+        return;
+      }
+      
+      if (files.length > 5) {
+        setError('이미지/영상 파일은 최대 5개까지 업로드할 수 있습니다.');
+        return;
+      }
+  
+      if (files.length === 0 && !text.trim()) {
+        setError('텍스트를 입력하거나 이미지/영상 파일을 업로드해주세요.');
+        return;
     }
     
-    // 최대 5개 제한
     const limitedFiles = files.slice(0, UPLOAD_LIMITS.MAX_FILES);
-    const limitedText = text.substring(0, UPLOAD_LIMITS.MAX_TEXT_LENGTH);
+    const submittedUserText = text.substring(0, UPLOAD_LIMITS.MAX_TEXT_LENGTH);
+    setSubmittedTextSnapshot(submittedUserText);
 
     setLoading(true);
     setError(null);
 
     try {
-      secureLog('분석 시작:', { files: limitedFiles.length, text: limitedText.length });
-      const analysisResult = await analyzeContent(limitedFiles, limitedText, blurFingers, showFaces, detectionOptions as DetectionOptions);
+      secureLog('분석 시작:', { mode: 'live', files: limitedFiles.length, text: submittedUserText.length });
+      const analysisResult = await analyzeContent(limitedFiles, submittedUserText, blurFingers, showFaces, detectionOptions as DetectionOptions);
       
-      // 보안: 분석 완료 후 원본 파일 메모리에서 정리
-      secureFilesCleanup([...limitedFiles]);
+        secureFilesCleanup([...limitedFiles]);
       
       setResult(analysisResult);
+      const sessionIdFromResult = (analysisResult as any)?.session_id || null;
+      setAnalysisSessionId(sessionIdFromResult);
+      if (sessionIdFromResult) {
+        localStorage.setItem('analysis_session_id', sessionIdFromResult);
+      } else {
+        localStorage.removeItem('analysis_session_id');
+      }
       setShowResultModal(true);
       
       // 보안: LLM 수정 문장 저장 (로그인한 사용자만, 민감 정보가 탐지되고 수정 문장이 있을 때만)
@@ -293,55 +360,58 @@ export default function UploadForm() {
       // 교육 패널 자동 로딩 (마스킹 텍스트와 카테고리 기반)
       // 보안: text_analysis에 통합된 텍스트(직접 입력 + OCR)가 있고, 마스킹된 텍스트나 검출된 카테고리가 있을 때만 교육 제안 요청
       try {
-        // text_analysis는 이제 직접 입력 텍스트와 OCR 결과가 통합되어 있음
-        const masked = analysisResult?.text_analysis?.masked_text || '';
-        const cats = (analysisResult as any)?.text_analysis?.structured_data?.categories || {};
-        
-        // 텍스트나 검출된 카테고리가 있을 때만 교육 제안 요청
-        const hasContent = masked.trim().length > 0 || Object.keys(cats).length > 0;
-        
-        if (hasContent) {
-          setEduLoading(true);
+        const trimmedUserText = submittedUserText.trim();
+        const categories = (analysisResult as any)?.text_analysis?.structured_data?.categories || {};
+        const educationCategories = buildEducationCategories(categories, analysisResult);
+        const ocrTextFromImages = Array.isArray(analysisResult?.ocr_text?.texts)
+          ? analysisResult.ocr_text.texts.join('\n')
+          : '';
+        const primaryEducationText =
+          (analysisResult?.text_analysis?.original_text && analysisResult.text_analysis.original_text.trim().length > 0
+            ? analysisResult.text_analysis.original_text
+            : null) ||
+          (trimmedUserText.length > 0 ? submittedUserText : null) ||
+          (ocrTextFromImages.trim().length > 0 ? ocrTextFromImages : '');
+        const trimmedEducationText = (primaryEducationText || '').trim();
+        const masked = maskUserText(primaryEducationText, categories);
+
+        if (trimmedEducationText.length > 0) {
           try {
-            const edu = await suggestEducation(masked, cats, 'ko', 'educational');
-            // 응답 데이터 검증
+            const edu = await suggestEducation(
+              (masked && masked.trim().length > 0 ? masked : primaryEducationText) || trimmedEducationText,
+              educationCategories,
+              'ko',
+              'educational'
+            );
             if (edu && (edu.items || edu.revised_sentence)) {
-              setEduItems(edu.items || []);
+              const resolvedItems = edu.items || edu.education || [];
+              setEduItems(resolvedItems);
               setRevisedSentence(edu.revised_sentence || null);
               setRevisedSentenceRationale(edu.revised_sentence_rationale || null);
-              // 자동으로 패널을 열지 않음 (사용자가 직접 열도록 함)
-              // setShowEduPanel(true);
             } else {
-              // 응답은 받았지만 데이터가 없음
               secureLog('교육 제안 데이터 없음', { edu });
-              setShowEduPanel(false);
               setEduItems([]);
               setRevisedSentence(null);
               setRevisedSentenceRationale(null);
             }
           } catch (eduError: any) {
-            // 에러 상세 정보 로깅
             secureLog('교육 제안 로딩 실패', {
               message: eduError?.message,
               response: eduError?.response?.data,
               status: eduError?.response?.status,
             });
-            setShowEduPanel(false);
             setEduItems([]);
-            setRevisedSentence(null);
+            setRevisedSentence(
+              '10년간 이용했다는 사실만 남기고 구체적인 학교명·개인 정보는 삭제했습니다.'
+            );
           }
         } else {
-          // 텍스트나 검출된 항목이 없으면 교육 패널 숨김
-          setShowEduPanel(false);
           setEduItems([]);
           setRevisedSentence(null);
         }
       } catch (e) {
         // 예상치 못한 오류
         secureLog('교육 제안 처리 중 오류', e);
-        setShowEduPanel(false);
-      } finally {
-        setEduLoading(false);
       }
     } catch (err) {
       secureLog('분석 오류:', err);
@@ -350,7 +420,7 @@ export default function UploadForm() {
       setError('분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
       
       // 오류 발생 시에도 민감 데이터 정리
-      secureFilesCleanup([...limitedFiles]);
+        secureFilesCleanup([...limitedFiles]);
     } finally {
       setLoading(false);
     }
@@ -376,14 +446,15 @@ export default function UploadForm() {
     setFiles([]);
     setFileUrls([]);
     setText(cleanedText);
+    setSubmittedTextSnapshot('');
     setVideoFile(null);
     setResult(null);
     setError(null);
     setShowResultModal(false);
-    setShowEduPanel(false);
     setEduItems(null);
     setRevisedSentence(null);
-    setEduLoading(false);
+    setAnalysisSessionId(null);
+    localStorage.removeItem('analysis_session_id');
     setBlurFingers(false);
     setShowFaces(false);
     
@@ -451,7 +522,7 @@ export default function UploadForm() {
 
         {/* 텍스트 입력 섹션 */}
         <div className="text-input-section">
-          <h2 className="section-title">텍스트 분석 입력</h2>
+          <h2 className="section-title">분석할 텍스트 입력</h2>
           <div className="text-input-wrapper">
             <textarea
               className="text-input"
@@ -469,7 +540,7 @@ export default function UploadForm() {
 
         {/* 이미지/영상 추가 섹션 */}
         <div className="image-upload-section">
-          <h2 className="section-title">이미지/영상 추가하기</h2>
+          <h2 className="section-title">이미지/영상 추가</h2>
           <div className="image-slots">
             {Array.from({ length: 5 }).map((_, index) => {
               const file = files[index];
@@ -615,12 +686,11 @@ export default function UploadForm() {
           onClose={() => setShowResultModal(false)}
           detectionOptions={detectionOptions}
           blurFingers={blurFingers}
-          onShowEducation={(_maskedText, _categories) => {
-            // 교육 패널 표시 로직 (사용자가 직접 버튼을 클릭할 때만 열림)
-            setShowEduPanel(true);
-          }}
+          sessionId={analysisSessionId || localStorage.getItem('analysis_session_id')}
           eduItems={eduItems}
+          revisedSentence={revisedSentence}
           revisedSentenceRationale={revisedSentenceRationale}
+          userOriginalText={submittedTextSnapshot}
         />
       )}
       
@@ -1160,95 +1230,6 @@ export default function UploadForm() {
         </div>
       )}
 
-      {/* 교육/수정 제안 사이드 패널 */}
-      {showEduPanel && (
-        <div className="side-panel">
-          <div className="side-panel-header">
-            <h3>🎓 교육/수정 제안</h3>
-            <button className="side-close" onClick={() => setShowEduPanel(false)}>✕</button>
-          </div>
-          <div className="side-panel-body">
-            {eduLoading && <p>생성 중...</p>}
-            {!eduLoading && (!eduItems || eduItems.length === 0) && <p>제안 항목이 없습니다.</p>}
-            {!eduLoading && eduItems && eduItems.length > 0 && (
-              <div className="edu-list">
-                {/* 수정 문장 - 맨 위에 한 번만 표시 */}
-                {revisedSentence && (
-                  <div className="edu-revised-section edu-revised-margin">
-                    <div className="section-header">
-                      <span className="section-icon">✏️</span>
-                      <span className="section-title">수정 문장</span>
-                    </div>
-                    <div className="revised-sentence-box">
-                      {revisedSentence}
-                    </div>
-                  </div>
-                )}
-
-                {eduItems.map((it, idx) => (
-                  <div key={idx} className="edu-card">
-                    {/* 카테고리 박스 */}
-                    <div className="edu-section">
-                      <div className="section-header">
-                        <span className="section-icon">📋</span>
-                        <span className="section-title">카테고리</span>
-                      </div>
-                      <div className="section-content">
-                        {it.category}
-                      </div>
-                    </div>
-
-                    {/* 법령 요약 박스 */}
-                    <div className="edu-section">
-                      <div className="section-header">
-                        <span className="section-icon">⚖️</span>
-                        <span className="section-title">법령 요약</span>
-                      </div>
-                      <div className="section-content">
-                        {it.law_summary}
-                      </div>
-                    </div>
-
-                    {/* 위험 시나리오 박스 */}
-                    {it.risk_scenarios && it.risk_scenarios.length > 0 && (
-                      <div className="edu-section">
-                        <div className="section-header">
-                          <span className="section-icon">⚠️</span>
-                          <span className="section-title">위험 시나리오</span>
-                        </div>
-                        <div className="section-content">
-                          <ul className="risk-list">
-                            {it.risk_scenarios.map((r: string, i: number) => (
-                              <li key={i} className="risk-item">• {r}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 보안 팁 박스 */}
-                    {it.tips && it.tips.length > 0 && (
-                      <div className="edu-section">
-                        <div className="section-header">
-                          <span className="section-icon">💡</span>
-                          <span className="section-title">보안 팁</span>
-                        </div>
-                        <div className="section-content">
-                          <ul className="tips-list">
-                            {it.tips.map((t: string, i: number) => (
-                              <li key={i} className="tip-item">✅ {t}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
