@@ -1,0 +1,150 @@
+# CD(Continuous Deployment) 워크플로우
+# CI가 성공한 후 Docker 이미지를 빌드하고 레지스트리에 푸시합니다.
+name: CD
+
+# 워크플로우 실행 조건
+on:
+  # CI 워크플로우가 성공적으로 완료된 후 실행
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+  # main 브랜치에 직접 push 시 실행 (CI를 건너뛰고 직접 배포하는 경우)
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'  # 버전 태그가 푸시되면 배포
+  # 수동 실행 가능 (GitHub Actions 탭에서 직접 실행)
+  workflow_dispatch:
+
+# CI가 성공한 경우에만 실행
+jobs:
+  # ========== Docker 이미지 빌드 및 푸시 ==========
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    # CI가 성공한 경우에만 실행 (workflow_run 트리거인 경우)
+    if: |
+      github.event.workflow_run.conclusion == 'success' ||
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch'
+    
+    strategy:
+      matrix:
+        service:
+          - name: backend
+            context: ./backend
+            dockerfile: Dockerfile
+            image-name: privalert-backend
+            build-args: ""
+          - name: fastapi-backend
+            context: ./fastapi-backend
+            dockerfile: Dockerfile
+            image-name: privalert-fastapi
+            build-args: ""
+          - name: frontend
+            context: ./frontend
+            dockerfile: Dockerfile
+            image-name: privalert-frontend
+            has-build-args: true
+    
+    steps:
+    # 코드 체크아웃
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    # Docker Hub에 로그인
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME || 'honghhj66' }}
+        password: ${{ secrets.DOCKER_PASSWORD || '' }}
+    
+    # Docker Buildx 설정 (멀티 플랫폼 빌드 지원)
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    # 이미지 태그 생성
+    # - latest: 최신 버전
+    # - {sha}: 커밋 SHA 기반 태그
+    # - {version}: 버전 태그가 있는 경우
+    - name: Generate image tags
+      id: meta
+      env:
+        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME || 'honghhj66' }}
+      run: |
+        SHA=$(echo ${{ github.sha }} | cut -c1-7)
+        VERSION=${GITHUB_REF#refs/tags/v}
+        IMAGE="${DOCKER_USERNAME}/${{ matrix.service.image-name }}"
+        
+        if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+          echo "tags=${IMAGE}:${VERSION},${IMAGE}:latest" >> $GITHUB_OUTPUT
+        else
+          echo "tags=${IMAGE}:${SHA},${IMAGE}:latest" >> $GITHUB_OUTPUT
+        fi
+        
+        echo "image=${IMAGE}" >> $GITHUB_OUTPUT
+    
+    # Docker 이미지 빌드 및 푸시 (프론트엔드의 경우 build-args 포함)
+    - name: Build and push Docker image (Frontend)
+      if: matrix.service.name == 'frontend'
+      uses: docker/build-push-action@v5
+      with:
+        context: ${{ matrix.service.context }}
+        file: ${{ matrix.service.context }}/${{ matrix.service.dockerfile }}
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        cache-from: type=registry,ref=${{ steps.meta.outputs.image }}:buildcache
+        cache-to: type=registry,ref=${{ steps.meta.outputs.image }}:buildcache,mode=max
+        build-args: |
+          VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL || 'http://localhost:5000' }}
+          VITE_FASTAPI_BASE_URL=${{ secrets.VITE_FASTAPI_BASE_URL || 'http://localhost:8000' }}
+        # 보안: 이미지 레이블 추가
+        labels: |
+          org.opencontainers.image.title=PrivAlert ${{ matrix.service.name }}
+          org.opencontainers.image.description=PrivAlert ${{ matrix.service.name }} service
+          org.opencontainers.image.version=${{ steps.meta.outputs.tags }}
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.source=${{ github.repositoryUrl }}
+    
+    # Docker 이미지 빌드 및 푸시 (백엔드의 경우)
+    - name: Build and push Docker image (Backend)
+      if: matrix.service.name != 'frontend'
+      uses: docker/build-push-action@v5
+      with:
+        context: ${{ matrix.service.context }}
+        file: ${{ matrix.service.context }}/${{ matrix.service.dockerfile }}
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        cache-from: type=registry,ref=${{ steps.meta.outputs.image }}:buildcache
+        cache-to: type=registry,ref=${{ steps.meta.outputs.image }}:buildcache,mode=max
+        # 보안: 이미지 레이블 추가
+        labels: |
+          org.opencontainers.image.title=PrivAlert ${{ matrix.service.name }}
+          org.opencontainers.image.description=PrivAlert ${{ matrix.service.name }} service
+          org.opencontainers.image.version=${{ steps.meta.outputs.tags }}
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.source=${{ github.repositoryUrl }}
+
+  # ========== 배포 알림 (선택사항) ==========
+  notify:
+    name: Deployment Notification
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: always()
+    
+    steps:
+    - name: Deployment Summary
+      run: |
+        echo "## 🚀 배포 완료" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **커밋**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **브랜치**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **트리거**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 배포된 이미지" >> $GITHUB_STEP_SUMMARY
+        DOCKER_USERNAME="${{ secrets.DOCKER_USERNAME || 'honghhj66' }}"
+        echo "- Backend: \`${DOCKER_USERNAME}/privalert-backend:latest\`" >> $GITHUB_STEP_SUMMARY
+        echo "- FastAPI Backend: \`${DOCKER_USERNAME}/privalert-fastapi:latest\`" >> $GITHUB_STEP_SUMMARY
+        echo "- Frontend: \`${DOCKER_USERNAME}/privalert-frontend:latest\`" >> $GITHUB_STEP_SUMMARY
+
