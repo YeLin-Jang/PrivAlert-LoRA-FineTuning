@@ -401,9 +401,7 @@ export default function UploadForm() {
               status: eduError?.response?.status,
             });
             setEduItems([]);
-            setRevisedSentence(
-              '10년간 이용했다는 사실만 남기고 구체적인 학교명·개인 정보는 삭제했습니다.'
-            );
+            setRevisedSentence(null);
           }
         } else {
           setEduItems([]);

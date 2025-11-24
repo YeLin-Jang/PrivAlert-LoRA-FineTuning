@@ -84,13 +84,7 @@ export default function MyPage() {
 
       // 수정 기록 조회
       const historyData = await userApi.getRevisionHistory(currentPage, 20);
-      // LLM 수정기록 제거 (revised_sentence가 LLM 생성 문장인 경우 필터링)
-      const filteredRecords = (historyData.records || []).filter((record) => {
-        // LLM 생성 문장 패턴 제거 (예: "오래전부터" 같은 일반화된 표현)
-        const llmPatterns = ['오래전부터', '오랜 기간', '오래전에'];
-        return !llmPatterns.some(pattern => record.revised_sentence?.includes(pattern));
-      });
-      setRevisionHistory(filteredRecords);
+      setRevisionHistory(historyData.records || []);
       setTotalPages(historyData.pagination?.pages || 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : '데이터를 불러오는 중 오류가 발생했습니다');
