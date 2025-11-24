@@ -15,7 +15,10 @@ from app.utils.secure_storage import STORAGE_ROOT, delete_session, validate_path
 
 logger = get_logger(__name__)
 
-# 재시도 큐 (실제로는 Redis나 DB에 저장해야 함)
+# 재시도 큐 (메모리 기반)
+# ⚠️ 프로덕션 주의: 메모리 기반 큐는 서버 재시작 시 데이터 손실
+# 프로덕션에서는 Redis나 DB에 저장 필요 (REDIS_URL 환경 변수 설정 필요)
+# Redis 전환 예시: redis_client.lpush("retry_queue", json.dumps(item))
 _retry_queue: List[Dict] = []
 
 # 세션 만료 시간 (기본 1시간)

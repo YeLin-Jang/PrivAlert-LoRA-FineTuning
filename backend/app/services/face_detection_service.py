@@ -1,10 +1,16 @@
 import cv2
 import numpy as np
 import os
+import logging
 import mediapipe as mp
 from werkzeug.datastructures import FileStorage
 from app.utils.file_utils import save_path_with_timestamp, to_public_url
 from config import BASE_DATA_DIR
+
+logger = logging.getLogger(__name__)
+
+# 디버그 모드 (환경 변수로 제어)
+DEBUG_FACE_DETECTION = os.getenv("DEBUG_FACE_DETECTION", "false").lower() == "true"
 
 
 class FaceDetectionService:
@@ -50,35 +56,47 @@ class FaceDetectionService:
             rgb = cv2.cvtColor(image_enh, cv2.COLOR_BGR2RGB)
 
             # 검출 시도
-            print(f"이미지 크기: {iw}x{ih}")
+            if DEBUG_FACE_DETECTION:
+                logger.debug(f"이미지 크기: {iw}x{ih}")
             results = self.det_short.process(rgb)
-            print(f"Short model 결과: {results is not None and hasattr(results, 'detections') and results.detections is not None}")
+            if DEBUG_FACE_DETECTION:
+                has_detections = (results is not None and hasattr(results, 'detections')
+                                 and results.detections is not None)
+                logger.debug(f"Short model 결과: {has_detections}")
             
             if not results or not getattr(results, "detections", None):
-                print("Long model로 재시도...")
+                if DEBUG_FACE_DETECTION:
+                    logger.debug("Long model로 재시도...")
                 results = self.det_long.process(rgb)
-                print(f"Long model 결과: {results is not None and hasattr(results, 'detections') and results.detections is not None}")
+                if DEBUG_FACE_DETECTION:
+                    has_detections = (results is not None and hasattr(results, 'detections')
+                                     and results.detections is not None)
+                    logger.debug(f"Long model 결과: {has_detections}")
 
             faces = []
             preview_img = image.copy()
             if results and getattr(results, "detections", None):
-                print(f"감지된 얼굴 수: {len(results.detections)}")
+                if DEBUG_FACE_DETECTION:
+                    logger.debug(f"감지된 얼굴 수: {len(results.detections)}")
                 for i, det in enumerate(results.detections, 1):
                     if not getattr(det, "location_data", None):
-                        print(f"얼굴 {i}: location_data 없음")
+                        if DEBUG_FACE_DETECTION:
+                            logger.debug(f"얼굴 {i}: location_data 없음")
                         continue
                     box = det.location_data.relative_bounding_box
                     x, y = int(box.xmin * iw), int(box.ymin * ih)
                     ww, hh = int(box.width * iw), int(box.height * ih)
                     score = float(det.score[0]) if det.score else 0.0
-                    print(f"얼굴 {i}: 위치=({x},{y},{ww},{hh}), 신뢰도={score:.3f}")
+                    if DEBUG_FACE_DETECTION:
+                        logger.debug(f"얼굴 {i}: 위치=({x},{y},{ww},{hh}), 신뢰도={score:.3f}")
                     
                     cv2.rectangle(preview_img, (x, y), (x + ww, y + hh), (0, 255, 0), 2)
                     faces.append(
                         {"index": i, "box": {"x": x, "y": y, "w": ww, "h": hh}, "score": score}
                     )
             else:
-                print("얼굴이 감지되지 않았습니다.")
+                if DEBUG_FACE_DETECTION:
+                    logger.debug("얼굴이 감지되지 않았습니다.")
 
             result_image_url = None
             if save_result:
@@ -107,4 +125,5 @@ class FaceDetectionService:
             return response
 
         except Exception as e:
+            logger.error(f"얼굴 검출 중 오류: {e}", exc_info=True)
             return {"success": False, "error": str(e)}

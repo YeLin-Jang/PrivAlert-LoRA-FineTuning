@@ -14,10 +14,13 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 # 세션별 파일 추적 (메모리 내)
+# ⚠️ 프로덕션 주의: 메모리 기반 추적은 서버 재시작 시 데이터 손실
+# 프로덕션에서는 DB 또는 Redis 사용 권장 (REDIS_URL 환경 변수 설정 필요)
 # {session_id: {files: Set[str], created_at: datetime}}
 _session_files: Dict[str, Dict] = {}
 
 # 파일별 세션 추적 (메모리 내)
+# ⚠️ 프로덕션 주의: 메모리 기반 추적은 서버 재시작 시 데이터 손실
 # {file_path: session_id}
 _file_sessions: Dict[str, str] = {}
 

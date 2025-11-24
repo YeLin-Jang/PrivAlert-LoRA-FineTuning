@@ -2,6 +2,7 @@
 인증 코드 생성 및 검증 서비스
 보안: 예측 불가능한 난수 생성, 만료 시간 설정
 """
+import os
 import secrets
 import logging
 from datetime import datetime, timedelta
@@ -12,15 +13,36 @@ from app.extensions.database import db
 logger = logging.getLogger(__name__)
 
 # 인증 코드 저장소 (메모리, key: email, value: {code, token_id, expires_at})
-# 프로덕션에서는 Redis 사용 권장
+# ⚠️ 프로덕션 주의: 메모리 기반 저장소는 서버 재시작 시 데이터 손실 및 멀티 인스턴스 환경에서 문제 발생
+# 프로덕션에서는 Redis 사용 필수 (REDIS_URL 환경 변수 설정 필요)
+# Redis 전환 예시: redis_client.setex(f"verification:{email}", expiry_seconds, json.dumps(data))
 _verification_codes: Dict[str, Dict] = {}
 
 
 class VerificationService:
-    """인증 코드 생성 및 검증 서비스"""
+    """인증 코드 생성 및 검증 서비스
     
-    CODE_LENGTH = 6  # 6자리 숫자 코드
-    CODE_EXPIRY_MINUTES = 10  # 10분 만료
+    ⚠️ 프로덕션 배포 전 필수 사항:
+    - 메모리 기반 저장소를 Redis로 전환 필요
+    - REDIS_URL 환경 변수 설정 필요
+    - 멀티 인스턴스 환경에서 공유 가능하도록 개선 필요
+    """
+    
+    # 환경 변수에서 설정 로드 (기본값: 6자리, 10분 만료)
+    CODE_LENGTH = int(os.getenv("VERIFICATION_CODE_LENGTH", "6"))
+    CODE_EXPIRY_MINUTES = int(os.getenv("VERIFICATION_CODE_EXPIRY_MINUTES", "10"))
+    
+    @staticmethod
+    def _check_redis_available() -> bool:
+        """Redis 사용 가능 여부 확인"""
+        redis_url = os.getenv("REDIS_URL", "")
+        if redis_url:
+            try:
+                import redis
+                return True
+            except ImportError:
+                return False
+        return False
     
     @staticmethod
     def generate_code(email: str, token_id: int) -> str:
@@ -41,11 +63,17 @@ class VerificationService:
         expires_at = datetime.utcnow() + timedelta(minutes=VerificationService.CODE_EXPIRY_MINUTES)
         
         # 메모리에 저장 (key: email, value: {code, token_id, expires_at})
+        # ⚠️ 프로덕션: Redis로 전환 필요
         _verification_codes[email] = {
             'code': code,
             'token_id': token_id,
             'expires_at': expires_at
         }
+        
+        # 프로덕션 환경에서 Redis 미사용 시 경고
+        flask_env = os.getenv("FLASK_ENV", "development")
+        if flask_env == "production" and not VerificationService._check_redis_available():
+            logger.warning("⚠️ 프로덕션 환경에서 메모리 기반 인증 코드 저장소 사용 중. Redis 전환 권장.")
         
         logger.info(f"인증 코드 생성: email={email[:3]}..., token_id={token_id}, 만료={expires_at}")
         

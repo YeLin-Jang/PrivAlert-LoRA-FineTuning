@@ -3,7 +3,14 @@ import json
 import hashlib
 import time
 import re
+import logging
 from typing import Any, Dict, List, Optional
+
+# 로거 설정
+logger = logging.getLogger(__name__)
+
+# 디버그 모드 (환경 변수로 제어)
+DEBUG_LLM = os.getenv("DEBUG_LLM", "false").lower() == "true"
 
 # Claude 모델 설정
 # 환경변수 CLAUDE_MODEL이 없으면 기본값 사용
@@ -12,6 +19,9 @@ CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-5-20250929")
 CACHE_TTL_SEC = int(os.getenv("LLMSERVICE_CACHE_TTL_SEC", "86400"))
 
 # 간단 메모리 캐시 (재시도/요금 절약)
+# ⚠️ 프로덕션 주의: 메모리 기반 캐시는 서버 재시작 시 데이터 손실 및 멀티 인스턴스 환경에서 공유 불가
+# 프로덕션에서는 Redis 사용 필수 (REDIS_URL 환경 변수 설정 필요)
+# Redis 전환 예시: redis_client.setex(cache_key, ttl, json.dumps(value))
 _CACHE: Dict[str, tuple[float, Any]] = {}
 
 # 스타일 프리셋
@@ -138,6 +148,7 @@ class LLMService:
     
     def _cache_get(self, key: str) -> Optional[Any]:
         """캐시에서 값 조회 (TTL 확인 포함)"""
+        # ⚠️ 프로덕션: Redis로 전환 필요
         if key in _CACHE:
             timestamp, data = _CACHE[key]
             if time.time() - timestamp < CACHE_TTL_SEC:
@@ -148,7 +159,16 @@ class LLMService:
     
     def _cache_set(self, key: str, value: Any) -> None:
         """캐시에 값 저장"""
+        # ⚠️ 프로덕션: Redis로 전환 필요
         _CACHE[key] = (time.time(), value)
+        
+        # 프로덕션 환경에서 Redis 미사용 시 경고 (최초 1회만)
+        if not hasattr(self, '_redis_warning_logged'):
+            flask_env = os.getenv("FLASK_ENV", "development")
+            redis_url = os.getenv("REDIS_URL", "")
+            if flask_env == "production" and not redis_url:
+                logger.warning("⚠️ 프로덕션 환경에서 메모리 기반 캐시 사용 중. Redis 전환 권장.")
+                self._redis_warning_logged = True
     
     def _cache_ttl_remaining(self, key: str) -> int:
         """캐시 TTL 남은 시간 반환 (초)"""
@@ -180,14 +200,16 @@ class LLMService:
                 return result
 
             # 교육파트: LLM 사용 (Claude API)
-            print(f"[DEBUG] 교육파트 로딩 시작: categories={list(categories.keys()) if categories else []}")
-            print(f"[DEBUG] Claude 클라이언트 상태: {'있음' if self.client else '없음 (폴백 사용)'}")
+            if DEBUG_LLM:
+                logger.debug(f"교육파트 로딩 시작: categories={list(categories.keys()) if categories else []}")
+                logger.debug(f"Claude 클라이언트 상태: {'있음' if self.client else '없음 (폴백 사용)'}")
             items = []
             revised_from_llm = None  # LLM에서 가져온 revised_sentence 저장
             revised_sentence_rationale = None  # LLM에서 가져온 revised_sentence_rationale 저장
             
             if self.client:
-                print(f"[DEBUG] ✅ Claude 클라이언트 사용 가능, LLM 호출 시작 (Claude API 사용)")
+                if DEBUG_LLM:
+                    logger.debug("Claude 클라이언트 사용 가능, LLM 호출 시작 (Claude API 사용)")
                 try:
                     # LLM을 사용해서 교육 항목 생성
                     prompt = self._build_prompt(masked_text, categories, language, tone)
@@ -198,16 +220,20 @@ class LLMService:
                     
                     result = self._call_claude(prompt)
                     self.logger.debug(f"Claude API 응답 받음, result 타입: {type(result)}")
-                    self.logger.debug(f"Claude API 응답 키: {list(result.keys()) if isinstance(result, dict) else 'None'}")
+                    keys = (list(result.keys()) if isinstance(result, dict) else 'None')
+                    self.logger.debug(f"Claude API 응답 키: {keys}")
                     
                     # revised_sentence_rationale은 항상 추출 시도 (revised_sentence 유효성과 무관)
                     if result and "revised_sentence_rationale" in result:
                         revised_sentence_rationale = result["revised_sentence_rationale"]
-                        print(f"[DEBUG] revised_sentence_rationale 추출: {revised_sentence_rationale[:100] if revised_sentence_rationale else 'None'}...")
+                        if DEBUG_LLM:
+                            preview = (revised_sentence_rationale[:100]
+                                      if revised_sentence_rationale else 'None')
+                            logger.debug(f"revised_sentence_rationale 추출: {preview}...")
                     else:
-                        print(f"[WARNING] Claude 응답에 revised_sentence_rationale이 없습니다!")
-                        if isinstance(result, dict):
-                            print(f"[DEBUG] Claude 응답의 모든 키: {list(result.keys())}")
+                        logger.warning("Claude 응답에 revised_sentence_rationale이 없습니다!")
+                        if DEBUG_LLM and isinstance(result, dict):
+                            logger.debug(f"Claude 응답의 모든 키: {list(result.keys())}")
                     
                     if result and "items" in result and len(result["items"]) > 0:
                         items = result["items"]
@@ -224,48 +250,71 @@ class LLMService:
                             ):
                                 self.logger.info(f"LLM으로 revised_sentence도 함께 생성됨: {revised_from_llm[:100]}...")
                             else:
-                                self.logger.warning(f"revised_sentence가 예시 문장으로 보임, 무시하고 2-pass 사용: {revised_from_llm[:100]}...")
+                                preview = revised_from_llm[:100] if revised_from_llm else 'None'
+                                msg = f"revised_sentence가 예시 문장으로 보임, 무시하고 2-pass 사용: {preview}..."
+                                self.logger.warning(msg)
                                 revised_from_llm = None
                         else:
-                            print(f"[WARNING] LLM 응답에 revised_sentence가 없음. result 키: {list(result.keys())}")
-                            print(f"[DEBUG] LLM 응답 전체: {json.dumps(result, ensure_ascii=False, indent=2)[:500]}...")
-                        print(f"[DEBUG] ✅ LLM(Claude API)으로 교육파트 생성 완료: {len(items)}개 항목")
+                            logger.warning(f"LLM 응답에 revised_sentence가 없음. result 키: {list(result.keys())}")
+                            if DEBUG_LLM:
+                                if isinstance(result, dict):
+                                    preview = json.dumps(result, ensure_ascii=False, indent=2)[:500]
+                                else:
+                                    preview = str(result)[:500]
+                                logger.debug(f"LLM 응답 전체: {preview}")
+                        if DEBUG_LLM:
+                            logger.debug(f"LLM(Claude API)으로 교육파트 생성 완료: {len(items)}개 항목")
                         # rationale 필드가 items에 포함되어 있는지 확인
-                        for idx, item in enumerate(items):
-                            print(f"[DEBUG] Item {idx} ({item.get('category', 'unknown')}) 키 목록: {list(item.keys())}")
-                            if "law_summary_rationale" in item:
-                                print(f"[DEBUG] ✅ law_summary_rationale 발견: {item['law_summary_rationale'][:100] if item['law_summary_rationale'] else 'None'}...")
-                            else:
-                                print(f"[WARNING] ❌ law_summary_rationale 없음")
-                            if "risk_scenarios_rationale" in item:
-                                print(f"[DEBUG] ✅ risk_scenarios_rationale 발견: {item['risk_scenarios_rationale'][:100] if item['risk_scenarios_rationale'] else 'None'}...")
-                            else:
-                                print(f"[WARNING] ❌ risk_scenarios_rationale 없음")
-                            if "tips_rationale" in item:
-                                print(f"[DEBUG] ✅ tips_rationale 발견: {item['tips_rationale'][:100] if item['tips_rationale'] else 'None'}...")
-                            else:
-                                print(f"[WARNING] ❌ tips_rationale 없음")
+                        if DEBUG_LLM:
+                            for idx, item in enumerate(items):
+                                cat = item.get('category', 'unknown')
+                                logger.debug(f"Item {idx} ({cat}) 키 목록: {list(item.keys())}")
+                                if "law_summary_rationale" in item:
+                                    preview = (item['law_summary_rationale'][:100]
+                                              if item['law_summary_rationale'] else 'None')
+                                    logger.debug(f"law_summary_rationale 발견: {preview}...")
+                                else:
+                                    logger.warning("law_summary_rationale 없음")
+                                if "risk_scenarios_rationale" in item:
+                                    preview = (item['risk_scenarios_rationale'][:100]
+                                              if item['risk_scenarios_rationale'] else 'None')
+                                    logger.debug(f"risk_scenarios_rationale 발견: {preview}...")
+                                else:
+                                    logger.warning("risk_scenarios_rationale 없음")
+                                if "tips_rationale" in item:
+                                    preview = (item['tips_rationale'][:100]
+                                              if item['tips_rationale'] else 'None')
+                                    logger.debug(f"tips_rationale 발견: {preview}...")
+                                else:
+                                    logger.warning("tips_rationale 없음")
                     else:
-                        print("[WARNING] ❌ LLM 응답에 items가 없음, 폴백 사용")
-                        print(f"[DEBUG] LLM 응답 내용: {json.dumps(result, ensure_ascii=False, indent=2)[:500] if isinstance(result, dict) else str(result)[:500]}")
-                        print("[DEBUG] ⚠️ 폴백 아이템 사용 (하드코딩된 데이터)")
+                        logger.warning("LLM 응답에 items가 없음, 폴백 사용")
+                        if DEBUG_LLM:
+                            if isinstance(result, dict):
+                                preview = json.dumps(result, ensure_ascii=False, indent=2)[:500]
+                            else:
+                                preview = str(result)[:500]
+                            logger.debug(f"LLM 응답 내용: {preview}")
+                        logger.info("폴백 아이템 사용 (하드코딩된 데이터)")
                         items = self._fallback_items(categories)
                 except Exception as e:
                     self.logger.error(f"LLM 교육파트 생성 실패, 폴백 사용: {e}", exc_info=True)
                     items = self._fallback_items(categories)
             else:
                 # 클라이언트가 없으면 레퍼런스 또는 폴백 사용
-                print(f"[WARNING] ❌ Claude 클라이언트가 없습니다! ANTHROPIC_API_KEY 환경변수를 확인하세요.")
-                print(f"[WARNING] ⚠️ 폴백 아이템을 사용합니다 (하드코딩된 데이터, Claude API 미사용)")
+                logger.warning("Claude 클라이언트가 없습니다! ANTHROPIC_API_KEY 환경변수를 확인하세요.")
+                logger.info("폴백 아이템을 사용합니다 (하드코딩된 데이터, Claude API 미사용)")
                 try:
                     items = self._educ_reference(categories)
                     if not items:
                         items = self._fallback_items(categories)
-                        print(f"[DEBUG] ⚠️ 폴백 아이템 사용 (하드코딩): {len(items)}개 항목")
+                        if DEBUG_LLM:
+                            logger.debug(f"폴백 아이템 사용 (하드코딩): {len(items)}개 항목")
                 except Exception as e:
                     self.logger.error(f"레퍼런스 로딩 실패, 폴백 사용: {e}", exc_info=True)
                     items = self._fallback_items(categories)
-                    print(f"[DEBUG] ⚠️ 폴백 아이템 사용 (하드코딩): {len(items)}개 항목")
+                    if DEBUG_LLM:
+                        logger.debug(f"폴백 아이템 사용 (하드코딩): {len(items)}개 항목")
             
             if not items:
                 # 최종 폴백: general 항목 하나
@@ -339,12 +388,17 @@ class LLMService:
             # revised_sentence_rationale이 있으면 추가
             if revised_sentence_rationale_final:
                 result_dict["revised_sentence_rationale"] = revised_sentence_rationale_final
-                print(f"[DEBUG] ✅ revised_sentence_rationale 최종 응답에 포함됨")
+                if DEBUG_LLM:
+                    logger.debug("revised_sentence_rationale 최종 응답에 포함됨")
             else:
-                print(f"[WARNING] ❌ revised_sentence_rationale 최종 응답에 없음 (Claude API {'사용' if self.client else '미사용'})")
+                logger.warning(f"revised_sentence_rationale 최종 응답에 없음 (Claude API {'사용' if self.client else '미사용'})")
             
-            print(f"[DEBUG] 최종 응답 모델: {result_dict['model']}")
-            print(f"[DEBUG] 최종 응답에 rationale 포함 여부: revised_sentence_rationale={revised_sentence_rationale_final is not None}")
+            if DEBUG_LLM:
+                logger.debug(f"최종 응답 모델: {result_dict['model']}")
+                included = revised_sentence_rationale_final is not None
+                logger.debug(
+                    f"최종 응답에 rationale 포함 여부: revised_sentence_rationale={included}"
+                )
             
             return result_dict
         except Exception as e:
@@ -575,13 +629,49 @@ class LLMService:
             })
 
         if categories.get("email"):
+            email_law = (
+                "개인정보보호법 제71조 제1항에 따라 개인정보처리자가 개인정보를 "
+                "목적 외 이용·제공하거나 제3자에게 제공할 경우 최대 3억원의 과태료가 부과됩니다. "
+                "개인정보보호법 제75조 제1항에 따라 고의로 개인정보를 유출하거나 타인에게 제공할 경우 "
+                "5년 이하의 징역 또는 5천만원 이하의 벌금에 처해집니다. "
+                "정보통신망 이용촉진 및 정보보호 등에 관한 법률 제48조의2 제1항에 따라 "
+                "이메일 주소 등 개인정보를 무단으로 수집·이용할 경우 "
+                "5년 이하의 징역 또는 5천만원 이하의 벌금에 처해질 수 있습니다."
+            )
             add_item(
                 "email",
-                "개인정보보호법 제71조 제1항에 따라 개인정보처리자가 개인정보를 목적 외 이용·제공하거나 제3자에게 제공할 경우 최대 3억원의 과태료가 부과됩니다. 개인정보보호법 제75조 제1항에 따라 고의로 개인정보를 유출하거나 타인에게 제공할 경우 5년 이하의 징역 또는 5천만원 이하의 벌금에 처해집니다. 정보통신망 이용촉진 및 정보보호 등에 관한 법률 제48조의2 제1항에 따라 이메일 주소 등 개인정보를 무단으로 수집·이용할 경우 5년 이하의 징역 또는 5천만원 이하의 벌금에 처해질 수 있습니다.",
-                ["이메일 주소 노출 시 피싱/사칭 공격으로 계정 탈취 위험: 공격자가 노출된 이메일 주소를 이용하여 피싱 이메일을 발송하고, 이를 통해 피해자를 피싱 사이트로 유도하여 금융정보(계좌번호, 비밀번호 등)를 탈취한 후 불법 인출 및 재산 피해를 발생시킬 수 있습니다. 또한 이메일 주소를 이용하여 주요 온라인 서비스(은행, 쇼핑몰, SNS 등) 계정을 탈취하여 개인정보 유출, 명예 훼손, 재산 피해를 유발할 수 있습니다.",
-                 "이메일 주소 노출 시 스팸·사기 메일 증가 위험: 공격자가 노출된 이메일 주소를 수집하여 스팸 메일, 피싱 메일, 악성 메일을 대량으로 발송하고, 이를 통해 추가 개인정보 탈취나 악성코드 감염을 시도할 수 있습니다."],
-                ["피싱 공격 방지를 위한 이메일 주소 최소수집 원칙 준수: 불필요한 이메일 주소 수집을 최소화하고, 수집 목적에 필요한 최소한의 정보만 보관하여 노출 범위를 줄임으로써 피싱 공격의 표적이 될 가능성을 최소화합니다. 또한 이메일 주소 수집 시 반드시 개인정보보호법에 따른 동의 절차를 거쳐야 합니다.",
-                 "스팸 메일 방지를 위한 외부 전송 시 최소 공개 원칙: 이메일 주소를 외부로 전송할 경우 반드시 필요한 최소한의 정보만 제공하고, 수신자 신원 확인 및 전송 목적을 명확히 합니다. 또한 TLS/SSL 등 암호화된 채널을 통해 안전하게 전송하고, 전송 로그를 남겨 이상 징후를 조기에 발견할 수 있도록 합니다."],
+                email_law,
+                [
+                    (
+                        "이메일 주소 노출 시 피싱/사칭 공격으로 계정 탈취 위험: "
+                        "공격자가 노출된 이메일 주소를 이용하여 피싱 이메일을 발송하고, "
+                        "이를 통해 피해자를 피싱 사이트로 유도하여 금융정보(계좌번호, 비밀번호 등)를 "
+                        "탈취한 후 불법 인출 및 재산 피해를 발생시킬 수 있습니다. "
+                        "또한 이메일 주소를 이용하여 주요 온라인 서비스(은행, 쇼핑몰, SNS 등) "
+                        "계정을 탈취하여 개인정보 유출, 명예 훼손, 재산 피해를 유발할 수 있습니다."
+                    ),
+                    (
+                        "이메일 주소 노출 시 스팸·사기 메일 증가 위험: "
+                        "공격자가 노출된 이메일 주소를 수집하여 스팸 메일, 피싱 메일, "
+                        "악성 메일을 대량으로 발송하고, 이를 통해 추가 개인정보 탈취나 "
+                        "악성코드 감염을 시도할 수 있습니다."
+                    )
+                ],
+                [
+                    (
+                        "피싱 공격 방지를 위한 이메일 주소 최소수집 원칙 준수: "
+                        "불필요한 이메일 주소 수집을 최소화하고, 수집 목적에 필요한 최소한의 정보만 "
+                        "보관하여 노출 범위를 줄임으로써 피싱 공격의 표적이 될 가능성을 최소화합니다. "
+                        "또한 이메일 주소 수집 시 반드시 개인정보보호법에 따른 동의 절차를 거쳐야 합니다."
+                    ),
+                    (
+                        "스팸 메일 방지를 위한 외부 전송 시 최소 공개 원칙: "
+                        "이메일 주소를 외부로 전송할 경우 반드시 필요한 최소한의 정보만 제공하고, "
+                        "수신자 신원 확인 및 전송 목적을 명확히 합니다. "
+                        "또한 TLS/SSL 등 암호화된 채널을 통해 안전하게 전송하고, "
+                        "전송 로그를 남겨 이상 징후를 조기에 발견할 수 있도록 합니다."
+                    )
+                ],
             )
         if categories.get("phone"):
             add_item(
@@ -674,7 +764,7 @@ class LLMService:
         try:
             import yaml
         except ImportError:
-            print("Warning: PyYAML not installed. Install with: pip install pyyaml")
+            logger.warning("PyYAML not installed. Install with: pip install pyyaml")
             return {}
         
         # 여러 경로 시도
@@ -690,16 +780,17 @@ class LLMService:
                     with open(base, "r", encoding="utf-8") as f:
                         return yaml.safe_load(f) or {}
                 except Exception as e:
-                    print(f"Failed to load policies from {base}: {e}")
+                    logger.warning(f"Failed to load policies from {base}: {e}")
                     continue
         
-        print("Warning: policies.yml not found, using fallback")
+        logger.warning("policies.yml not found, using fallback")
         return {}
     
     def _educ_reference(self, categories: Dict[str, Any]) -> List[dict]:
         """교육파트 고정 레퍼런스에서 로드 (LLM 비사용)"""
         ref = self._load_policies()
-        print(f"[DEBUG] 로드된 레퍼런스 키: {list(ref.keys())}")
+        if DEBUG_LLM:
+            logger.debug(f"로드된 레퍼런스 키: {list(ref.keys())}")
         
         # categories 처리: dict 값이 True인 경우 또는 dict인 경우 모두 처리
         norm = []
@@ -712,14 +803,15 @@ class LLMService:
                 # True나 다른 truthy 값인 경우
                 norm.append(k)
         
-        print(f"[DEBUG] 정규화된 카테고리: {norm}")
+                if DEBUG_LLM:
+                    logger.debug(f"정규화된 카테고리: {norm}")
         items: List[dict] = []
         
         for k in norm:
             node = ref.get(k, {})
             if not node:
                 # 레퍼런스에 없으면 폴백 사용
-                print(f"[WARNING] 레퍼런스에 '{k}' 카테고리 없음")
+                logger.warning(f"레퍼런스에 '{k}' 카테고리 없음")
                 continue
             
             items.append({
@@ -988,7 +1080,8 @@ class LLMService:
             else:
                 content = ""
             
-            print(f"[DEBUG] Raw response ({model}): {content[:200]}...")  # 디버깅용
+            if DEBUG_LLM:
+                logger.debug(f"Raw response ({model}): {content[:200]}...")
             
             # ```json 마커 제거
             content = re.sub(r'^```json\s*', '', content, flags=re.MULTILINE)
@@ -999,7 +1092,7 @@ class LLMService:
             try:
                 return json.loads(content)
             except json.JSONDecodeError as e1:
-                print(f"[WARNING] 첫 번째 JSON 파싱 시도 실패: {e1}")
+                logger.warning(f"첫 번째 JSON 파싱 시도 실패: {e1}")
                 # JSON 블록 찾기 (더 관대한 패턴)
                 json_match = re.search(r'\{.*\}', content, re.DOTALL)
                 if json_match:
@@ -1014,20 +1107,19 @@ class LLMService:
                             if last_brace > 0:
                                 return json.loads(json_str[:last_brace+1])
                     except json.JSONDecodeError as e2:
-                        print(f"[ERROR] JSON 파싱 실패: {e2}")
-                        print(f"[ERROR] 추출된 내용: {json_match.group()[:300]}")
+                        logger.error(f"JSON 파싱 실패: {e2}")
+                        if DEBUG_LLM:
+                            logger.debug(f"추출된 내용: {json_match.group()[:300]}")
                         # 빈 dict 반환 (폴백)
                         return {}
                 
-                print(f"[ERROR] JSON을 찾을 수 없음. 전체 응답: {content[:500]}")
+                logger.error(f"JSON을 찾을 수 없음. 전체 응답: {content[:500]}")
                 # 빈 dict 반환 (폴백)
                 return {}
                 
         except Exception as e:
-            print(f"[ERROR] Claude API 호출 실패 ({model}): {e}")
-            import traceback
-            traceback.print_exc()
-            # 예외를 다시 발생시키지 않고 빈 dict 반환
+            logger.error(f"Claude API 호출 실패 ({model}): {e}", exc_info=True)
+            # 예외를 다시 발생시키지 않고 빈 dict 반환 (폴백 메커니즘)
             return {}
 
     def _call_claude(self, prompt: str) -> Dict[str, Any]:
@@ -1036,29 +1128,46 @@ class LLMService:
             raise Exception("Claude client not initialized")
             
         try:
-            system_message = """당신은 개인정보보호 전문가이자 사이버 보안 전문가입니다. 
-
-**절대 준수 사항 (반드시 포함해야 함):**
-
-1. **JSON 형식 준수 (가장 중요)**: 반드시 유효한 JSON 형식으로 응답해야 합니다. 문자열 내의 따옴표는 \"로 이스케이프하고, 모든 중괄호와 대괄호를 올바르게 닫아야 합니다. JSON이 잘리거나 잘못된 형식이면 응답이 실패합니다.
-
-2. **revised_sentence (필수)**: JSON 응답의 최상위에 반드시 포함. 사용자가 제공한 마스킹된 텍스트를 실제로 읽고 수정한 결과여야 합니다. 예시 문장을 복사하지 마세요.
-
-3. **revised_sentence_rationale (필수, 절대 생략 금지)**: JSON 응답의 최상위에 반드시 포함. 수정 문장을 생성한 근거를 **간결하게** (2-3문장, 100-150자 이내) 설명하세요. 이 필드가 없으면 응답이 실패합니다.
-
-4. **각 item의 rationale 필드 (필수, 절대 생략 금지)**: 모든 item에 다음 필드를 반드시 포함해야 합니다:
-   - law_summary_rationale: 법령 요약 생성 근거 (2-3문장, 100-150자 이내, 간결하게)
-   - risk_scenarios_rationale: 위험 시나리오 생성 근거 (2-3문장, 100-150자 이내, 간결하게)
-   - tips_rationale: 보안 팁 생성 근거 (2-3문장, 100-150자 이내, 간결하게)
-
-**중요**: rationale 필드는 명확하고 구체적이어야 하지만, **반드시 간결하게** 작성하세요. 각 rationale은 2-3문장, 100-150자 이내로 작성하여 JSON 응답이 너무 길어지지 않도록 하세요. 너무 길면 JSON이 잘려서 파싱이 실패합니다. 이 필드들이 없으면 응답이 실패합니다.
-
-**중요**: 
-- JSON 문자열 내의 모든 따옴표는 반드시 백슬래시로 이스케이프(\\\")해야 합니다.
-- 모든 중괄호 { }와 대괄호 [ ]를 올바르게 닫아야 합니다.
-- 모든 필드 사이에 콤마(,)를 반드시 포함해야 합니다.
-- JSON 응답이 완전히 끝나야 합니다. 응답이 중간에 잘리면 파싱이 실패합니다.
-- 긴 텍스트를 작성할 때도 JSON 형식 규칙을 반드시 준수하세요."""
+            system_message = (
+                "당신은 개인정보보호 전문가이자 사이버 보안 전문가입니다.\n\n"
+                "**절대 준수 사항 (반드시 포함해야 함):**\n\n"
+                "1. **JSON 형식 준수 (가장 중요)**: "
+                "반드시 유효한 JSON 형식으로 응답해야 합니다. "
+                "문자열 내의 따옴표는 \"로 이스케이프하고, "
+                "모든 중괄호와 대괄호를 올바르게 닫아야 합니다. "
+                "JSON이 잘리거나 잘못된 형식이면 응답이 실패합니다.\n\n"
+                "2. **revised_sentence (필수)**: "
+                "JSON 응답의 최상위에 반드시 포함. "
+                "사용자가 제공한 마스킹된 텍스트를 실제로 읽고 수정한 결과여야 합니다. "
+                "예시 문장을 복사하지 마세요.\n\n"
+                "3. **revised_sentence_rationale (필수, 절대 생략 금지)**: "
+                "JSON 응답의 최상위에 반드시 포함. "
+                "수정 문장을 생성한 근거를 **간결하게** "
+                "(2-3문장, 100-150자 이내) 설명하세요. "
+                "이 필드가 없으면 응답이 실패합니다.\n\n"
+                "4. **각 item의 rationale 필드 (필수, 절대 생략 금지)**: "
+                "모든 item에 다음 필드를 반드시 포함해야 합니다:\n"
+                "   - law_summary_rationale: 법령 요약 생성 근거 "
+                "(2-3문장, 100-150자 이내, 간결하게)\n"
+                "   - risk_scenarios_rationale: 위험 시나리오 생성 근거 "
+                "(2-3문장, 100-150자 이내, 간결하게)\n"
+                "   - tips_rationale: 보안 팁 생성 근거 "
+                "(2-3문장, 100-150자 이내, 간결하게)\n\n"
+                "**중요**: rationale 필드는 명확하고 구체적이어야 하지만, "
+                "**반드시 간결하게** 작성하세요. "
+                "각 rationale은 2-3문장, 100-150자 이내로 작성하여 "
+                "JSON 응답이 너무 길어지지 않도록 하세요. "
+                "너무 길면 JSON이 잘려서 파싱이 실패합니다. "
+                "이 필드들이 없으면 응답이 실패합니다.\n\n"
+                "**중요**:\n"
+                "- JSON 문자열 내의 모든 따옴표는 반드시 백슬래시로 "
+                "이스케이프(\\\")해야 합니다.\n"
+                "- 모든 중괄호 { }와 대괄호 [ ]를 올바르게 닫아야 합니다.\n"
+                "- 모든 필드 사이에 콤마(,)를 반드시 포함해야 합니다.\n"
+                "- JSON 응답이 완전히 끝나야 합니다. "
+                "응답이 중간에 잘리면 파싱이 실패합니다.\n"
+                "- 긴 텍스트를 작성할 때도 JSON 형식 규칙을 반드시 준수하세요."
+            )
             
             # Rate limit 방지를 위해 재시도 로직 추가
             max_retries = 3
@@ -1081,12 +1190,12 @@ class LLMService:
                     if "429" in error_str or "Too Many Requests" in error_str:
                         if attempt < max_retries - 1:
                             wait_time = retry_delay * (attempt + 1)
-                            print(f"[WARNING] Rate limit (429) 발생. {wait_time}초 후 재시도... ({attempt + 1}/{max_retries})")
+                            logger.warning(f"Rate limit (429) 발생. {wait_time}초 후 재시도... ({attempt + 1}/{max_retries})")
                             import time
                             time.sleep(wait_time)
                             continue
                         else:
-                            print(f"[ERROR] Rate limit (429) - 최대 재시도 횟수 초과")
+                            logger.error("Rate limit (429) - 최대 재시도 횟수 초과")
                             raise
                     else:
                         raise
@@ -1097,8 +1206,9 @@ class LLMService:
             else:
                 content = ""
             
-            print(f"[DEBUG] Claude 원본 응답 (처음 1000자): {content[:1000]}...")
-            print(f"[DEBUG] Claude 원본 응답 전체 길이: {len(content)}자")
+            if DEBUG_LLM:
+                logger.debug(f"Claude 원본 응답 (처음 1000자): {content[:1000]}...")
+                logger.debug(f"Claude 원본 응답 전체 길이: {len(content)}자")
             
             # ```json 마커 제거
             content = re.sub(r'^```json\s*', '', content, flags=re.MULTILINE)
@@ -1107,43 +1217,45 @@ class LLMService:
             
             try:
                 parsed = json.loads(content)
-                print(f"[DEBUG] JSON 파싱 성공. 파싱된 최상위 키: {list(parsed.keys()) if isinstance(parsed, dict) else 'None'}")
-                if isinstance(parsed, dict):
-                    print(f"[DEBUG] ========== Claude 응답 분석 ==========")
-                    print(f"[DEBUG] 파싱된 모든 키: {list(parsed.keys())}")
-                    if "revised_sentence" in parsed:
-                        print(f"[DEBUG] ✅ revised_sentence 발견: {parsed['revised_sentence'][:100] if parsed['revised_sentence'] else 'None'}...")
-                    else:
-                        print(f"[WARNING] ❌ revised_sentence가 응답에 없습니다!")
-                    if "revised_sentence_rationale" in parsed:
-                        print(f"[DEBUG] ✅ revised_sentence_rationale 발견: {parsed['revised_sentence_rationale'][:200] if parsed['revised_sentence_rationale'] else 'None'}...")
-                    else:
-                        print(f"[WARNING] ❌ revised_sentence_rationale가 응답에 없습니다!")
-                        print(f"[DEBUG] Claude가 생성한 모든 최상위 필드: {list(parsed.keys())}")
-                    if "items" in parsed and isinstance(parsed["items"], list) and len(parsed["items"]) > 0:
-                        first_item = parsed["items"][0]
-                        if isinstance(first_item, dict):
-                            print(f"[DEBUG] 첫 번째 item의 모든 키: {list(first_item.keys())}")
-                            if "law_summary_rationale" in first_item:
-                                print(f"[DEBUG] ✅ law_summary_rationale 발견")
-                            else:
-                                print(f"[WARNING] ❌ law_summary_rationale 없음")
-                            if "risk_scenarios_rationale" in first_item:
-                                print(f"[DEBUG] ✅ risk_scenarios_rationale 발견")
-                            else:
-                                print(f"[WARNING] ❌ risk_scenarios_rationale 없음")
-                            if "tips_rationale" in first_item:
-                                print(f"[DEBUG] ✅ tips_rationale 발견")
-                            else:
-                                print(f"[WARNING] ❌ tips_rationale 없음")
-                    print(f"[DEBUG] ========================================")
+                if DEBUG_LLM:
+                    logger.debug(f"JSON 파싱 성공. 파싱된 최상위 키: {list(parsed.keys()) if isinstance(parsed, dict) else 'None'}")
+                    if isinstance(parsed, dict):
+                        logger.debug("========== Claude 응답 분석 ==========")
+                        logger.debug(f"파싱된 모든 키: {list(parsed.keys())}")
+                        if "revised_sentence" in parsed:
+                            logger.debug(f"revised_sentence 발견: {parsed['revised_sentence'][:100] if parsed['revised_sentence'] else 'None'}...")
+                        else:
+                            logger.warning("revised_sentence가 응답에 없습니다!")
+                        if "revised_sentence_rationale" in parsed:
+                            logger.debug(f"revised_sentence_rationale 발견: {parsed['revised_sentence_rationale'][:200] if parsed['revised_sentence_rationale'] else 'None'}...")
+                        else:
+                            logger.warning("revised_sentence_rationale가 응답에 없습니다!")
+                            logger.debug(f"Claude가 생성한 모든 최상위 필드: {list(parsed.keys())}")
+                        if "items" in parsed and isinstance(parsed["items"], list) and len(parsed["items"]) > 0:
+                            first_item = parsed["items"][0]
+                            if isinstance(first_item, dict):
+                                logger.debug(f"첫 번째 item의 모든 키: {list(first_item.keys())}")
+                                if "law_summary_rationale" in first_item:
+                                    logger.debug("law_summary_rationale 발견")
+                                else:
+                                    logger.warning("law_summary_rationale 없음")
+                                if "risk_scenarios_rationale" in first_item:
+                                    logger.debug("risk_scenarios_rationale 발견")
+                                else:
+                                    logger.warning("risk_scenarios_rationale 없음")
+                                if "tips_rationale" in first_item:
+                                    logger.debug("tips_rationale 발견")
+                                else:
+                                    logger.warning("tips_rationale 없음")
+                        logger.debug("========================================")
                 return parsed
             except json.JSONDecodeError as e:
-                print(f"[ERROR] JSON 파싱 오류: {e}")
+                logger.error(f"JSON 파싱 오류: {e}")
                 error_msg = str(e)
                 error_pos = getattr(e, 'pos', len(content))
-                print(f"[ERROR] 오류 위치: char {error_pos}")
-                print(f"[ERROR] 파싱 시도한 내용 (오류 위치 주변 200자): ...{content[max(0, error_pos-100):error_pos+100]}...")
+                if DEBUG_LLM:
+                    logger.debug(f"오류 위치: char {error_pos}")
+                    logger.debug(f"파싱 시도한 내용 (오류 위치 주변 200자): ...{content[max(0, error_pos-100):error_pos+100]}...")
                 
                 # JSON 복구 시도
                 try:
@@ -1189,7 +1301,8 @@ class LLMService:
                                 content_fixed += ']' * (open_brackets - close_brackets)
                             
                             parsed = json.loads(content_fixed)
-                            print(f"[DEBUG] JSON 복구 후 파싱 성공! (콤마 오류 위치에서 잘림)")
+                            if DEBUG_LLM:
+                                logger.debug("JSON 복구 후 파싱 성공! (콤마 오류 위치에서 잘림)")
                             return parsed
                     
                     # "Unterminated string" 오류 처리
@@ -1245,7 +1358,8 @@ class LLMService:
                                 content_fixed += ']' * (open_brackets - close_brackets)
                             
                             parsed = json.loads(content_fixed)
-                            print(f"[DEBUG] JSON 복구 후 파싱 성공! (잘린 문자열 필드 제거)")
+                            if DEBUG_LLM:
+                                logger.debug("JSON 복구 후 파싱 성공! (잘린 문자열 필드 제거)")
                             return parsed
                         else:
                             # 마지막 완전한 중괄호 찾기
@@ -1264,7 +1378,8 @@ class LLMService:
                                     content_fixed += ']' * (open_brackets - close_brackets)
                                 
                                 parsed = json.loads(content_fixed)
-                                print(f"[DEBUG] JSON 복구 후 파싱 성공! (잘린 문자열 제거)")
+                                if DEBUG_LLM:
+                                    logger.debug("JSON 복구 후 파싱 성공! (잘린 문자열 제거)")
                                 return parsed
                     
                     # 기본 복구: 마지막 완전한 중괄호까지 자르기
@@ -1283,11 +1398,12 @@ class LLMService:
                             content_fixed += ']' * (open_brackets - close_brackets)
                         
                         parsed = json.loads(content_fixed)
-                        print(f"[DEBUG] JSON 복구 후 파싱 성공! (기본 복구)")
+                        if DEBUG_LLM:
+                            logger.debug("JSON 복구 후 파싱 성공! (기본 복구)")
                         return parsed
                         
                 except Exception as fix_error:
-                    print(f"[WARNING] JSON 복구 시도 실패: {fix_error}")
+                    logger.warning(f"JSON 복구 시도 실패: {fix_error}")
                 
                 # JSON이 아닌 경우 텍스트에서 JSON 부분만 추출 시도
                 json_match = re.search(r'\{.*\}', content, re.DOTALL)
@@ -1297,9 +1413,10 @@ class LLMService:
                         # 중괄호 밸런스 체크
                         if json_str.count('{') == json_str.count('}'):
                             parsed = json.loads(json_str)
-                            print(f"[DEBUG] 정규식으로 JSON 추출 성공. 파싱된 키: {list(parsed.keys()) if isinstance(parsed, dict) else 'None'}")
-                            if isinstance(parsed, dict) and "revised_sentence" in parsed:
-                                print(f"[DEBUG] revised_sentence 발견: {parsed['revised_sentence'][:100] if parsed['revised_sentence'] else 'None'}...")
+                            if DEBUG_LLM:
+                                logger.debug(f"정규식으로 JSON 추출 성공. 파싱된 키: {list(parsed.keys()) if isinstance(parsed, dict) else 'None'}")
+                                if isinstance(parsed, dict) and "revised_sentence" in parsed:
+                                    logger.debug(f"revised_sentence 발견: {parsed['revised_sentence'][:100] if parsed['revised_sentence'] else 'None'}...")
                             return parsed
                         else:
                             # 중괄호 불균형 시 마지막 닫는 중괄호까지 잘라서 파싱
@@ -1307,18 +1424,19 @@ class LLMService:
                             if last_close > 0:
                                 json_str = json_str[:last_close+1]
                                 parsed = json.loads(json_str)
-                                print(f"[DEBUG] 중괄호 밸런스 수정 후 파싱 성공!")
+                                if DEBUG_LLM:
+                                    logger.debug("중괄호 밸런스 수정 후 파싱 성공!")
                                 return parsed
                     except json.JSONDecodeError as e2:
-                        print(f"[ERROR] 정규식으로 추출한 JSON도 파싱 실패: {e2}")
+                        logger.error(f"정규식으로 추출한 JSON도 파싱 실패: {e2}")
                         pass
                 
                 # 최종 실패: 빈 dict 반환 (폴백 사용)
-                print(f"[WARNING] 모든 JSON 파싱 시도 실패. 빈 dict 반환하여 폴백 사용")
+                logger.warning("모든 JSON 파싱 시도 실패. 빈 dict 반환하여 폴백 사용")
                 return {}
             
         except Exception as e:
-            print(f"Claude API error: {e}")
+            logger.error(f"Claude API error: {e}", exc_info=True)
             raise Exception(f"Claude API 호출 실패: {str(e)}")
 
 
