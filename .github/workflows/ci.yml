@@ -20,7 +20,7 @@ jobs:
     steps:
     # 코드 체크아웃
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
     
     # Python 환경 설정
     - name: Set up Python
@@ -70,7 +70,7 @@ jobs:
     steps:
     # 코드 체크아웃
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
     
     # Node.js 환경 설정
     - name: Set up Node.js
