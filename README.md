@@ -2,13 +2,185 @@
 
 **당신의 개인정보 보호 분석 시스템**
 
-19기 도전학기제 설계형(팀) **도전!보안벨**  
-사용자 맞춤 민감정보 탐지를 위한 **AI 기반 텍스트 및 이미지 점검 시스템 개발**  
-Flask 기반 **위험정보(개인정보 등) 탐지 웹서비스** 프로젝트입니다.
+> **"SNS에 올리기 전, 한 번 더 확인하세요!"**  
+> PrivAlert는 AI 기술을 활용하여 텍스트, 이미지, 동영상에서 개인정보를 자동으로 찾아주고, 안전하게 수정할 수 있도록 도와주는 웹 서비스입니다.
 
 ---
 
-## 📌 프로젝트 개요
+## 🌟 PrivAlert가 뭔가요?
+
+**PrivAlert**는 여러분이 SNS나 블로그에 올리려는 글, 사진, 동영상에 **개인정보가 숨어있는지** 자동으로 찾아주는 똑똑한 보안 도우미입니다! 
+
+### 왜 필요한가요? 🤔
+
+- 📸 **사진 속 개인정보**: 사진에 담긴 전화번호, 주소, 이름 등을 자동으로 찾아드립니다
+- 📝 **글 속 민감 정보**: 이메일, 전화번호, 주소, 직장명 등이 포함되어 있는지 확인합니다
+- 🎥 **동영상 분석**: 동영상 속 대화나 자막에서 개인정보를 추출합니다
+- 🔒 **안전한 공유**: 개인정보가 노출되기 전에 미리 알려드려 안전하게 공유할 수 있습니다
+
+### 주요 기능 ✨
+
+1. **📄 텍스트 분석**: 입력한 텍스트에서 전화번호, 이메일, 주소, 이름 등을 자동 탐지
+2. **🖼️ 이미지 분석**: 
+   - 사진 속 얼굴과 손가락 검출
+   - 이미지 속 텍스트 추출 (OCR)
+   - 위치 정보 등 메타데이터 제거
+3. **🎬 동영상 분석**: 동영상에서 프레임 추출 및 음성 인식
+4. **✏️ 수정 제안**: AI가 개인정보를 안전하게 바꿀 수 있는 문장을 제안해드립니다
+5. **👤 사용자 맞춤 설정**: 본인만의 필터링 규칙을 설정하여 더 정확한 탐지 가능
+
+---
+
+## 🚀 3분 안에 시작하기
+
+### 방법 1: Docker로 실행하기 (가장 쉬운 방법! ⭐)
+
+**Docker가 뭔가요?**  
+Docker는 프로그램을 실행하는 데 필요한 모든 것을 하나로 묶어서, 복잡한 설정 없이 바로 실행할 수 있게 해주는 도구입니다. 마치 "포장된 상자"를 열기만 하면 되는 것처럼요!
+
+#### 1️⃣ Docker 설치하기
+
+- **Windows/Mac**: [Docker Desktop 다운로드](https://www.docker.com/products/docker-desktop) 후 설치
+- **Linux**: 
+  ```bash
+  sudo apt-get update
+  sudo apt-get install docker.io docker-compose
+  ```
+
+설치 확인:
+```bash
+docker --version
+docker-compose --version
+```
+
+#### 2️⃣ 환경 설정 파일 만들기
+
+프로젝트 폴더(`PrivAlert`) 안에 `.env` 파일을 만들고 아래 내용을 복사하세요:
+
+```bash
+# 필수 설정 (반드시 변경하세요!)
+FLASK_SECRET_KEY=여기에-32자-이상의-랜덤한-문자열을-입력하세요
+MYSQL_ROOT_PASSWORD=데이터베이스-루트-비밀번호-16자-이상
+MYSQL_PASSWORD=데이터베이스-사용자-비밀번호-16자-이상
+JWT_SECRET_KEY=JWT-비밀키-다른-랜덤-문자열
+ENCRYPTION_KEY=암호화-키-생성-필요
+
+# 선택 설정 (이메일 인증을 사용하려면)
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SMTP_EMAIL=your-email@gmail.com
+SMTP_PASSWORD=your-app-password
+SMTP_FROM=noreply@privalert.com
+
+# 선택 설정 (AI 수정 제안 기능을 사용하려면)
+ANTHROPIC_API_KEY=sk-ant-...
+CLAUDE_MODEL=claude-sonnet-4-5-20250929
+```
+
+**💡 비밀번호 생성 팁:**
+- Windows PowerShell에서:
+  ```powershell
+  [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Minimum 0 -Maximum 256 }))
+  ```
+- Linux/Mac에서:
+  ```bash
+  openssl rand -base64 32
+  ```
+
+**💡 암호화 키 생성:**
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+#### 3️⃣ 실행하기
+
+프로젝트 폴더에서 아래 명령어를 실행하세요:
+
+```bash
+docker-compose up -d --build
+```
+
+**이 명령어가 하는 일:**
+- `docker-compose up`: 모든 서비스를 시작합니다
+- `-d`: 백그라운드에서 실행합니다 (터미널을 닫아도 계속 실행됨)
+- `--build`: 필요한 이미지를 자동으로 빌드합니다
+
+#### 4️⃣ 접속하기
+
+잠시 기다린 후 (약 1-2분), 브라우저에서 접속하세요:
+
+- 🌐 **웹사이트**: http://localhost:3000
+- 🔧 **API 문서**: http://localhost:5000/api-docs/
+- ❤️ **서버 상태 확인**: http://localhost:5000/health
+
+**🎉 완료!** 이제 PrivAlert를 사용할 수 있습니다!
+
+---
+
+### 방법 2: 로컬에서 직접 실행하기 (개발자용)
+
+Docker 없이 직접 실행하고 싶다면 아래 방법을 따라하세요.
+
+#### 1️⃣ 저장소 다운로드
+
+```bash
+git clone https://github.com/yelin1197/PrivAlert.git
+cd PrivAlert
+```
+
+#### 2️⃣ 백엔드 설정
+
+**Windows:**
+```cmd
+cd backend
+py -3.10 -m venv venv
+.\venv\Scripts\activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+**Linux/Mac:**
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+#### 3️⃣ 프론트엔드 설정
+
+```bash
+cd frontend
+npm install
+```
+
+#### 4️⃣ 환경 변수 설정
+
+프로젝트 루트에 `.env` 파일을 만들고 위의 "방법 1"에서 설명한 내용을 입력하세요.
+
+#### 5️⃣ 실행하기
+
+**백엔드 실행:**
+```bash
+cd backend
+python wsgi.py
+```
+
+**프론트엔드 실행 (새 터미널):**
+```bash
+cd frontend
+npm run dev
+```
+
+#### 6️⃣ 접속하기
+
+- 🌐 **웹사이트**: http://localhost:3000 (또는 http://localhost:5173)
+- 🔧 **API**: http://localhost:5000
+
+---
+
+## 📌 프로젝트 개요 (상세)
 
 - 업로드된 텍스트/이미지/비디오에서 개인정보 가능성이 있는 패턴 탐지  
 - 위험도 산정 및 수정 문구 제안  
@@ -25,7 +197,10 @@ Flask 기반 **위험정보(개인정보 등) 탐지 웹서비스** 프로젝트
 
 ---
 
-## 🚀 빠른 시작 (Docker - 권장)
+## 🚀 빠른 시작 (Docker - 상세 가이드)
+
+> 💡 **위의 "3분 안에 시작하기" 섹션을 먼저 확인하세요!**  
+> 아래는 더 자세한 설명과 문제 해결 방법입니다.
 
 ### 1단계: Docker 설치 확인
 
