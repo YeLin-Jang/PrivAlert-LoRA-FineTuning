@@ -28,7 +28,7 @@ jobs:
     steps:
     # 코드 체크아웃
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
     
     # ========== Python 의존성 취약점 스캔 ==========
     - name: Set up Python
@@ -99,7 +99,7 @@ jobs:
     steps:
     # 코드 체크아웃
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
     
     # ========== Python SBOM 생성 ==========
     - name: Set up Python

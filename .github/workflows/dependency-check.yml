@@ -16,7 +16,7 @@ jobs:
     steps:
     # 코드 체크아웃
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
     
     # ========== Python 의존성 확인 ==========
     # Python 환경 설정
