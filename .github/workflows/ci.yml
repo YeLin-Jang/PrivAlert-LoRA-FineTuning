@@ -74,7 +74,7 @@ jobs:
     
     # Node.js 환경 설정
     - name: Set up Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v6
       with:
         node-version: '20'  # 프론트엔드에서 사용하는 Node.js 버전
         cache: 'npm'        # npm 캐시 사용으로 설치 속도 향상
