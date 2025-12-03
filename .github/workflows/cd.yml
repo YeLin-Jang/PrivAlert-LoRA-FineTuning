@@ -106,6 +106,7 @@ jobs:
           org.opencontainers.image.version=${{ steps.meta.outputs.tags }}
           org.opencontainers.image.revision=${{ github.sha }}
           org.opencontainers.image.source=${{ github.repositoryUrl }}
+      continue-on-error: false
     
     # Docker 이미지 빌드 및 푸시 (백엔드의 경우)
     - name: Build and push Docker image (Backend)
