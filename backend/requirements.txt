@@ -10,7 +10,7 @@ requests==2.31.0
 flasgger==0.9.7.1
 opencv-python-headless==4.10.0.84
 numpy==1.26.4
-mediapipe==0.10.14
+mediapipe==0.10.21
 flask-cors==4.0.0
 easyocr==1.7.1
 protobuf==4.25.3
