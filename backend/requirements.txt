@@ -32,7 +32,7 @@ anthropic>=0.72.0
 
 # Video processing and speech recognition dependencies
 openai-whisper==20231117
-moviepy==1.0.3
+moviepy==2.2.1
 ffmpeg-python==0.2.0
 
 # Admin page authentication and security
