@@ -45,7 +45,7 @@ marshmallow==3.20.1
 Flask-SQLAlchemy==3.1.1
 SQLAlchemy==2.0.23
 PyMySQL==1.1.0
-cryptography==41.0.7
+cryptography==46.0.3
 
 # Background job scheduler
 APScheduler==3.10.4
@@ -54,7 +54,7 @@ APScheduler==3.10.4
 argon2-cffi==23.1.0  # Argon2id 비밀번호 해싱
 pyotp==2.9.0  # TOTP (MFA)
 qrcode[pil]==7.4.2  # QR 코드 생성
-cryptography==41.0.7  # 암호화 (이미 있음)
+cryptography==46.0.3  # 암호화 (이미 있음)
 
 # NER model dependencies (pytorch-bert-crf-ner)
 # Note: kobert, gluonnlp, model.net, data_utils etc. are part of 
