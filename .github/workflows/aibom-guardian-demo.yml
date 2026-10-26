@@ -1,0 +1,57 @@
+name: AIBOM Guardian demo
+
+on:
+  push:
+    branches:
+      - codex/aibom-demo-20261027
+    paths:
+      - '.github/workflows/aibom-guardian-demo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: scan (${{ matrix.policy }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        policy: [warning, block, never]
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: Prepare report folder
+        run: mkdir -p aibom-ci
+      - name: Scan PrivAlert
+        id: guardian
+        uses: Letmeloveyou522/aibom_guardian@4855a47fd905729513a0333a1701e83dc51ee52b
+        with:
+          requirements: backend/requirements.txt
+          fail-on: ${{ matrix.policy }}
+          direct-only: 'true'
+          python-version: '3.13'
+          report-file: aibom-ci/report.json
+          sbom-file: aibom-ci/sbom.json
+          sarif-file: aibom-ci/report.sarif
+      - name: Record scanner outcome
+        if: always()
+        shell: bash
+        env:
+          POLICY: ${{ matrix.policy }}
+          SCANNER_EXIT: ${{ steps.guardian.outputs.exit-code }}
+          ACTION_OUTCOME: ${{ steps.guardian.outcome }}
+        run: |
+          mkdir -p aibom-ci
+          printf 'Policy: %s\nScanner exit: %s\nAction outcome: %s\n' "$POLICY" "$SCANNER_EXIT" "$ACTION_OUTCOME" | tee aibom-ci/outcome.txt
+          if [ -z "$SCANNER_EXIT" ]; then
+            echo 'Scanner exit code is missing. Check installation and setup.'
+            exit 1
+          fi
+      - name: Keep reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aibom-${{ matrix.policy }}
+          path: aibom-ci/
+          retention-days: 3
